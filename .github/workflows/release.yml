@@ -108,11 +108,18 @@ jobs:
           cat gitswitch-*.sha256 > checksums.txt 2>/dev/null || echo "No checksums"
           ls -la
 
+      - name: Update install script with version
+        run: |
+          sed -i "s/LATEST_VERSION/${{ needs.version.outputs.new_tag }}/g" .github/install.sh
+
       - name: Create git tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/install.sh
+          git commit -m "chore: update install script for ${{ needs.version.outputs.new_tag }}" || true
           git tag "${{ needs.version.outputs.new_tag }}"
+          git push origin main
           git push origin "${{ needs.version.outputs.new_tag }}"
 
       - name: Create GitHub release

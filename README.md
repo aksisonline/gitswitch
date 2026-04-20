@@ -39,15 +39,20 @@ These are independent. You can have `gh` authenticated as your work account whil
 
 ## Install
 
+**Homebrew** (recommended):
 ```bash
 brew tap aksisonline/gitswitch
 brew install gitswitch
 ```
 
-Or build from source:
-
+**Curl** (one-liner):
 ```bash
-git clone https://github.com/aksisonline/git-switcher
+curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh | bash
+```
+
+Or **build from source**:
+```bash
+git clone https://github.com/aksisonline/gitswitch
 cd git-switcher
 make install
 ```
