@@ -10,8 +10,54 @@ permissions:
   contents: write
 
 jobs:
+  check:
+    name: Check for code changes
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if internal/ or cmd/gitswitch/main.go changed
+        id: check
+        run: |
+          LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "No tags yet, will release"
+            exit 0
+          fi
+
+          # Check if internal/ or cmd/gitswitch/main.go changed
+          CHANGED=$(git diff $LATEST_TAG..HEAD --name-only -- internal/ cmd/gitswitch/main.go || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "No changes in internal/ or cmd/gitswitch/main.go since $LATEST_TAG, skipping release"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "Code changes detected, proceeding with release:"
+            echo "$CHANGED"
+          fi
+
+  skip:
+    name: No code changes detected
+    needs: check
+    if: needs.check.outputs.should_release == 'false'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Skip notification
+        run: echo "✓ Only docs/config changed. No release needed."
+
   version:
     name: Compute next version
+    needs: check
+    if: needs.check.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     outputs:
       new_tag: ${{ steps.next_version.outputs.new_tag }}
