@@ -22,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check if internal/ or cmd/gitswitch/main.go changed
+      - name: Check if internal/ or cmd/ changed
         id: check
         run: |
           LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1)
@@ -32,12 +32,12 @@ jobs:
             exit 0
           fi
 
-          # Check if internal/ or cmd/gitswitch/main.go changed
-          CHANGED=$(git diff $LATEST_TAG..HEAD --name-only -- internal/ cmd/gitswitch/main.go || true)
+          # Check if internal/ or cmd/ changed
+          CHANGED=$(git diff $LATEST_TAG..HEAD --name-only -- internal/ cmd/ || true)
 
           if [ -z "$CHANGED" ]; then
             echo "should_release=false" >> "$GITHUB_OUTPUT"
-            echo "No changes in internal/ or cmd/gitswitch/main.go since $LATEST_TAG, skipping release"
+            echo "No changes in internal/ or cmd/ since $LATEST_TAG, skipping release"
           else
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "Code changes detected, proceeding with release:"
