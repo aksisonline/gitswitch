@@ -74,9 +74,9 @@ Opens a full terminal UI. First run auto-imports your existing `git config` as a
 │  ✦  Git-Switcher                                     │
 │     Made by AKS  ·  abhiramkanna.com                 │
 │                                                      │
-│  Current  aksisonline  ·  user@gmail.com             │
+│  Current  username  ·  user@gmail.com                │
 │                                                      │
-│     ·  default       abhiramkanna@edirq.com          │
+│     ·  default       user@default.com                │
 │  ❯  ✓  aksisonline   user@gmail.com                  │
 │     ·  work          user@company.com                │
 │                                                      │
@@ -201,4 +201,3 @@ SSH key switching, `gh auth switch` integration, and profile state detection log
 ---
 
 Made by [AKS](https://abhiramkanna.com)
-  
