@@ -196,3 +196,4 @@ SSH key switching, `gh auth switch` integration, and profile state detection log
 ---
 
 Made by [AKS](https://abhiramkanna.com)
+ 
