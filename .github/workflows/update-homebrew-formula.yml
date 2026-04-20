@@ -1,0 +1,57 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout homebrew-gitswitch
+        uses: actions/checkout@v4
+        with:
+          repository: aksisonline/homebrew-gitswitch
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download checksums from release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          # Download checksums.txt from release
+          curl -sL "https://github.com/aksisonline/gitswitch/releases/download/${RELEASE_TAG}/checksums.txt" -o checksums.txt
+          cat checksums.txt
+
+      - name: Extract and update formula
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          # Parse checksums
+          AMD64=$(grep gitswitch-darwin-amd64 checksums.txt | awk '{print $1}')
+          ARM64=$(grep gitswitch-darwin-arm64 checksums.txt | awk '{print $1}')
+          LINUX_AMD64=$(grep gitswitch-linux-amd64 checksums.txt | awk '{print $1}')
+          LINUX_ARM64=$(grep gitswitch-linux-arm64 checksums.txt | awk '{print $1}')
+
+          echo "AMD64: $AMD64"
+          echo "ARM64: $ARM64"
+          echo "LINUX_AMD64: $LINUX_AMD64"
+          echo "LINUX_ARM64: $LINUX_ARM64"
+
+          # Update formula
+          sed -i "s/version = .*/version = \"${RELEASE_TAG#v}\"/" Formula/gitswitch.rb
+          sed -i "s/REPLACE_WITH_AMD64_SHA256/$AMD64/" Formula/gitswitch.rb
+          sed -i "s/REPLACE_WITH_ARM64_SHA256/$ARM64/" Formula/gitswitch.rb
+          sed -i "s/REPLACE_WITH_LINUX_AMD64_SHA256/$LINUX_AMD64/" Formula/gitswitch.rb
+          sed -i "s/REPLACE_WITH_LINUX_ARM64_SHA256/$LINUX_ARM64/" Formula/gitswitch.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/gitswitch.rb
+          git commit -m "chore: update formula for ${{ github.ref_name }}"
+          git push
