@@ -1,16 +1,51 @@
-name: Release
+name: Build, Release, and Update Homebrew
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  version:
+    name: Compute next version
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.next_version.outputs.new_tag }}
+      version: ${{ steps.next_version.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next patch version
+        id: next_version
+        run: |
+          LATEST=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1)
+          if [ -z "$LATEST" ]; then
+            LATEST="v0.0.0"
+          fi
+          echo "Latest tag: $LATEST"
+
+          VERSION="${LATEST#v}"
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+
+          NEXT_PATCH=$((PATCH + 1))
+          NEW_TAG="v${MAJOR}.${MINOR}.${NEXT_PATCH}"
+          echo "New tag: $NEW_TAG"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${MAJOR}.${MINOR}.${NEXT_PATCH}" >> "$GITHUB_OUTPUT"
+
   build:
-    name: Build and release
+    name: Build binaries
+    needs: version
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -40,7 +75,7 @@ jobs:
           CGO_ENABLED: 0
         run: |
           OUTPUT="gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}"
-          go build -trimpath -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o "$OUTPUT" ./cmd/gitswitch
+          go build -trimpath -ldflags="-s -w -X main.version=${{ needs.version.outputs.new_tag }}" -o "$OUTPUT" ./cmd/gitswitch
           sha256sum "$OUTPUT" > "$OUTPUT.sha256"
 
       - name: Upload artifacts
@@ -51,12 +86,15 @@ jobs:
             gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}
             gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
 
-  release:
-    name: Create GitHub release
-    needs: build
+  publish:
+    name: Create release and tag
+    needs: [version, build]
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -65,16 +103,62 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          mv artifacts/gitswitch-*/* release/ 2>/dev/null || true
+          find artifacts -type f \( -name "gitswitch-*" -o -name "*.sha256" \) -exec mv {} release/ \;
           cd release
-          cat gitswitch-*.sha256 > checksums.txt 2>/dev/null || echo "No checksums found"
+          cat gitswitch-*.sha256 > checksums.txt 2>/dev/null || echo "No checksums"
           ls -la
+
+      - name: Create git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ needs.version.outputs.new_tag }}"
+          git push origin "${{ needs.version.outputs.new_tag }}"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
+          tag_name: ${{ needs.version.outputs.new_tag }}
+          name: ${{ needs.version.outputs.new_tag }}
           generate_release_notes: true
           files: release/*
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  update-homebrew:
+    name: Update Homebrew formula
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    if: success()
+
+    steps:
+      - name: Checkout homebrew-gitswitch
+        uses: actions/checkout@v4
+        with:
+          repository: aksisonline/homebrew-gitswitch
+          token: ${{ secrets.HOMEBREW_PAT }}
+
+      - name: Download checksums
+        run: |
+          curl -sL "https://github.com/aksisonline/gitswitch/releases/download/${{ needs.version.outputs.new_tag }}/checksums.txt" -o checksums.txt
+          cat checksums.txt
+
+      - name: Update formula with checksums
+        run: |
+          AMD64=$(grep gitswitch-darwin-amd64 checksums.txt | awk '{print $1}')
+          ARM64=$(grep gitswitch-darwin-arm64 checksums.txt | awk '{print $1}')
+          LINUX_AMD64=$(grep gitswitch-linux-amd64 checksums.txt | awk '{print $1}')
+          LINUX_ARM64=$(grep gitswitch-linux-arm64 checksums.txt | awk '{print $1}')
+
+          sed -i "s/version = .*/version = \"${{ needs.version.outputs.version }}\"/" Formula/gitswitch.rb
+          sed -i "s/REPLACE_WITH_AMD64_SHA256/$AMD64/" Formula/gitswitch.rb
+          sed -i "s/REPLACE_WITH_ARM64_SHA256/$ARM64/" Formula/gitswitch.rb
+          sed -i "s/REPLACE_WITH_LINUX_AMD64_SHA256/$LINUX_AMD64/" Formula/gitswitch.rb
+          sed -i "s/REPLACE_WITH_LINUX_ARM64_SHA256/$LINUX_ARM64/" Formula/gitswitch.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/gitswitch.rb
+          git commit -m "chore: update formula for ${{ needs.version.outputs.new_tag }}"
+          git push
