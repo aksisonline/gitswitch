@@ -96,7 +96,12 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = fmt.Sprintf("error: %v", msg.err)
 			m.statusIsErr = true
 		} else {
-			profiles, _ := m.store.Load()
+			profiles, err := m.store.Load()
+			if err != nil {
+				m.statusMsg = fmt.Sprintf("error: %v", err)
+				m.statusIsErr = true
+				break
+			}
 			m.profiles = profiles
 			m.active = git.DetectActive(profiles)
 			if len(msg.warnings) > 0 {
