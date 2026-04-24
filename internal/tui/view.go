@@ -216,7 +216,7 @@ func (m Model) footerKeys(pw int, pairs [][2]string) string {
 	currentW := 2
 	for i, p := range pairs {
 		item := styleFooterKey.Render(p[0]) + styleFooter.Render(" "+p[1])
-		itemW := len(p[0]) + 1 + len(p[1])
+		itemW := lipgloss.Width(p[0]) + 1 + lipgloss.Width(p[1])
 		if i > 0 {
 			if currentW+sepW+itemW > pw {
 				lines = append(lines, currentLine)
