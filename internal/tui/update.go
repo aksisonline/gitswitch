@@ -189,9 +189,14 @@ func (m *Model) submitForm() {
 		m.statusMsg = fmt.Sprintf("error: %v", err)
 		m.statusIsErr = true
 	} else {
-		m.statusIsErr = false
-		profiles, _ := m.store.Load()
-		m.profiles = profiles
+		profiles, loadErr := m.store.Load()
+		if loadErr != nil {
+			m.statusMsg = fmt.Sprintf("error: %v", loadErr)
+			m.statusIsErr = true
+		} else {
+			m.statusIsErr = false
+			m.profiles = profiles
+		}
 	}
 	m.state = StateList
 }
@@ -207,14 +212,19 @@ func (m Model) updateDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusMsg = fmt.Sprintf("error: %v", err)
 					m.statusIsErr = true
 				} else {
-					profiles, _ := m.store.Load()
-					m.profiles = profiles
-					m.active = git.DetectActive(profiles)
-					if m.cursor >= len(m.profiles) && m.cursor > 0 {
-						m.cursor--
+					profiles, loadErr := m.store.Load()
+					if loadErr != nil {
+						m.statusMsg = fmt.Sprintf("error: %v", loadErr)
+						m.statusIsErr = true
+					} else {
+						m.profiles = profiles
+						m.active = git.DetectActive(profiles)
+						if m.cursor >= len(m.profiles) && m.cursor > 0 {
+							m.cursor--
+						}
+						m.statusMsg = fmt.Sprintf("deleted '%s'", nick)
+						m.statusIsErr = false
 					}
-					m.statusMsg = fmt.Sprintf("deleted '%s'", nick)
-					m.statusIsErr = false
 				}
 			}
 			m.state = StateList
