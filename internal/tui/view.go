@@ -86,8 +86,9 @@ func (m Model) viewCurrentLine() string {
 func (m Model) nickColumnWidth() int {
 	nickColW := 12
 	for _, p := range m.profiles {
-		if len(p.Nickname) > nickColW {
-			nickColW = len(p.Nickname)
+		nickW := lipgloss.Width(p.Nickname)
+		if nickW > nickColW {
+			nickColW = nickW
 		}
 	}
 	return nickColW + 2
@@ -108,7 +109,7 @@ func (m Model) viewProfileItems(pw, nickColW int) string {
 		if isActive {
 			check = " " + styleCheckmark.Render("✓") + " "
 		}
-		nick := fmt.Sprintf("%-*s", nickColW, p.Nickname)
+		nick := p.Nickname + strings.Repeat(" ", max(0, nickColW-lipgloss.Width(p.Nickname)))
 		line := fmt.Sprintf("%s%s%s  %s", cursor, check, nick, p.Email)
 		if i == m.cursor {
 			line = styleItemActive(pw).Render(line)
