@@ -182,7 +182,9 @@ func (m Model) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 				*f = (*f)[:len(*f)-1]
 			}
 		default:
-			if len(msg.String()) == 1 {
+			if msg.Paste {
+				m.formFields[m.formFocus] += string(msg.Runes)
+			} else if len(msg.String()) == 1 {
 				m.formFields[m.formFocus] += msg.String()
 			}
 		}
