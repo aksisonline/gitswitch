@@ -156,16 +156,16 @@ jobs:
 
       - name: Update install script with version
         run: |
-          sed -i "s/LATEST_VERSION/${{ needs.version.outputs.new_tag }}/g" .github/install.sh
+          sed -i 's|VERSION="${1:-v[^"]*}"|VERSION="${1:-${{ needs.version.outputs.new_tag }}}"|' .github/install.sh
 
       - name: Create git tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .github/install.sh
-          git commit -m "chore: update install script for ${{ needs.version.outputs.new_tag }}" || true
+          git diff --staged --quiet || git commit -m "chore: update install script for ${{ needs.version.outputs.new_tag }}"
           git tag "${{ needs.version.outputs.new_tag }}"
-          git push origin main
+          git push origin main || true
           git push origin "${{ needs.version.outputs.new_tag }}"
 
       - name: Create GitHub release
