@@ -162,7 +162,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          rm -rf release artifacts
           git add .github/install.sh
           git diff --cached --quiet || git commit -m "chore: update install script for ${{ needs.version.outputs.new_tag }}"
           git tag "${{ needs.version.outputs.new_tag }}"
