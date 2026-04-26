@@ -7,6 +7,8 @@ A terminal UI for managing multiple local git identities. Switch the name, email
 
 > **Credits:** Switching logic (SSH key management, `gh auth switch` integration, profile state detection) is inspired by [dankozlowski/git-switcher](https://github.com/dankozlowski/git-switcher). The TUI, profile storage, and CLI design are original to this project.
 
+**→ [Full CLI reference](docs/cli.md)**
+
 ---
 
 ## Why not just use `gh auth switch`?
@@ -108,28 +110,17 @@ Switches immediately and exits. Useful in scripts or when you already know the p
 ### Other CLI commands
 
 ```bash
-# Show active profile
-gitswitch current
-
-# List all profiles
-gitswitch list
-
-# Add a profile
-gitswitch add <nickname> <user-name> <email> [flags]
-gitswitch add work "Jane Doe" jane@company.com \
-  --sign-key ABCD1234 \
-  --ssh-key ~/.ssh/id_work \
-  --gh-user janedoe-work
-
-# Switch by name
-gitswitch switch work
-
-# Remove a profile
-gitswitch remove work
-
-# Re-import current git config
-gitswitch init
+gitswitch current          # show active profile
+gitswitch list             # list all profiles
+gitswitch add work "Jane Doe" jane@company.com --ssh-key ~/.ssh/id_work
+gitswitch switch work      # switch by name
+gitswitch remove work      # remove a profile
+gitswitch init             # re-import current git config
+gitswitch version          # show version and check for updates
+gitswitch upgrade          # upgrade to latest release
 ```
+
+See **[docs/cli.md](docs/cli.md)** for full flag reference and examples.
 
 ---
 
