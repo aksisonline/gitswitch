@@ -201,6 +201,7 @@ func (m *Model) submitForm() {
 		} else {
 			m.statusIsErr = false
 			m.profiles = profiles
+			m.active = git.DetectActive(profiles)
 		}
 	}
 	m.state = StateList

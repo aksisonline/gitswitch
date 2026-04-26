@@ -4,6 +4,7 @@ import (
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type State int
@@ -72,16 +73,16 @@ func (m Model) Init() tea.Cmd {
 func (m Model) panelWidth() int {
 	content := minPanelWidth
 	for _, p := range m.profiles {
-		needed := 3 + 3 + 14 + 2 + len(p.Email) + 6
+		needed := 3 + 3 + 14 + 2 + lipgloss.Width(p.Email) + 6
 		if needed > content {
 			content = needed
 		}
-		if nickNeeded := 3 + 3 + len(p.Nickname) + 2 + len(p.Email) + 6; nickNeeded > content {
+		if nickNeeded := 3 + 3 + lipgloss.Width(p.Nickname) + 2 + lipgloss.Width(p.Email) + 6; nickNeeded > content {
 			content = nickNeeded
 		}
 	}
 	for _, s := range formSubtitles {
-		if needed := len(s) + 8; needed > content {
+		if needed := lipgloss.Width(s) + 8; needed > content {
 			content = needed
 		}
 	}
