@@ -27,7 +27,7 @@ case "$OS" in
 esac
 
 # Use version from arg or latest
-VERSION="${1:-v0.1.10}"
+VERSION="${1:-v0.1.11}"
 
 # Download URL
 RELEASE_URL="https://github.com/aksisonline/gitswitch/releases/download/$VERSION/$BINARY"
