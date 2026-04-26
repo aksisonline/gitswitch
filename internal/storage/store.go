@@ -49,6 +49,10 @@ func (s *Store) filePath() string {
 	return filepath.Join(s.path, "profiles.json")
 }
 
+func (s *Store) ConfigDir() string {
+	return s.path
+}
+
 func (s *Store) Load() ([]Profile, error) {
 	data, err := os.ReadFile(s.filePath())
 	if err != nil {

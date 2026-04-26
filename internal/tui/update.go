@@ -6,6 +6,7 @@ import (
 
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/storage"
+	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -15,10 +16,23 @@ type switchDoneMsg struct {
 	err      error
 }
 
+type upgradeDoneMsg struct {
+	err error
+}
+
+type versionCheckMsg struct {
+	latest string
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width = ws.Width
 		m.height = ws.Height
+		return m, nil
+	}
+	if vc, ok := msg.(versionCheckMsg); ok {
+		m.latestVersion = vc.latest
+		m.updateAvailable = ver.IsUpdateAvailable(m.currentVersion, vc.latest)
 		return m, nil
 	}
 	switch m.state {
@@ -90,6 +104,27 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "?":
 			m.state = StateTips
+		case "u":
+			if m.updateAvailable {
+				cmd, err := ver.UpgradeCommand(m.latestVersion)
+				if err != nil {
+					m.statusMsg = fmt.Sprintf("upgrade error: %v", err)
+					m.statusIsErr = true
+					return m, nil
+				}
+				return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+					return upgradeDoneMsg{err: err}
+				})
+			}
+		}
+	case upgradeDoneMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("upgrade failed: %v", msg.err)
+			m.statusIsErr = true
+		} else {
+			m.statusMsg = fmt.Sprintf("upgraded to %s — restart to apply", m.latestVersion)
+			m.statusIsErr = false
+			m.updateAvailable = false
 		}
 	case switchDoneMsg:
 		if msg.err != nil {

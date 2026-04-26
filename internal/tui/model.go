@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/storage"
+	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -32,6 +33,10 @@ type Model struct {
 
 	statusMsg   string
 	statusIsErr bool
+
+	currentVersion  string
+	latestVersion   string
+	updateAvailable bool
 }
 
 var formLabels = [6]string{
@@ -52,22 +57,27 @@ var formSubtitles = [6]string{
 	"for gh auth switch — optional, leave blank to skip",
 }
 
-func New(store *storage.Store) (*Model, error) {
+func New(store *storage.Store, currentVersion string) (*Model, error) {
 	profiles, err := store.Load()
 	if err != nil {
 		return nil, err
 	}
 	active := git.DetectActive(profiles)
 	return &Model{
-		store:    store,
-		profiles: profiles,
-		active:   active,
-		state:    StateList,
+		store:          store,
+		profiles:       profiles,
+		active:         active,
+		state:          StateList,
+		currentVersion: currentVersion,
 	}, nil
 }
 
 func (m Model) Init() tea.Cmd {
-	return nil
+	configDir := m.store.ConfigDir()
+	return func() tea.Msg {
+		latest := ver.CachedLatestVersion(configDir)
+		return versionCheckMsg{latest: latest}
+	}
 }
 
 func (m Model) panelWidth() int {

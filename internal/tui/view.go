@@ -52,16 +52,28 @@ func (m Model) viewList(pw int) string {
 
 	statusLine := m.viewStatusLine()
 
-	footer := "\n\n" + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
+	var updateBanner string
+	if m.updateAvailable {
+		updateBanner = "\n\n  " +
+			lipgloss.NewStyle().Foreground(colorGreen).Bold(true).Render("⬆ Update available: "+m.latestVersion) +
+			"\n  " + styleBrand.Render("Press [u] to upgrade")
+	}
+
+	footerPairs := [][2]string{
 		{"↑/↓", "navigate"},
 		{"enter", "switch"},
 		{"a", "add"},
 		{"e", "edit"},
 		{"?", "cli tips"},
 		{"q", "quit"},
-	})
+	}
+	if m.updateAvailable {
+		footerPairs = append(footerPairs, [2]string{"u", "upgrade"})
+	}
 
-	return stylePanelBorder(pw).Render(header + currentLine + items + statusLine + footer)
+	footer := "\n\n" + divider(pw) + "\n" + m.footerKeys(pw, footerPairs)
+
+	return stylePanelBorder(pw).Render(header + currentLine + items + updateBanner + statusLine + footer)
 }
 
 func (m Model) viewCurrentLine() string {

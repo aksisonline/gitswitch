@@ -1,7 +1,9 @@
 .PHONY: build install clean
 
+VERSION ?= dev
+
 build:
-	go build -o bin/gitswitch ./cmd/gitswitch
+	go build -trimpath -ldflags="-s -w -X main.version=$(VERSION)" -o bin/gitswitch ./cmd/gitswitch
 
 install: build
 	cp bin/gitswitch /usr/local/bin/
