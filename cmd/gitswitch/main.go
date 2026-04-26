@@ -7,9 +7,12 @@ import (
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	"github.com/aksisonline/gitswitch/internal/tui"
+	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
+
+var version = "dev"
 
 var store *storage.Store
 
@@ -38,7 +41,7 @@ var rootCmd = &cobra.Command{
 		if len(args) == 1 {
 			return quickSwitch(args[0])
 		}
-		m, err := tui.New(store)
+		m, err := tui.New(store, version)
 		if err != nil {
 			return err
 		}
@@ -200,8 +203,46 @@ var initCmd = &cobra.Command{
 	},
 }
 
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Show current version and check for updates",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Printf("gitswitch %s\n", version)
+		latest := ver.CachedLatestVersion(store.ConfigDir())
+		if latest != "" && ver.IsUpdateAvailable(version, latest) {
+			fmt.Printf("New version available: %s\n", latest)
+			fmt.Println("Run: gitswitch upgrade")
+		} else if latest != "" {
+			fmt.Println("Already on latest version.")
+		}
+		return nil
+	},
+}
+
+var upgradeCmd = &cobra.Command{
+	Use:   "upgrade",
+	Short: "Upgrade gitswitch to the latest version",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Println("Checking for updates...")
+		latest := ver.CachedLatestVersion(store.ConfigDir())
+		if latest == "" {
+			return fmt.Errorf("could not fetch latest version")
+		}
+		if !ver.IsUpdateAvailable(version, latest) {
+			fmt.Printf("Already on latest version (%s).\n", version)
+			return nil
+		}
+		fmt.Printf("Upgrading %s → %s...\n", version, latest)
+		if err := ver.RunUpgrade(latest); err != nil {
+			return fmt.Errorf("upgrade failed: %w", err)
+		}
+		fmt.Println("✓ Upgrade complete. Restart gitswitch to use the new version.")
+		return nil
+	},
+}
+
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")

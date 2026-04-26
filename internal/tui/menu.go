@@ -2,10 +2,13 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/storage"
+	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -35,6 +38,10 @@ type Model struct {
 
 	statusMsg   string
 	statusIsErr bool
+
+	currentVersion  string
+	latestVersion   string
+	updateAvailable bool
 }
 
 var formLabels = [6]string{
@@ -61,17 +68,28 @@ type switchDoneMsg struct {
 	err      error
 }
 
-func New(store *storage.Store) (*Model, error) {
+type upgradeDoneMsg struct {
+	err error
+}
+
+func New(store *storage.Store, currentVersion string) (*Model, error) {
 	profiles, err := store.Load()
 	if err != nil {
 		return nil, err
 	}
 	active := git.DetectActive(profiles)
+
+	latest := ver.CachedLatestVersion(store.ConfigDir())
+	updateAvailable := ver.IsUpdateAvailable(currentVersion, latest)
+
 	return &Model{
-		store:    store,
-		profiles: profiles,
-		active:   active,
-		state:    StateList,
+		store:           store,
+		profiles:        profiles,
+		active:          active,
+		state:           StateList,
+		currentVersion:  currentVersion,
+		latestVersion:   latest,
+		updateAvailable: updateAvailable,
 	}, nil
 }
 
@@ -184,6 +202,26 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "?":
 			m.state = StateTips
+		case "u":
+			if m.updateAvailable {
+				latest := m.latestVersion
+				return m, func() tea.Msg {
+					script := fmt.Sprintf("curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh | bash -s -- %s", latest)
+					cmd := exec.Command("sh", "-c", script)
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+					return upgradeDoneMsg{err: cmd.Run()}
+				}
+			}
+		}
+	case upgradeDoneMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("upgrade failed: %v", msg.err)
+			m.statusIsErr = true
+		} else {
+			m.statusMsg = fmt.Sprintf("✓ Upgraded to %s — restart to apply", m.latestVersion)
+			m.statusIsErr = false
+			m.updateAvailable = false
 		}
 	case switchDoneMsg:
 		if msg.err != nil {
@@ -431,16 +469,28 @@ func (m Model) viewList(pw int) string {
 		statusLine = "\n\n  " + s
 	}
 
-	footer := "\n\n" + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
+	var updateBanner string
+	if m.updateAvailable {
+		updateBanner = "\n\n  " +
+			lipgloss.NewStyle().Foreground(colorGreen).Bold(true).Render("⬆ Update available: "+m.latestVersion) +
+			"\n  " + styleBrand.Render("Press [u] to upgrade")
+	}
+
+	footerPairs := [][2]string{
 		{"↑/↓", "navigate"},
 		{"enter", "switch"},
 		{"a", "add"},
 		{"e", "edit"},
 		{"?", "cli tips"},
 		{"q", "quit"},
-	})
+	}
+	if m.updateAvailable {
+		footerPairs = append(footerPairs, [2]string{"u", "upgrade"})
+	}
 
-	return stylePanelBorder(pw).Render(header + currentLine + items + statusLine + footer)
+	footer := "\n\n" + divider(pw) + "\n" + m.footerKeys(pw, footerPairs)
+
+	return stylePanelBorder(pw).Render(header + currentLine + items + updateBanner + statusLine + footer)
 }
 
 func (m Model) viewForm(subtitle string, pw int) string {
