@@ -27,7 +27,7 @@ type cache struct {
 }
 
 // CachedLatestVersion returns the latest version using a 24-hour disk cache.
-// Returns "" on any error (graceful degradation)
+// Returns "" on any error (graceful degradation).
 func CachedLatestVersion(configDir string) string {
 	cachePath := filepath.Join(configDir, "version-check.json")
 
