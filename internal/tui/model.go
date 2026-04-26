@@ -63,20 +63,21 @@ func New(store *storage.Store, currentVersion string) (*Model, error) {
 		return nil, err
 	}
 	active := git.DetectActive(profiles)
-	latest := ver.CachedLatestVersion(store.ConfigDir())
 	return &Model{
-		store:           store,
-		profiles:        profiles,
-		active:          active,
-		state:           StateList,
-		currentVersion:  currentVersion,
-		latestVersion:   latest,
-		updateAvailable: ver.IsUpdateAvailable(currentVersion, latest),
+		store:          store,
+		profiles:       profiles,
+		active:         active,
+		state:          StateList,
+		currentVersion: currentVersion,
 	}, nil
 }
 
 func (m Model) Init() tea.Cmd {
-	return nil
+	configDir := m.store.ConfigDir()
+	return func() tea.Msg {
+		latest := ver.CachedLatestVersion(configDir)
+		return versionCheckMsg{latest: latest}
+	}
 }
 
 func (m Model) panelWidth() int {

@@ -224,9 +224,9 @@ var upgradeCmd = &cobra.Command{
 	Short: "Upgrade gitswitch to the latest version",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("Checking for updates...")
-		latest := ver.CachedLatestVersion(store.ConfigDir())
-		if latest == "" {
-			return fmt.Errorf("could not fetch latest version")
+		latest, err := ver.FetchLatestVersionFresh()
+		if err != nil {
+			return fmt.Errorf("could not fetch latest version: %w", err)
 		}
 		if !ver.IsUpdateAvailable(version, latest) {
 			fmt.Printf("Already on latest version (%s).\n", version)

@@ -2,12 +2,11 @@ package tui
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/storage"
+	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -21,10 +20,19 @@ type upgradeDoneMsg struct {
 	err error
 }
 
+type versionCheckMsg struct {
+	latest string
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width = ws.Width
 		m.height = ws.Height
+		return m, nil
+	}
+	if vc, ok := msg.(versionCheckMsg); ok {
+		m.latestVersion = vc.latest
+		m.updateAvailable = ver.IsUpdateAvailable(m.currentVersion, vc.latest)
 		return m, nil
 	}
 	switch m.state {
@@ -98,14 +106,15 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = StateTips
 		case "u":
 			if m.updateAvailable {
-				latest := m.latestVersion
-				return m, func() tea.Msg {
-					script := fmt.Sprintf("curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh | bash -s -- %s", latest)
-					cmd := exec.Command("sh", "-c", script)
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-					return upgradeDoneMsg{err: cmd.Run()}
+				cmd, err := ver.UpgradeCommand(m.latestVersion)
+				if err != nil {
+					m.statusMsg = fmt.Sprintf("upgrade error: %v", err)
+					m.statusIsErr = true
+					return m, nil
 				}
+				return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+					return upgradeDoneMsg{err: err}
+				})
 			}
 		}
 	case upgradeDoneMsg:
