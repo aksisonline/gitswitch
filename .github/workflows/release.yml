@@ -193,26 +193,40 @@ jobs:
 
       - name: Download checksums
         run: |
-          curl -sL "https://github.com/aksisonline/gitswitch/releases/download/${{ needs.version.outputs.new_tag }}/checksums.txt" -o checksums.txt
-          cat checksums.txt
+          curl -sL "https://github.com/aksisonline/gitswitch/releases/download/${{ needs.version.outputs.new_tag }}/checksums.txt" -o /tmp/checksums.txt
+          cat /tmp/checksums.txt
 
       - name: Update formula with checksums
         run: |
-          AMD64=$(grep gitswitch-darwin-amd64 checksums.txt | awk '{print $1}')
-          ARM64=$(grep gitswitch-darwin-arm64 checksums.txt | awk '{print $1}')
-          LINUX_AMD64=$(grep gitswitch-linux-amd64 checksums.txt | awk '{print $1}')
-          LINUX_ARM64=$(grep gitswitch-linux-arm64 checksums.txt | awk '{print $1}')
+          VERSION="${{ needs.version.outputs.version }}"
+          AMD64=$(grep "gitswitch-darwin-amd64" /tmp/checksums.txt | awk '{print $1}')
+          ARM64=$(grep "gitswitch-darwin-arm64" /tmp/checksums.txt | awk '{print $1}')
+          LINUX_AMD64=$(grep "gitswitch-linux-amd64" /tmp/checksums.txt | awk '{print $1}')
+          LINUX_ARM64=$(grep "gitswitch-linux-arm64" /tmp/checksums.txt | awk '{print $1}')
 
-          sed -i "s/version = .*/version = \"${{ needs.version.outputs.version }}\"/" Formula/gitswitch.rb
-          sed -i "s/REPLACE_WITH_AMD64_SHA256/$AMD64/" Formula/gitswitch.rb
-          sed -i "s/REPLACE_WITH_ARM64_SHA256/$ARM64/" Formula/gitswitch.rb
-          sed -i "s/REPLACE_WITH_LINUX_AMD64_SHA256/$LINUX_AMD64/" Formula/gitswitch.rb
-          sed -i "s/REPLACE_WITH_LINUX_ARM64_SHA256/$LINUX_ARM64/" Formula/gitswitch.rb
+          # Update version (formula uses: version "x.y.z", no equals sign)
+          sed -i "s/version \"[^\"]*\"/version \"$VERSION\"/" Formula/gitswitch.rb
+
+          # Update sha256 values using state-tracking awk — works on first run
+          # and all subsequent runs regardless of current sha256 content
+          awk -v damd64="$AMD64" -v darm64="$ARM64" -v lamd64="$LINUX_AMD64" -v larm64="$LINUX_ARM64" '
+            /gitswitch-darwin-arm64/ { next_sha = "darm64" }
+            /gitswitch-darwin-amd64/ { next_sha = "damd64" }
+            /gitswitch-linux-arm64/  { next_sha = "larm64" }
+            /gitswitch-linux-amd64/  { next_sha = "lamd64" }
+            /sha256 "/ {
+              if      (next_sha == "darm64") { sub(/sha256 "[^"]*"/, "sha256 \"" darm64 "\""); next_sha = "" }
+              else if (next_sha == "damd64") { sub(/sha256 "[^"]*"/, "sha256 \"" damd64 "\""); next_sha = "" }
+              else if (next_sha == "larm64") { sub(/sha256 "[^"]*"/, "sha256 \"" larm64 "\""); next_sha = "" }
+              else if (next_sha == "lamd64") { sub(/sha256 "[^"]*"/, "sha256 \"" lamd64 "\""); next_sha = "" }
+            }
+            { print }
+          ' Formula/gitswitch.rb > /tmp/gitswitch.rb.new && mv /tmp/gitswitch.rb.new Formula/gitswitch.rb
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/gitswitch.rb
-          git commit -m "chore: update formula for ${{ needs.version.outputs.new_tag }}"
+          git diff --cached --quiet || git commit -m "chore: update formula for ${{ needs.version.outputs.new_tag }}"
           git push
