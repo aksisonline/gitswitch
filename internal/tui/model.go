@@ -93,7 +93,13 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		return nil, err
 	}
 	active := git.DetectActive(profiles)
-	prefs, _ := store.LoadPrefs()
+	prefs, err := store.LoadPrefs()
+	if err != nil {
+		prefs = storage.Prefs{}
+	}
+	if prefs.ColorTheme < 0 || prefs.ColorTheme >= len(normalThemes) {
+		prefs.ColorTheme = 0
+	}
 	m := &Model{
 		store:          store,
 		profiles:       profiles,

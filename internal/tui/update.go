@@ -68,6 +68,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case StateTips:
 		return m.updateTips(msg)
 	case StateSelectFlash, StateTransition, StateExitAnim:
+		if km, ok := msg.(tea.KeyMsg); ok && km.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
 		return m, nil
 	}
 	return m, nil
@@ -150,9 +153,13 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			if !m.arcadeMode {
 				m.colorTheme = (m.colorTheme + 1) % 12
-				m.statusMsg = fmt.Sprintf("theme: %s (%d/12)", themeNames[m.colorTheme], m.colorTheme+1)
-				m.statusIsErr = false
-				_ = m.store.SavePrefs(storage.Prefs{ColorTheme: m.colorTheme})
+				if err := m.store.SavePrefs(storage.Prefs{ColorTheme: m.colorTheme}); err != nil {
+					m.statusMsg = fmt.Sprintf("theme: %s — could not save: %v", themeNames[m.colorTheme], err)
+					m.statusIsErr = true
+				} else {
+					m.statusMsg = fmt.Sprintf("theme: %s (%d/12)", themeNames[m.colorTheme], m.colorTheme+1)
+					m.statusIsErr = false
+				}
 			}
 		case "u":
 			if m.updateAvailable {

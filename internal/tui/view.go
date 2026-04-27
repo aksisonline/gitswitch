@@ -12,7 +12,11 @@ func (m Model) View() string {
 	if m.arcadeMode {
 		applyTheme(arcadeTheme, true)
 	} else {
-		applyTheme(normalThemes[m.colorTheme], false)
+		theme := m.colorTheme
+		if theme < 0 || theme >= len(normalThemes) {
+			theme = 0
+		}
+		applyTheme(normalThemes[theme], false)
 	}
 
 	pw := m.panelWidth()
@@ -461,7 +465,7 @@ func (m Model) footerKeys(pw int, pairs [][2]string) string {
 		sep = styleFooter.Render("  │  ")
 		sepW = 5
 	} else {
-		prefix = "  "
+		prefix = ""
 		sep = styleFooter.Render("  ·  ")
 		sepW = 5
 	}

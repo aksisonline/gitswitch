@@ -73,6 +73,9 @@ func (s *Store) LoadPrefs() (Prefs, error) {
 	if err := json.Unmarshal(data, &p); err != nil {
 		return Prefs{}, err
 	}
+	if p.ColorTheme < 0 || p.ColorTheme >= 12 {
+		p.ColorTheme = 0
+	}
 	return p, nil
 }
 
