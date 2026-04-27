@@ -35,7 +35,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateAvailable = ver.IsUpdateAvailable(m.currentVersion, vc.latest)
 		return m, nil
 	}
+	if _, ok := msg.(arcadeTickMsg); ok {
+		switch m.state {
+		case StateIntro:
+			return m.tickIntro()
+		case StateSelectFlash:
+			return m.tickSelectFlash()
+		case StateTransition:
+			return m.tickTransition()
+		case StateExitAnim:
+			return m.tickExitAnim()
+		}
+		return m, nil
+	}
 	switch m.state {
+	case StateIntro:
+		if km, ok := msg.(tea.KeyMsg); ok {
+			switch km.String() {
+			case "q", "ctrl+c":
+				return m, tea.Quit
+			default:
+				m.state = StateList
+			}
+		}
+		return m, nil
 	case StateList:
 		return m.updateList(msg)
 	case StateAdd, StateEdit:
@@ -44,6 +67,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateDelete(msg)
 	case StateTips:
 		return m.updateTips(msg)
+	case StateSelectFlash, StateTransition, StateExitAnim:
+		if km, ok := msg.(tea.KeyMsg); ok && km.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -53,6 +81,11 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c":
+			if m.arcadeMode {
+				m.exitFrame = 0
+				m.state = StateExitAnim
+				return m, arcadeTickCmd()
+			}
 			return m, tea.Quit
 		case "up", "k":
 			if m.cursor > 0 {
@@ -65,35 +98,42 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.statusMsg = ""
 		case "enter":
+			if m.arcadeMode && len(m.profiles) > 0 {
+				m.selFlashFrame = 0
+				m.selFlashProfile = m.cursor
+				m.state = StateSelectFlash
+				return m, arcadeTickCmd()
+			}
 			if len(m.profiles) > 0 {
 				p := m.profiles[m.cursor]
-				return m, func() tea.Msg {
-					cfg := git.New(true)
-					if err := cfg.SetUser(p.UserName, p.Email); err != nil {
-						return switchDoneMsg{err: err}
-					}
-					if err := cfg.SetSignKey(p.SignKey); err != nil {
-						return switchDoneMsg{err: err}
-					}
-					if err := cfg.SetSSHKey(p.SSHKey); err != nil {
-						return switchDoneMsg{err: err}
-					}
-					var warnings []string
-					if w := git.SwitchGHUser(p.GHUser); w != "" {
-						warnings = append(warnings, w)
-					}
-					if err := m.store.SetActive(p.Nickname); err != nil {
-						return switchDoneMsg{err: err}
-					}
-					return switchDoneMsg{profile: &p, warnings: warnings}
-				}
+				return m, m.switchProfileCmd(p)
 			}
 		case "a":
+			if m.arcadeMode {
+				m.formFields = [6]string{}
+				m.formFocus = 0
+				m.statusMsg = ""
+				m.transTarget = StateAdd
+				m.transFrame = 0
+				m.state = StateTransition
+				return m, arcadeTickCmd()
+			}
 			m.state = StateAdd
 			m.formFields = [6]string{}
 			m.formFocus = 0
 			m.statusMsg = ""
 		case "e":
+			if m.arcadeMode && len(m.profiles) > 0 {
+				p := m.profiles[m.cursor]
+				m.editingNick = p.Nickname
+				m.formFields = [6]string{p.Nickname, p.UserName, p.Email, p.SignKey, p.SSHKey, p.GHUser}
+				m.formFocus = 0
+				m.statusMsg = ""
+				m.transTarget = StateEdit
+				m.transFrame = 0
+				m.state = StateTransition
+				return m, arcadeTickCmd()
+			}
 			if len(m.profiles) > 0 {
 				p := m.profiles[m.cursor]
 				m.state = StateEdit
@@ -103,7 +143,24 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = ""
 			}
 		case "?":
+			if m.arcadeMode {
+				m.transTarget = StateTips
+				m.transFrame = 0
+				m.state = StateTransition
+				return m, arcadeTickCmd()
+			}
 			m.state = StateTips
+		case "c":
+			if !m.arcadeMode {
+				m.colorTheme = (m.colorTheme + 1) % 12
+				if err := m.store.SavePrefs(storage.Prefs{ColorTheme: m.colorTheme}); err != nil {
+					m.statusMsg = fmt.Sprintf("theme: %s — could not save: %v", themeNames[m.colorTheme], err)
+					m.statusIsErr = true
+				} else {
+					m.statusMsg = fmt.Sprintf("theme: %s (%d/12)", themeNames[m.colorTheme], m.colorTheme+1)
+					m.statusIsErr = false
+				}
+			}
 		case "u":
 			if m.updateAvailable {
 				cmd, err := ver.UpgradeCommand(m.latestVersion)
@@ -161,6 +218,9 @@ func (m Model) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "esc":
+			if m.arcadeMode {
+				return m, m.startBackTransition()
+			}
 			m.state = StateList
 		case "tab", "down":
 			if m.formFocus < 5 {
@@ -174,7 +234,8 @@ func (m Model) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.formFocus < 5 {
 				m.formFocus++
 			} else {
-				m.submitForm()
+				cmd := m.submitForm()
+				return m, cmd
 			}
 		case "backspace":
 			f := &m.formFields[m.formFocus]
@@ -192,7 +253,7 @@ func (m Model) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) submitForm() {
+func (m *Model) submitForm() tea.Cmd {
 	nickname := strings.TrimSpace(m.formFields[0])
 	userName := strings.TrimSpace(m.formFields[1])
 	email := strings.TrimSpace(m.formFields[2])
@@ -204,7 +265,7 @@ func (m *Model) submitForm() {
 		m.statusMsg = "nickname, user name and email are required"
 		m.statusIsErr = true
 		m.state = StateList
-		return
+		return nil
 	}
 
 	var err error
@@ -241,7 +302,11 @@ func (m *Model) submitForm() {
 			m.active = git.DetectActive(profiles)
 		}
 	}
+	if m.arcadeMode {
+		return m.startBackTransition()
+	}
 	m.state = StateList
+	return nil
 }
 
 func (m Model) updateDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -270,6 +335,12 @@ func (m Model) updateDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			if m.arcadeMode {
+				m.transTarget = StateList
+				m.transFrame = 0
+				m.state = StateTransition
+				return m, arcadeTickCmd()
+			}
 			m.state = StateList
 		case "n", "N", "esc":
 			m.state = StateEdit
@@ -282,8 +353,99 @@ func (m Model) updateTips(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if km, ok := msg.(tea.KeyMsg); ok {
 		switch km.String() {
 		case "q", "esc", "?", "ctrl+c":
+			if m.arcadeMode {
+				return m, m.startBackTransition()
+			}
 			m.state = StateList
 		}
+	}
+	return m, nil
+}
+
+func (m *Model) startBackTransition() tea.Cmd {
+	m.transTarget = StateList
+	m.transFrame = 0
+	m.state = StateTransition
+	return arcadeTickCmd()
+}
+
+func (m Model) switchProfileCmd(p storage.Profile) tea.Cmd {
+	return func() tea.Msg {
+		cfg := git.New(true)
+		if err := cfg.SetUser(p.UserName, p.Email); err != nil {
+			return switchDoneMsg{err: err}
+		}
+		if err := cfg.SetSignKey(p.SignKey); err != nil {
+			return switchDoneMsg{err: err}
+		}
+		if err := cfg.SetSSHKey(p.SSHKey); err != nil {
+			return switchDoneMsg{err: err}
+		}
+		var warnings []string
+		if w := git.SwitchGHUser(p.GHUser); w != "" {
+			warnings = append(warnings, w)
+		}
+		if err := m.store.SetActive(p.Nickname); err != nil {
+			return switchDoneMsg{err: err}
+		}
+		return switchDoneMsg{profile: &p, warnings: warnings}
+	}
+}
+
+func (m Model) tickSelectFlash() (tea.Model, tea.Cmd) {
+	m.selFlashFrame++
+	if m.selFlashFrame >= 4 {
+		m.state = StateList
+		if len(m.profiles) > 0 && m.selFlashProfile < len(m.profiles) {
+			return m, m.switchProfileCmd(m.profiles[m.selFlashProfile])
+		}
+		return m, nil
+	}
+	return m, arcadeTickCmd()
+}
+
+func (m Model) tickTransition() (tea.Model, tea.Cmd) {
+	m.transFrame++
+	if m.transFrame >= 5 {
+		m.state = m.transTarget
+		return m, nil
+	}
+	return m, arcadeTickCmd()
+}
+
+func (m Model) tickExitAnim() (tea.Model, tea.Cmd) {
+	m.exitFrame++
+	if m.exitFrame >= 8 {
+		return m, tea.Quit
+	}
+	return m, arcadeTickCmd()
+}
+
+func (m Model) tickIntro() (tea.Model, tea.Cmd) {
+	if m.state != StateIntro {
+		return m, nil
+	}
+	pw := m.panelWidth()
+	numSlots := (pw - 2) / 2
+	if numSlots < 1 {
+		numSlots = 1
+	}
+	switch m.introPhase {
+	case 0:
+		m.introPos++
+		m.introMouthOpen = !m.introMouthOpen
+		if m.introPos >= numSlots {
+			m.introPhase = 1
+			m.introPos = numSlots - 1
+		}
+		return m, arcadeTickCmd()
+	case 1:
+		m.introReadyFrame++
+		if m.introReadyFrame >= 10 {
+			m.state = StateList
+			return m, nil
+		}
+		return m, arcadeTickCmd()
 	}
 	return m, nil
 }

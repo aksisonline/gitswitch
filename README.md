@@ -84,7 +84,7 @@ Opens a full terminal UI. First run auto-imports your existing `git config` as a
 │                                                      │
 │  ────────────────────────────────────────────────    │
 │  ↑/↓ navigate  ·  enter switch  ·  a add             │
-│  e edit  ·  ? cli tips  ·  q quit                    │
+│  e edit  ·  ? cli tips  ·  c theme  ·  q quit        │
 ╰──────────────────────────────────────────────────────╯
 ```
 
@@ -96,6 +96,7 @@ Opens a full terminal UI. First run auto-imports your existing `git config` as a
 | `a` | Add new profile |
 | `e` | Edit selected profile |
 | `ctrl+d` (in edit) | Delete profile |
+| `c` | Cycle color theme (12 palettes) |
 | `?` | Show CLI quick reference |
 | `q` | Quit |
 
@@ -135,7 +136,7 @@ See **[docs/cli.md](docs/cli.md)** for full flag reference and examples.
 | SSH Key Path | `core.sshCommand` | Optional. Path to SSH private key (e.g. `~/.ssh/id_work`). Sets `ssh -i <key> -o IdentitiesOnly=yes` to force that exact key and prevent SSH agent fallback. |
 | GitHub Username | — | Optional. Runs `gh auth switch --user <username>` on switch. Fails gracefully if `gh` is not installed. |
 
-Profiles are stored at `~/.config/gitswitch/profiles.json`.
+Profiles are stored at `~/.config/gitswitch/profiles.json`. UI preferences (color theme) are stored at `~/.config/gitswitch/config.json`.
 
 ---
 

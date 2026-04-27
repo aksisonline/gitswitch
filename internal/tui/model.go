@@ -16,6 +16,10 @@ const (
 	StateEdit
 	StateDeleteConfirm
 	StateTips
+	StateIntro
+	StateSelectFlash
+	StateTransition
+	StateExitAnim
 )
 
 type Model struct {
@@ -37,6 +41,22 @@ type Model struct {
 	currentVersion  string
 	latestVersion   string
 	updateAvailable bool
+
+	colorTheme int // 0-11 normal palette index
+
+	arcadeMode      bool
+	introPos        int
+	introMouthOpen  bool
+	introPhase      int
+	introReadyFrame int
+
+	selFlashFrame   int
+	selFlashProfile int
+
+	transFrame  int
+	transTarget State
+
+	exitFrame int
 }
 
 var formLabels = [6]string{
@@ -57,27 +77,53 @@ var formSubtitles = [6]string{
 	"for gh auth switch — optional, leave blank to skip",
 }
 
-func New(store *storage.Store, currentVersion string) (*Model, error) {
+type Option func(*Model)
+
+func WithArcadeMode() Option {
+	return func(m *Model) {
+		m.arcadeMode = true
+		m.state = StateIntro
+		m.introMouthOpen = true
+	}
+}
+
+func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, error) {
 	profiles, err := store.Load()
 	if err != nil {
 		return nil, err
 	}
 	active := git.DetectActive(profiles)
-	return &Model{
+	prefs, err := store.LoadPrefs()
+	if err != nil {
+		prefs = storage.Prefs{}
+	}
+	if prefs.ColorTheme < 0 || prefs.ColorTheme >= len(normalThemes) {
+		prefs.ColorTheme = 0
+	}
+	m := &Model{
 		store:          store,
 		profiles:       profiles,
 		active:         active,
 		state:          StateList,
 		currentVersion: currentVersion,
-	}, nil
+		colorTheme:     prefs.ColorTheme,
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m, nil
 }
 
 func (m Model) Init() tea.Cmd {
 	configDir := m.store.ConfigDir()
-	return func() tea.Msg {
+	versionCmd := func() tea.Msg {
 		latest := ver.CachedLatestVersion(configDir)
 		return versionCheckMsg{latest: latest}
 	}
+	if m.arcadeMode {
+		return tea.Batch(versionCmd, arcadeTickCmd())
+	}
+	return versionCmd
 }
 
 func (m Model) panelWidth() int {
