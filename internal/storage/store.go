@@ -53,6 +53,37 @@ func (s *Store) ConfigDir() string {
 	return s.path
 }
 
+type Prefs struct {
+	ColorTheme int `json:"color_theme"`
+}
+
+func (s *Store) prefsPath() string {
+	return filepath.Join(s.path, "config.json")
+}
+
+func (s *Store) LoadPrefs() (Prefs, error) {
+	data, err := os.ReadFile(s.prefsPath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Prefs{}, nil
+		}
+		return Prefs{}, err
+	}
+	var p Prefs
+	if err := json.Unmarshal(data, &p); err != nil {
+		return Prefs{}, err
+	}
+	return p, nil
+}
+
+func (s *Store) SavePrefs(p Prefs) error {
+	data, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.prefsPath(), data, 0600)
+}
+
 func (s *Store) Load() ([]Profile, error) {
 	data, err := os.ReadFile(s.filePath())
 	if err != nil {

@@ -219,6 +219,22 @@ var versionCmd = &cobra.Command{
 	},
 }
 
+var pacmanCmd = &cobra.Command{
+	Use:   "pacman",
+	Short: "Launch Git-Switcher with arcade intro animation",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := ensureInitialized(); err != nil {
+			return err
+		}
+		m, err := tui.New(store, version, tui.WithArcadeMode())
+		if err != nil {
+			return err
+		}
+		_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
+		return err
+	},
+}
+
 var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Upgrade gitswitch to the latest version",
@@ -242,7 +258,7 @@ var upgradeCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
