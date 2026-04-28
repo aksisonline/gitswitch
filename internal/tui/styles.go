@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const minPanelWidth = 56
+const minPanelWidth = 60
 const maxPanelWidth = 120
 
 // ThemeColors holds the four mutable colors per palette.
@@ -18,18 +18,18 @@ type ThemeColors struct {
 }
 
 var normalThemes = [12]ThemeColors{
-	{"141", "84", "226", "196"},   // 0: Default (original)
-	{"39", "51", "123", "203"},    // 1: Ocean
-	{"208", "220", "214", "196"},  // 2: Sunset
-	{"34", "118", "154", "196"},   // 3: Forest
-	{"255", "250", "245", "203"},  // 4: Mono
-	{"213", "207", "219", "196"},  // 5: Rose
-	{"51", "195", "159", "203"},   // 6: Arctic
-	{"226", "214", "220", "196"},  // 7: Gold
-	{"165", "177", "183", "196"},  // 8: Violet
-	{"196", "202", "226", "196"},  // 9: Ember
-	{"46", "40", "82", "196"},     // 10: Matrix
-	{"111", "153", "195", "203"},  // 11: Steel
+	{"141", "84", "226", "196"},  // 0: Default (original)
+	{"39", "51", "123", "203"},   // 1: Ocean
+	{"208", "220", "214", "196"}, // 2: Sunset
+	{"34", "118", "154", "196"},  // 3: Forest
+	{"255", "250", "245", "203"}, // 4: Mono
+	{"213", "207", "219", "196"}, // 5: Rose
+	{"51", "195", "159", "203"},  // 6: Arctic
+	{"226", "214", "220", "196"}, // 7: Gold
+	{"165", "177", "183", "196"}, // 8: Violet
+	{"196", "202", "226", "196"}, // 9: Ember
+	{"46", "40", "82", "196"},    // 10: Matrix
+	{"111", "153", "195", "203"}, // 11: Steel
 }
 
 var themeNames = [12]string{
@@ -47,11 +47,13 @@ var arcadeTheme = ThemeColors{
 
 // Arcade-specific fixed colors — always the same regardless of palette.
 var (
-	arcadeMazeBlue  = lipgloss.Color("27")
-	arcadeGhostRed  = lipgloss.Color("196")
-	arcadeGhostPink = lipgloss.Color("213")
-	arcadeGhostCyan = lipgloss.Color("51")
-	arcadePipe      = lipgloss.Color("46")
+	arcadeMazeBlue    = lipgloss.Color("27")
+	arcadeGhostRed    = lipgloss.Color("196")
+	arcadeGhostPink   = lipgloss.Color("213")
+	arcadeGhostCyan   = lipgloss.Color("51")
+	arcadeGhostOrange = lipgloss.Color("208")
+	arcadeFrightened  = lipgloss.Color("21") // dark blue (frightened ghosts)
+	arcadeFrightWhite = lipgloss.Color("255")
 )
 
 // Mutable color vars — reassigned by applyTheme. Default = original theme.
@@ -63,6 +65,7 @@ var (
 	colorRed     = lipgloss.Color("196")
 	colorWhite   = lipgloss.Color("255") // fixed
 	colorBgHover = lipgloss.Color("237") // fixed
+	colorBgChip  = lipgloss.Color("236") // fixed (chip background)
 	isArcadeMode = false
 )
 
@@ -80,6 +83,8 @@ var (
 	styleCheckmark    = lipgloss.NewStyle().Foreground(colorGreen)
 	styleItemDim      = lipgloss.NewStyle().Foreground(colorDim)
 	styleItemInactive = lipgloss.NewStyle().Foreground(colorWhite)
+	styleRibbonActive = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
+	styleRibbonCursor = lipgloss.NewStyle().Foreground(colorPurple).Bold(true)
 
 	styleFooter    = lipgloss.NewStyle().Foreground(colorDim)
 	styleFooterKey = lipgloss.NewStyle().Foreground(colorYellow)
@@ -87,9 +92,14 @@ var (
 	styleFormTitle        = lipgloss.NewStyle().Foreground(colorGreen)
 	styleInputLabel       = lipgloss.NewStyle().Foreground(colorDim)
 	styleInputLabelActive = lipgloss.NewStyle().Foreground(colorPurple).Bold(true)
+	styleFieldCounter     = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
 	styleDeleteTitle      = lipgloss.NewStyle().Bold(true).Foreground(colorRed)
-	styleSubtitle         = lipgloss.NewStyle().Foreground(colorDim).Italic(true)
 	styleDivider          = lipgloss.NewStyle().Foreground(colorPurple)
+
+	styleChipUpdate = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
+	styleChipBonus  = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
+	styleScore      = lipgloss.NewStyle().Foreground(colorWhite).Bold(true)
+	styleScoreLabel = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
 )
 
 // applyTheme reassigns color vars and rebuilds dependent style vars.
@@ -104,17 +114,24 @@ func applyTheme(tc ThemeColors, arcade bool) {
 	styleTitle = lipgloss.NewStyle().Bold(true).Foreground(colorPurple)
 	styleBrandLink = lipgloss.NewStyle().Foreground(colorGreen).Underline(true)
 	styleCheckmark = lipgloss.NewStyle().Foreground(colorGreen)
+	styleRibbonActive = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
+	styleRibbonCursor = lipgloss.NewStyle().Foreground(colorPurple).Bold(true)
 	styleFooterKey = lipgloss.NewStyle().Foreground(colorYellow)
 	styleFormTitle = lipgloss.NewStyle().Foreground(colorGreen)
 	styleInputLabelActive = lipgloss.NewStyle().Foreground(colorPurple).Bold(true)
+	styleFieldCounter = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
 	styleDeleteTitle = lipgloss.NewStyle().Bold(true).Foreground(colorRed)
 	styleDivider = lipgloss.NewStyle().Foreground(colorPurple)
+	styleChipUpdate = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
+	styleChipBonus = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
+	styleScore = lipgloss.NewStyle().Foreground(colorWhite).Bold(true)
+	styleScoreLabel = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
 }
 
 // Width-dependent styles — read current vars at call time.
 
 func stylePanelBorder(w int) lipgloss.Style {
-	border := lipgloss.Border(lipgloss.RoundedBorder())
+	border := lipgloss.RoundedBorder()
 	if isArcadeMode {
 		border = lipgloss.DoubleBorder()
 	}
@@ -130,6 +147,7 @@ func styleItemActive(w int) lipgloss.Style {
 	return lipgloss.NewStyle().
 		Background(colorBgHover).
 		Foreground(colorYellow).
+		Bold(true).
 		Width(w)
 }
 
@@ -149,6 +167,16 @@ func styleInputInactive(w int) lipgloss.Style {
 		PaddingLeft(1)
 }
 
+func styleChipBox() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Background(colorBgChip).
+		Foreground(colorGreen).
+		Bold(true).
+		Padding(0, 1)
+}
+
+// divider draws the panel separator. Normal mode uses a dashed pattern;
+// arcade mode draws pellet dots.
 func divider(w int) string {
 	if isArcadeMode {
 		dots := ""
@@ -160,5 +188,5 @@ func divider(w int) string {
 		}
 		return styleDivider.Render(dots)
 	}
-	return styleDivider.Render(strings.Repeat("─", w))
+	return styleDivider.Render(strings.Repeat("┄", w))
 }

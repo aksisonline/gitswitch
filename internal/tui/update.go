@@ -394,8 +394,9 @@ func (m Model) switchProfileCmd(p storage.Profile) tea.Cmd {
 
 func (m Model) tickSelectFlash() (tea.Model, tea.Cmd) {
 	m.selFlashFrame++
-	if m.selFlashFrame >= 4 {
+	if m.selFlashFrame >= 6 {
 		m.state = StateList
+		m.score += 200
 		if len(m.profiles) > 0 && m.selFlashProfile < len(m.profiles) {
 			return m, m.switchProfileCmd(m.profiles[m.selFlashProfile])
 		}
@@ -406,7 +407,7 @@ func (m Model) tickSelectFlash() (tea.Model, tea.Cmd) {
 
 func (m Model) tickTransition() (tea.Model, tea.Cmd) {
 	m.transFrame++
-	if m.transFrame >= 5 {
+	if m.transFrame >= 6 {
 		m.state = m.transTarget
 		return m, nil
 	}
@@ -415,7 +416,8 @@ func (m Model) tickTransition() (tea.Model, tea.Cmd) {
 
 func (m Model) tickExitAnim() (tea.Model, tea.Cmd) {
 	m.exitFrame++
-	if m.exitFrame >= 8 {
+	// 14 frames: GAME OVER flash (0-5) → INSERT COIN countdown (6-13)
+	if m.exitFrame >= 14 {
 		return m, tea.Quit
 	}
 	return m, arcadeTickCmd()
@@ -432,14 +434,29 @@ func (m Model) tickIntro() (tea.Model, tea.Cmd) {
 	}
 	switch m.introPhase {
 	case 0:
+		// PAC eats dots moving right
 		m.introPos++
 		m.introMouthOpen = !m.introMouthOpen
 		if m.introPos >= numSlots {
 			m.introPhase = 1
-			m.introPos = numSlots - 1
+			m.introPos = 0
+			m.introReadyFrame = 0
 		}
 		return m, arcadeTickCmd()
 	case 1:
+		// Power-pellet eaten — ghosts turn frightened, PAC chases left to right
+		m.introPos++
+		m.introMouthOpen = !m.introMouthOpen
+		if m.introPos%3 == 0 && m.introGhostsEat < 4 {
+			m.introGhostsEat++
+		}
+		if m.introPos >= numSlots {
+			m.introPhase = 2
+			m.introReadyFrame = 0
+		}
+		return m, arcadeTickCmd()
+	case 2:
+		// READY flash
 		m.introReadyFrame++
 		if m.introReadyFrame >= 10 {
 			m.state = StateList
