@@ -1,16 +1,23 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/aksisonline/gitswitch/internal/git"
+	"github.com/aksisonline/gitswitch/internal/history"
+	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	"github.com/aksisonline/gitswitch/internal/tui"
 	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
+
+//go:embed skill/SKILL.md
+var skillMD []byte
 
 var version = "dev"
 
@@ -178,12 +185,19 @@ var currentCmd = &cobra.Command{
 	Use:   "current",
 	Short: "Show current profile",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		short, _ := cmd.Flags().GetBool("short")
 		p, err := store.GetActive()
 		if err != nil {
 			return err
 		}
 		if p == nil {
-			fmt.Println("No active profile")
+			if !short {
+				fmt.Println("No active profile")
+			}
+			return nil
+		}
+		if short {
+			fmt.Printf("%s\t%s\n", p.Nickname, p.Email)
 			return nil
 		}
 		fmt.Printf("%s — %s <%s>\n", p.Nickname, p.UserName, p.Email)
@@ -257,11 +271,183 @@ var upgradeCmd = &cobra.Command{
 	},
 }
 
+var pinCmd = &cobra.Command{
+	Use:   "pin <nickname>",
+	Short: "Pin an identity to this repo — always recommended regardless of usage history",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := store.Get(args[0]); err != nil {
+			return err
+		}
+		repoKey := history.GetRepoKey()
+		if repoKey == "" {
+			return fmt.Errorf("not inside a git repo")
+		}
+		if err := history.Pin(repoKey, args[0]); err != nil {
+			return err
+		}
+		fmt.Printf("Pinned '%s' to this repo\n", args[0])
+		return nil
+	},
+}
+
+var unpinCmd = &cobra.Command{
+	Use:   "unpin",
+	Short: "Remove pinned identity for this repo, fall back to auto-recommendation",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		repoKey := history.GetRepoKey()
+		if repoKey == "" {
+			return fmt.Errorf("not inside a git repo")
+		}
+		if err := history.Unpin(repoKey); err != nil {
+			return err
+		}
+		fmt.Println("Unpinned — identity recommendation now based on usage history")
+		return nil
+	},
+}
+
+var recordCmd = &cobra.Command{
+	Use:   "record",
+	Short: "Record current identity for this repo (called by shell hooks on repo entry)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, _ := cmd.Flags().GetString("path")
+		if path == "" {
+			var err error
+			path, err = os.Getwd()
+			if err != nil {
+				return err
+			}
+		}
+		repoKey := history.GetRepoKeyForPath(path)
+		if repoKey == "" {
+			return nil
+		}
+		active, err := store.GetActive()
+		if err != nil || active == nil {
+			return nil
+		}
+		return history.Record(repoKey, active.Nickname)
+	},
+}
+
+// errNoRecommendation signals a silent exit 1 from recommendCmd.
+// SilenceErrors on the command prevents cobra from printing it.
+var errNoRecommendation = fmt.Errorf("")
+
+var recommendCmd = &cobra.Command{
+	Use:          "recommend",
+	Short:        "Print recommended profile for current repo (used by shell hooks)",
+	SilenceErrors: true,
+	SilenceUsage:  true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path, _ := cmd.Flags().GetString("path")
+		if path == "" {
+			var err error
+			path, err = os.Getwd()
+			if err != nil {
+				return errNoRecommendation
+			}
+		}
+
+		repoKey := history.GetRepoKeyForPath(path)
+		if repoKey == "" {
+			return errNoRecommendation
+		}
+
+		active, _ := store.GetActive()
+		currentNick := ""
+		if active != nil {
+			currentNick = active.Nickname
+		}
+
+		nick, ok := history.Recommend(repoKey, currentNick)
+		if !ok {
+			return errNoRecommendation
+		}
+
+		p, err := store.Get(nick)
+		if err != nil {
+			return errNoRecommendation
+		}
+		fmt.Printf("%s\t%s\t%s\n", p.Nickname, p.UserName, p.Email)
+		return nil
+	},
+}
+
+var claudeCmd = &cobra.Command{
+	Use:   "claude",
+	Short: "Install the git-switcher skill into Claude Code",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		scope, _ := cmd.Flags().GetString("scope")
+
+		var base string
+		if scope == "project" {
+			base = ".claude"
+		} else {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			base = filepath.Join(home, ".claude")
+		}
+
+		dest := filepath.Join(base, "skills", "git-switcher")
+		if err := os.MkdirAll(dest, 0755); err != nil {
+			return fmt.Errorf("could not create skills directory: %w", err)
+		}
+
+		skillPath := filepath.Join(dest, "SKILL.md")
+		if err := os.WriteFile(skillPath, skillMD, 0644); err != nil {
+			return fmt.Errorf("could not write skill: %w", err)
+		}
+
+		fmt.Printf("✓ Skill installed to %s\n", dest)
+		fmt.Println("  Reload Claude Code (or open a new session) to activate.")
+		return nil
+	},
+}
+
+var installCmd = &cobra.Command{
+	Use:   "install",
+	Short: "Install shell integration (prompt segment + identity nudge)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		shellFlag, _ := cmd.Flags().GetString("shell")
+
+		var sh shell.Shell
+		switch shellFlag {
+		case "zsh":
+			sh = shell.ShellZsh
+		case "bash":
+			sh = shell.ShellBash
+		case "fish":
+			sh = shell.ShellFish
+		default:
+			sh = shell.DetectShell()
+		}
+
+		fw := shell.DetectFramework()
+
+		result, err := shell.Install(sh, fw)
+		if err != nil {
+			return fmt.Errorf("install failed: %w", err)
+		}
+		fmt.Printf("✓ %s\n", result)
+		fmt.Println("  Reload your shell (or open a new terminal) to activate.")
+		return nil
+	},
+}
+
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, claudeCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
+	currentCmd.Flags().Bool("short", false, "Output nickname and email tab-separated (for shell prompts)")
+	recordCmd.Flags().String("path", "", "Directory to record for (default: current working directory)")
+	recommendCmd.Flags().String("path", "", "Directory to check (default: current working directory)")
+	installCmd.Flags().String("shell", "", "Shell to install for: zsh, bash, or fish (default: auto-detect)")
+	claudeCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills) or 'project' (.claude/skills)")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

@@ -32,7 +32,7 @@ jobs:
             exit 0
           fi
 
-          # Check if internal/ or cmd/ changed
+          # Check if internal/ or cmd/ changed (skill/SKILL.md lives under cmd/)
           CHANGED=$(git diff $LATEST_TAG..HEAD --name-only -- internal/ cmd/ || true)
 
           if [ -z "$CHANGED" ]; then
@@ -153,6 +153,13 @@ jobs:
           cd release
           cat gitswitch-*.sha256 > checksums.txt 2>/dev/null || echo "No checksums"
           ls -la
+
+      - name: Package skill file
+        run: |
+          mkdir -p git-switcher-skill
+          cp cmd/gitswitch/skill/SKILL.md git-switcher-skill/SKILL.md
+          zip -j release/git-switcher.skill git-switcher-skill/SKILL.md
+          echo "Packaged skill: $(ls -lh release/git-switcher.skill)"
 
       - name: Update install script with version
         run: |
