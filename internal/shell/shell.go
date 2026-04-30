@@ -115,6 +115,7 @@ __gitswitch_nudge() {
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
 __gitswitch_nudge
+PROMPT='$(__gitswitch_prompt)'"$PROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
 ` + marker + ` end
@@ -132,6 +133,9 @@ __gitswitch_prompt() {
 }
 
 __gitswitch_nudge() {
+  # short-circuit when $PWD hasn't changed to avoid git rev-parse on every prompt
+  [[ "$PWD" == "$__GITSWITCH_LAST_PWD" ]] && return
+  export __GITSWITCH_LAST_PWD="$PWD"
   local root
   root=$(git rev-parse --show-toplevel 2>/dev/null) || return
   [[ "$root" == "$__GITSWITCH_LAST_REPO" ]] && return
@@ -145,6 +149,7 @@ __gitswitch_nudge() {
   read -n 1 -s reply; echo
   [[ "$reply" =~ ^[Yy]$ ]] && gitswitch switch "$nickname"
 }
+PS1='$(__gitswitch_prompt)'"$PS1"
 PROMPT_COMMAND="__gitswitch_nudge${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
 __gitswitch_nudge
 source <(gitswitch completion bash)
@@ -186,6 +191,9 @@ function __gitswitch_cd_hook --on-variable PWD
   __gitswitch_nudge
 end
 __gitswitch_nudge
+function fish_right_prompt
+  __gitswitch_prompt
+end
 gitswitch completion fish | source
 ` + marker + ` end
 `

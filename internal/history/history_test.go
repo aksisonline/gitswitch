@@ -10,6 +10,9 @@ const testRepo = "git@github.com:org/repo.git"
 
 // newHistory builds a History value inline for test readability.
 func newHistory(repos map[string]RepoHistory) *History {
+	if repos == nil {
+		repos = make(map[string]RepoHistory)
+	}
 	return &History{Repos: repos}
 }
 
@@ -187,11 +190,7 @@ func TestRecord_IncrementsCount(t *testing.T) {
 	h := newHistory(map[string]RepoHistory{
 		testRepo: rh("", map[string]int{"work": 2}),
 	})
-	rh := h.Repos[testRepo]
-	rh.Identities["work"]++
-	rh.LastUsed = "work"
-	h.Repos[testRepo] = rh
-
+	recordInHistory(h, testRepo, "work")
 	if h.Repos[testRepo].Identities["work"] != 3 {
 		t.Errorf("expected count 3, got %d", h.Repos[testRepo].Identities["work"])
 	}
@@ -200,18 +199,31 @@ func TestRecord_IncrementsCount(t *testing.T) {
 	}
 }
 
+func TestRecord_NewRepo(t *testing.T) {
+	h := newHistory(nil)
+	recordInHistory(h, testRepo, "work")
+	if h.Repos[testRepo].Identities["work"] != 1 {
+		t.Errorf("expected count 1 for new repo, got %d", h.Repos[testRepo].Identities["work"])
+	}
+}
+
+func TestRecord_NilIdentitiesMap(t *testing.T) {
+	h := newHistory(map[string]RepoHistory{
+		testRepo: {Pinned: "", Identities: nil, LastUsed: ""},
+	})
+	recordInHistory(h, testRepo, "work")
+	if h.Repos[testRepo].Identities["work"] != 1 {
+		t.Errorf("expected count 1 with nil map initialised, got %d", h.Repos[testRepo].Identities["work"])
+	}
+}
+
 func TestRecord_DoesNotTouchPinned(t *testing.T) {
 	h := newHistory(map[string]RepoHistory{
 		testRepo: rh("personal", map[string]int{"work": 2}),
 	})
-	// simulate record call (increments count, never touches Pinned)
-	rh := h.Repos[testRepo]
-	rh.Identities["work"]++
-	rh.LastUsed = "work"
-	h.Repos[testRepo] = rh
-
+	recordInHistory(h, testRepo, "work")
 	if h.Repos[testRepo].Pinned != "personal" {
-		t.Errorf("record should not touch pinned field, got %q", h.Repos[testRepo].Pinned)
+		t.Errorf("recordInHistory must not touch pinned field, got %q", h.Repos[testRepo].Pinned)
 	}
 }
 

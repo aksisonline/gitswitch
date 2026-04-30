@@ -3,8 +3,8 @@ package history
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -35,6 +35,7 @@ func historyPath() (string, error) {
 }
 
 // Load reads history.json; returns an empty History if the file does not exist.
+// If the file is corrupted, backs it up as history.json.bak before starting fresh.
 func Load() (*History, error) {
 	path, err := historyPath()
 	if err != nil {
@@ -49,6 +50,8 @@ func Load() (*History, error) {
 	}
 	var h History
 	if err := json.Unmarshal(data, &h); err != nil {
+		// back up corrupted file so the user can inspect it, then start fresh
+		_ = os.Rename(path, path+".bak")
 		return &History{Repos: make(map[string]RepoHistory)}, nil
 	}
 	if h.Repos == nil {
@@ -57,7 +60,8 @@ func Load() (*History, error) {
 	return &h, nil
 }
 
-// Save writes history to disk, creating the config directory if needed.
+// Save writes history to disk atomically (temp file + rename) to prevent corruption
+// from concurrent writers.
 func Save(h *History) error {
 	dir, err := configDir()
 	if err != nil {
@@ -66,12 +70,40 @@ func Save(h *History) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	path := filepath.Join(dir, "history.json")
 	data, err := json.MarshalIndent(h, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	tmp, err := os.CreateTemp(dir, ".history-*.json")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, filepath.Join(dir, "history.json"))
+}
+
+// recordInHistory increments the usage count for nickname in h without touching the file.
+// Exported for use in tests.
+func recordInHistory(h *History, repoKey, nickname string) {
+	rh, ok := h.Repos[repoKey]
+	if !ok {
+		rh = RepoHistory{Identities: make(map[string]int)}
+	}
+	if rh.Identities == nil {
+		rh.Identities = make(map[string]int)
+	}
+	rh.Identities[nickname]++
+	rh.LastUsed = nickname
+	h.Repos[repoKey] = rh
 }
 
 // Record increments the usage count for nickname under repoKey.
@@ -83,16 +115,7 @@ func Record(repoKey, nickname string) error {
 	if err != nil {
 		return err
 	}
-	rh, ok := h.Repos[repoKey]
-	if !ok {
-		rh = RepoHistory{Identities: make(map[string]int)}
-	}
-	if rh.Identities == nil {
-		rh.Identities = make(map[string]int)
-	}
-	rh.Identities[nickname]++
-	rh.LastUsed = nickname
-	h.Repos[repoKey] = rh
+	recordInHistory(h, repoKey, nickname)
 	return Save(h)
 }
 
@@ -198,6 +221,25 @@ func GetRepoKey() string {
 	return ""
 }
 
+// GetRepoKeyForPath resolves the repo key for a given directory path.
+func GetRepoKeyForPath(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output()
+	if err == nil {
+		key := strings.TrimSpace(string(out))
+		if key != "" {
+			return key
+		}
+	}
+	out, err = exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	if err == nil {
+		key := strings.TrimSpace(string(out))
+		if key != "" {
+			return key
+		}
+	}
+	return ""
+}
+
 // marshalHistory encodes a History to JSON bytes (used by tests).
 func marshalHistory(h *History) ([]byte, error) {
 	return json.MarshalIndent(h, "", "  ")
@@ -217,23 +259,4 @@ func loadFromPath(path string) (*History, error) {
 		h.Repos = make(map[string]RepoHistory)
 	}
 	return &h, nil
-}
-
-// GetRepoKeyForPath resolves the repo key for a given directory path.
-func GetRepoKeyForPath(dir string) string {
-	out, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output()
-	if err == nil {
-		key := strings.TrimSpace(string(out))
-		if key != "" {
-			return key
-		}
-	}
-	out, err = exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
-	if err == nil {
-		key := strings.TrimSpace(string(out))
-		if key != "" {
-			return key
-		}
-	}
-	return ""
 }

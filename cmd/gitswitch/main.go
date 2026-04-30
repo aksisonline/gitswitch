@@ -327,33 +327,35 @@ var recordCmd = &cobra.Command{
 		if err != nil || active == nil {
 			return nil
 		}
-		_ = history.Record(repoKey, active.Nickname)
-		return nil
+		return history.Record(repoKey, active.Nickname)
 	},
 }
 
+// errNoRecommendation signals a silent exit 1 from recommendCmd.
+// SilenceErrors on the command prevents cobra from printing it.
+var errNoRecommendation = fmt.Errorf("")
+
 var recommendCmd = &cobra.Command{
-	Use:   "recommend",
-	Short: "Print recommended profile for current repo (used by shell hooks)",
+	Use:          "recommend",
+	Short:        "Print recommended profile for current repo (used by shell hooks)",
+	SilenceErrors: true,
+	SilenceUsage:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, _ := cmd.Flags().GetString("path")
 		if path == "" {
 			var err error
 			path, err = os.Getwd()
 			if err != nil {
-				return err
+				return errNoRecommendation
 			}
 		}
 
 		repoKey := history.GetRepoKeyForPath(path)
 		if repoKey == "" {
-			os.Exit(1)
+			return errNoRecommendation
 		}
 
-		active, err := store.GetActive()
-		if err != nil {
-			os.Exit(1)
-		}
+		active, _ := store.GetActive()
 		currentNick := ""
 		if active != nil {
 			currentNick = active.Nickname
@@ -361,12 +363,12 @@ var recommendCmd = &cobra.Command{
 
 		nick, ok := history.Recommend(repoKey, currentNick)
 		if !ok {
-			os.Exit(1)
+			return errNoRecommendation
 		}
 
 		p, err := store.Get(nick)
 		if err != nil {
-			os.Exit(1)
+			return errNoRecommendation
 		}
 		fmt.Printf("%s\t%s\t%s\n", p.Nickname, p.UserName, p.Email)
 		return nil
