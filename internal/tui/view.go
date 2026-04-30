@@ -657,7 +657,7 @@ func (m Model) viewSelectFlash(pw int) string {
 			Bold(true).
 			Background(colorBgChip).
 			Padding(0, 1)
-		popup = "\n\n  " + popupStyle.Render(fmt.Sprintf("+200  BONUS!"))
+		popup = "\n\n  " + popupStyle.Render("+200  BONUS!")
 	}
 
 	footer := "\n\n" + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{})
