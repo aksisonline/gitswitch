@@ -49,6 +49,7 @@ type Model struct {
 	introMouthOpen  bool
 	introPhase      int
 	introReadyFrame int
+	introGhostsEat  int // ghosts eaten in frightened phase (0..4)
 
 	selFlashFrame   int
 	selFlashProfile int
@@ -57,6 +58,10 @@ type Model struct {
 	transTarget State
 
 	exitFrame int
+
+	// pacman score state — purely cosmetic
+	score   int
+	hiScore int
 }
 
 var formLabels = [6]string{
@@ -84,6 +89,7 @@ func WithArcadeMode() Option {
 		m.arcadeMode = true
 		m.state = StateIntro
 		m.introMouthOpen = true
+		m.hiScore = 99990
 	}
 }
 
