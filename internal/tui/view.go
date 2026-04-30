@@ -77,11 +77,9 @@ func (m Model) viewNormalHeader(subtitle string) string {
 			styleItemDim.Render("  ›  "),
 			styleFormTitle.Render(subtitle))
 	} else {
-		heading = fmt.Sprintf("  %s  %s   %s\n", icon, title, tagline)
+		heading = fmt.Sprintf("  %s  %s   %s", icon, title, tagline)
 	}
-	made := styleBrand.Render("  Made by ") + styleTitle.Render("AKS") +
-		styleBrand.Render("  ·  ") + styleBrandLink.Render("abhiramkanna.com")
-	return heading + made
+	return heading
 }
 
 func (m Model) viewArcadeHeader(subtitle string) string {
@@ -96,11 +94,9 @@ func (m Model) viewArcadeHeader(subtitle string) string {
 			styleItemDim.Render(" ► "),
 			styleFormTitle.Render(subtitle))
 	} else {
-		heading = fmt.Sprintf("  %s  %s %s\n", icon, title, pellets)
+		heading = fmt.Sprintf("  %s  %s %s", icon, title, pellets)
 	}
-	made := lipgloss.NewStyle().Foreground(arcadeMazeBlue).Bold(true).Render("  ARCADE MODE  ") +
-		styleBrand.Render("·  ") + styleBrandLink.Render("abhiramkanna.com")
-	return heading + made
+	return heading
 }
 
 func (m Model) viewList(pw int) string {
@@ -271,21 +267,66 @@ func (m Model) viewForm(subtitle string, pw int) string {
 	inputW := pw - 6
 	header := m.viewHeader(subtitle)
 
+	// compact: no subtitles, inactive fields collapse to one line + input box
+	// mini: all fields on one line including the active one (no input box at all)
+	compact := m.height > 0 && m.height < 28
+	mini := m.height > 0 && m.height < 22
+
 	var fields string
 	for i := range formLabels {
-		fields += "\n\n"
 		counter := styleFieldCounter.Render(fmt.Sprintf("[%d/6]", i+1))
-		sub := styleBrand.Render("  " + formSubtitles[i])
-		if i == m.formFocus {
-			fields += "  " + counter + " " + styleInputLabelActive.Render(formLabels[i]) + sub + "\n"
-			fields += "  " + styleInputActive(inputW).Render(m.formFields[i]+styleTitle.Render("█"))
-		} else {
-			fields += "  " + styleBrand.Render(fmt.Sprintf("[%d/6]", i+1)) + " " + styleInputLabel.Render(formLabels[i]) + sub + "\n"
+		isFocus := i == m.formFocus
+
+		if mini {
+			// All fields on a single line; active field uses an inline cursor.
 			v := m.formFields[i]
-			if v == "" {
-				v = " "
+			if isFocus {
+				cursor := v + styleTitle.Render("█")
+				row := "  " + counter + " " + styleInputLabelActive.Render(formLabels[i]) +
+					styleItemDim.Render("  ") + styleCurrentVal.Render(cursor)
+				fields += "\n" + row
+			} else {
+				display := v
+				if display == "" {
+					display = styleItemDim.Render("—")
+				} else {
+					display = styleCurrentVal.Render(display)
+				}
+				row := "  " + counter + " " + styleInputLabel.Render(formLabels[i]) +
+					styleItemDim.Render("  ") + display
+				fields += "\n" + row
 			}
-			fields += "  " + styleInputInactive(inputW).Render(v)
+		} else if compact {
+			// Active field: label + input box (no subtitle).
+			// Inactive fields: single collapsed line, no input box.
+			if isFocus {
+				fields += "\n"
+				fields += "  " + counter + " " + styleInputLabelActive.Render(formLabels[i]) + "\n"
+				fields += "  " + styleInputActive(inputW).Render(m.formFields[i]+styleTitle.Render("█"))
+			} else {
+				v := m.formFields[i]
+				display := styleItemDim.Render("—")
+				if v != "" {
+					display = styleCurrentVal.Render(v)
+				}
+				fields += "\n  " + counter + " " + styleItemDim.Render("· ") +
+					styleInputLabel.Render(formLabels[i]) + styleItemDim.Render("  ") + display
+			}
+		} else {
+			// Full layout: subtitles, input box for every field.
+			fields += "\n\n"
+			sub := styleBrand.Render("  " + formSubtitles[i])
+			if isFocus {
+				fields += "  " + counter + " " + styleInputLabelActive.Render(formLabels[i]) + sub + "\n"
+				fields += "  " + styleInputActive(inputW).Render(m.formFields[i]+styleTitle.Render("█"))
+			} else {
+				fields += "  " + styleBrand.Render(fmt.Sprintf("[%d/6]", i+1)) + " " + styleInputLabel.Render(formLabels[i]) + sub + "\n"
+				v := m.formFields[i]
+				if v == "" {
+					v = " "
+				}
+				fields += "  " + styleInputInactive(inputW).Render(v)
+			}
 		}
 	}
 

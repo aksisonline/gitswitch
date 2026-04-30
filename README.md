@@ -74,7 +74,7 @@ Opens a full terminal UI. First run auto-imports your existing `git config` as a
 ```
 ╭──────────────────────────────────────────────────────╮
 │  ✦  Git-Switcher                                     │
-│     Made by AKS  ·  abhiramkanna.com                 │
+│     identity manager for git                        │
 │                                                      │
 │  Current  username  ·  user@gmail.com                │
 │                                                      │
@@ -189,7 +189,3 @@ gitswitch add work     "Alice" alice@company.com --ssh-key ~/.ssh/id_work     --
 ## Credits
 
 SSH key switching, `gh auth switch` integration, and profile state detection logic inspired by [dankozlowski/git-switcher](https://github.com/dankozlowski/git-switcher).
-
----
-
-Made by [AKS](https://abhiramkanna.com)
