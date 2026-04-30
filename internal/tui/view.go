@@ -100,19 +100,26 @@ func (m Model) viewArcadeHeader(subtitle string) string {
 }
 
 func (m Model) viewList(pw int) string {
+	// Full list height = 10 + len(profiles) lines; switch to compact 2 lines early.
+	compact := m.height > 0 && m.height < 12+len(m.profiles)
+
 	var top string
 	if m.arcadeMode {
 		top = m.viewScoreLine(pw) + "\n"
 	}
 	header := m.viewHeader("")
-	currentLine := m.viewCurrentLine()
+	currentLine := m.viewCurrentLine(compact)
 
 	nickColW := m.nickColumnWidth()
 	items := m.viewProfileItems(pw, nickColW)
-	statusLine := m.viewStatusLine()
+	statusLine := m.viewStatusLine(compact)
 
 	var updateBanner string
 	if m.updateAvailable {
+		bannerSep := "\n\n"
+		if compact {
+			bannerSep = "\n"
+		}
 		if m.arcadeMode {
 			chip := lipgloss.NewStyle().
 				Background(colorBgChip).
@@ -120,12 +127,12 @@ func (m Model) viewList(pw int) string {
 				Bold(true).
 				Padding(0, 1).
 				Render("★ BONUS STAGE")
-			updateBanner = "\n\n  " + chip + "  " +
+			updateBanner = bannerSep + "  " + chip + "  " +
 				styleScore.Render(m.latestVersion) +
 				styleBrand.Render("  available")
 		} else {
 			chip := styleChipBox().Render("UPDATE")
-			updateBanner = "\n\n  " + chip + "  " +
+			updateBanner = bannerSep + "  " + chip + "  " +
 				styleCurrentVal.Render(m.latestVersion) +
 				styleBrand.Render("  ·  press [u] to upgrade")
 		}
@@ -146,11 +153,19 @@ func (m Model) viewList(pw int) string {
 		footerPairs = append(footerPairs, [2]string{"u", "upgrade"})
 	}
 
-	footer := "\n\n" + divider(pw) + "\n" + m.footerKeys(pw, footerPairs)
+	footerSep := "\n\n"
+	if compact {
+		footerSep = "\n"
+	}
+	footer := footerSep + divider(pw) + "\n" + m.footerKeys(pw, footerPairs)
 	return top + stylePanelBorder(pw).Render(header+currentLine+items+updateBanner+statusLine+footer)
 }
 
-func (m Model) viewCurrentLine() string {
+func (m Model) viewCurrentLine(compact bool) string {
+	sep := "\n\n"
+	if compact {
+		sep = "\n"
+	}
 	if m.active != nil {
 		tags := ""
 		if m.active.SSHKey != "" {
@@ -163,7 +178,7 @@ func (m Model) viewCurrentLine() string {
 		if m.arcadeMode {
 			label = "PLAYER 1 ► "
 		}
-		return "\n\n  " +
+		return sep + "  " +
 			styleCurrent.Render(label) +
 			styleCheckmark.Render(m.active.Nickname) +
 			styleCurrent.Render("  ·  ") +
@@ -171,9 +186,9 @@ func (m Model) viewCurrentLine() string {
 			tags
 	}
 	if m.arcadeMode {
-		return "\n\n  " + styleCurrent.Render("NO ACTIVE PLAYER")
+		return sep + "  " + styleCurrent.Render("NO ACTIVE PLAYER")
 	}
-	return "\n\n  " + styleCurrent.Render("No active profile")
+	return sep + "  " + styleCurrent.Render("No active profile")
 }
 
 func (m Model) nickColumnWidth() int {
@@ -245,32 +260,36 @@ func (m Model) viewProfileItems(pw, nickColW int) string {
 	return items
 }
 
-func (m Model) viewStatusLine() string {
+func (m Model) viewStatusLine(compact bool) string {
 	if m.statusMsg == "" {
 		return ""
+	}
+	sep := "\n\n"
+	if compact {
+		sep = "\n"
 	}
 	if m.statusIsErr {
 		prefix := "✕ "
 		if m.arcadeMode {
 			prefix = "✗ "
 		}
-		return "\n\n  " + lipgloss.NewStyle().Foreground(colorRed).Bold(true).Render(prefix+m.statusMsg)
+		return sep + "  " + lipgloss.NewStyle().Foreground(colorRed).Bold(true).Render(prefix+m.statusMsg)
 	}
 	prefix := "● "
 	if m.arcadeMode {
 		prefix = "◎ "
 	}
-	return "\n\n  " + lipgloss.NewStyle().Foreground(colorGreen).Render(prefix+m.statusMsg)
+	return sep + "  " + lipgloss.NewStyle().Foreground(colorGreen).Render(prefix+m.statusMsg)
 }
 
 func (m Model) viewForm(subtitle string, pw int) string {
 	inputW := pw - 6
 	header := m.viewHeader(subtitle)
 
-	// compact: no subtitles, inactive fields collapse to one line + input box
-	// mini: all fields on one line including the active one (no input box at all)
-	compact := m.height > 0 && m.height < 28
-	mini := m.height > 0 && m.height < 22
+	// full=36 lines, compact=15 lines, mini=12 lines.
+	// Switch 2 lines before the larger layout would clip.
+	compact := m.height > 0 && m.height < 38
+	mini := m.height > 0 && m.height < 17
 
 	var fields string
 	for i := range formLabels {
@@ -345,7 +364,12 @@ func (m Model) viewForm(subtitle string, pw int) string {
 }
 
 func (m Model) viewDeleteConfirm(pw int) string {
+	compact := m.height > 0 && m.height < 13 // full=11 lines
 	header := m.viewHeader("Delete Profile")
+	sep := "\n\n"
+	if compact {
+		sep = "\n"
+	}
 	var body string
 	if len(m.profiles) > 0 {
 		p := m.profiles[m.cursor]
@@ -363,11 +387,11 @@ func (m Model) viewDeleteConfirm(pw int) string {
 			Bold(true).
 			Padding(0, 1).
 			Render(" WARNING ")
-		body = "\n\n  " + warnChip + "  " + styleDeleteTitle.Render(titleText) +
+		body = sep + "  " + warnChip + "  " + styleDeleteTitle.Render(titleText) +
 			"\n  " + styleCurrent.Render(fmt.Sprintf("%s  ·  %s", p.UserName, p.Email)) +
-			"\n\n  " + styleBrand.Render(bodyText)
+			sep + "  " + styleBrand.Render(bodyText)
 	}
-	footer := "\n\n" + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
+	footer := sep + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
 		{"y", "confirm delete"},
 		{"n / esc", "cancel"},
 	})
@@ -375,6 +399,7 @@ func (m Model) viewDeleteConfirm(pw int) string {
 }
 
 func (m Model) viewTips(pw int) string {
+	compact := m.height > 0 && m.height < 28 // full=26 lines
 	header := m.viewHeader("CLI Quick Reference")
 
 	type tip struct{ cmd, desc string }
@@ -397,9 +422,18 @@ func (m Model) viewTips(pw int) string {
 		sectionLabel = "CHEAT CODES"
 	}
 
-	body := "\n\n  " + labelStyle.Render(sectionLabel) + "\n"
-	for _, t := range tips {
-		body += fmt.Sprintf("\n  %s  %s\n      %s\n", bullet, cmdStyle.Render(t.cmd), descStyle.Render(t.desc))
+	var body string
+	if compact {
+		body = "\n  " + labelStyle.Render(sectionLabel) + "\n"
+		for _, t := range tips {
+			body += fmt.Sprintf("\n  %s  %s  %s", bullet, cmdStyle.Render(t.cmd), descStyle.Render(t.desc))
+		}
+		body += "\n"
+	} else {
+		body = "\n\n  " + labelStyle.Render(sectionLabel) + "\n"
+		for _, t := range tips {
+			body += fmt.Sprintf("\n  %s  %s\n      %s\n", bullet, cmdStyle.Render(t.cmd), descStyle.Render(t.desc))
+		}
 	}
 
 	footer := "\n" + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{{"esc / ?", "back"}})
@@ -585,7 +619,7 @@ func (m Model) renderReadyTrack(numSlots int) string {
 func (m Model) viewSelectFlash(pw int) string {
 	score := m.viewScoreLine(pw)
 	header := m.viewHeader("")
-	currentLine := m.viewCurrentLine()
+	currentLine := m.viewCurrentLine(m.height > 0 && m.height < 12+len(m.profiles))
 	nickColW := m.nickColumnWidth()
 
 	items := "\n"
