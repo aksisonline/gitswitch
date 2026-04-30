@@ -39,7 +39,7 @@ func historyPath() (string, error) {
 func Load() (*History, error) {
 	path, err := historyPath()
 	if err != nil {
-		return &History{Repos: make(map[string]RepoHistory)}, nil
+		return nil, err
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -60,13 +60,9 @@ func Load() (*History, error) {
 	return &h, nil
 }
 
-// Save writes history to disk atomically (temp file + rename) to prevent corruption
-// from concurrent writers.
-func Save(h *History) error {
-	dir, err := configDir()
-	if err != nil {
-		return err
-	}
+// saveToPath writes h to an explicit file path atomically (temp file + rename).
+func saveToPath(h *History, path string) error {
+	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
@@ -88,11 +84,20 @@ func Save(h *History) error {
 		os.Remove(tmpName)
 		return err
 	}
-	return os.Rename(tmpName, filepath.Join(dir, "history.json"))
+	return os.Rename(tmpName, path)
+}
+
+// Save writes history to the default path atomically (temp file + rename) to
+// prevent corruption from concurrent writers.
+func Save(h *History) error {
+	dir, err := configDir()
+	if err != nil {
+		return err
+	}
+	return saveToPath(h, filepath.Join(dir, "history.json"))
 }
 
 // recordInHistory increments the usage count for nickname in h without touching the file.
-// Exported for use in tests.
 func recordInHistory(h *History, repoKey, nickname string) {
 	rh, ok := h.Repos[repoKey]
 	if !ok {
@@ -106,17 +111,37 @@ func recordInHistory(h *History, repoKey, nickname string) {
 	h.Repos[repoKey] = rh
 }
 
+// recordAt loads history from histPath, increments the count, and saves back.
+// It is used by Record (with the default path) and by tests (with a temp path).
+func recordAt(histPath, repoKey, nickname string) error {
+	h, err := loadFromPath(histPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		h = &History{Repos: make(map[string]RepoHistory)}
+	}
+	recordInHistory(h, repoKey, nickname)
+	return saveToPath(h, histPath)
+}
+
 // Record increments the usage count for nickname under repoKey.
+// It holds an exclusive advisory lock for the duration of the read-modify-write
+// to prevent lost updates when multiple shells call "gitswitch record" concurrently.
 func Record(repoKey, nickname string) error {
 	if repoKey == "" || nickname == "" {
 		return nil
 	}
-	h, err := Load()
+	dir, err := configDir()
 	if err != nil {
 		return err
 	}
-	recordInHistory(h, repoKey, nickname)
-	return Save(h)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	return withLock(dir, func() error {
+		return recordAt(filepath.Join(dir, "history.json"), repoKey, nickname)
+	})
 }
 
 // Recommend returns the suggested nickname for repoKey.

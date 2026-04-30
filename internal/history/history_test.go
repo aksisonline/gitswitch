@@ -167,7 +167,9 @@ func TestPinUnpinRoundtrip(t *testing.T) {
 
 	// pin
 	h.Repos[testRepo] = func() RepoHistory {
-		r := h.Repos[testRepo]; r.Pinned = "personal"; return r
+		r := h.Repos[testRepo]
+		r.Pinned = "personal"
+		return r
 	}()
 	nick, ok := recommendFromHistory(h, testRepo, "work")
 	if !ok || nick != "personal" {
@@ -176,7 +178,9 @@ func TestPinUnpinRoundtrip(t *testing.T) {
 
 	// unpin
 	h.Repos[testRepo] = func() RepoHistory {
-		r := h.Repos[testRepo]; r.Pinned = ""; return r
+		r := h.Repos[testRepo]
+		r.Pinned = ""
+		return r
 	}()
 	nick, ok = recommendFromHistory(h, testRepo, "other")
 	if !ok || nick != "work" {
@@ -184,7 +188,92 @@ func TestPinUnpinRoundtrip(t *testing.T) {
 	}
 }
 
-// ── Record ───────────────────────────────────────────────────────────────────
+// ── Record (full pipeline via recordAt) ─────────────────────────────────────
+
+// TestRecordAt_IncrementsCount exercises the full Load→recordInHistory→Save
+// pipeline by using recordAt with a temp file, catching regressions that
+// in-memory-only tests would miss (e.g. nil map handling, Save/Load round-trip).
+func TestRecordAt_IncrementsCount(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "history.json")
+
+	h := newHistory(map[string]RepoHistory{
+		testRepo: rh("", map[string]int{"work": 2}),
+	})
+	data, err := marshalHistory(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := recordAt(path, testRepo, "work"); err != nil {
+		t.Fatalf("recordAt: %v", err)
+	}
+
+	h2, err := loadFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h2.Repos[testRepo].Identities["work"] != 3 {
+		t.Errorf("expected count 3 after save/load, got %d", h2.Repos[testRepo].Identities["work"])
+	}
+	if h2.Repos[testRepo].LastUsed != "work" {
+		t.Errorf("expected last_used 'work', got %q", h2.Repos[testRepo].LastUsed)
+	}
+}
+
+// TestRecordAt_DoesNotTouchPinned verifies that the full Record pipeline never
+// overwrites the Pinned field.
+func TestRecordAt_DoesNotTouchPinned(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "history.json")
+
+	h := newHistory(map[string]RepoHistory{
+		testRepo: rh("personal", map[string]int{"work": 2}),
+	})
+	data, err := marshalHistory(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := recordAt(path, testRepo, "work"); err != nil {
+		t.Fatalf("recordAt: %v", err)
+	}
+
+	h2, err := loadFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h2.Repos[testRepo].Pinned != "personal" {
+		t.Errorf("recordAt must not touch pinned field, got %q", h2.Repos[testRepo].Pinned)
+	}
+}
+
+// TestRecordAt_CreatesFileFromScratch verifies that recordAt bootstraps a
+// fresh history file when none exists yet.
+func TestRecordAt_CreatesFileFromScratch(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "history.json")
+
+	if err := recordAt(path, testRepo, "work"); err != nil {
+		t.Fatalf("recordAt on missing file: %v", err)
+	}
+
+	h, err := loadFromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Repos[testRepo].Identities["work"] != 1 {
+		t.Errorf("expected count 1 for new file, got %d", h.Repos[testRepo].Identities["work"])
+	}
+}
+
+// ── Record (in-memory helpers) ───────────────────────────────────────────────
 
 func TestRecord_IncrementsCount(t *testing.T) {
 	h := newHistory(map[string]RepoHistory{
