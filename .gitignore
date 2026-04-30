@@ -10,3 +10,7 @@ bin/
 release/
 artifacts/
 checksums.txt
+
+# skill build artifacts
+*.skill
+git-switcher-eval-review.html

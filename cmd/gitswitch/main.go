@@ -1,8 +1,10 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/history"
@@ -13,6 +15,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
+
+//go:embed skill/SKILL.md
+var skillMD []byte
 
 var version = "dev"
 
@@ -368,6 +373,39 @@ var recommendCmd = &cobra.Command{
 	},
 }
 
+var claudeCmd = &cobra.Command{
+	Use:   "claude",
+	Short: "Install the git-switcher skill into Claude Code",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		scope, _ := cmd.Flags().GetString("scope")
+
+		var base string
+		if scope == "project" {
+			base = ".claude"
+		} else {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			base = filepath.Join(home, ".claude")
+		}
+
+		dest := filepath.Join(base, "skills", "git-switcher")
+		if err := os.MkdirAll(dest, 0755); err != nil {
+			return fmt.Errorf("could not create skills directory: %w", err)
+		}
+
+		skillPath := filepath.Join(dest, "SKILL.md")
+		if err := os.WriteFile(skillPath, skillMD, 0644); err != nil {
+			return fmt.Errorf("could not write skill: %w", err)
+		}
+
+		fmt.Printf("✓ Skill installed to %s\n", dest)
+		fmt.Println("  Reload Claude Code (or open a new session) to activate.")
+		return nil
+	},
+}
+
 var installCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install shell integration (prompt segment + identity nudge)",
@@ -399,7 +437,7 @@ var installCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, claudeCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
@@ -407,6 +445,7 @@ func main() {
 	recordCmd.Flags().String("path", "", "Directory to record for (default: current working directory)")
 	recommendCmd.Flags().String("path", "", "Directory to check (default: current working directory)")
 	installCmd.Flags().String("shell", "", "Shell to install for: zsh, bash, or fish (default: auto-detect)")
+	claudeCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills) or 'project' (.claude/skills)")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
