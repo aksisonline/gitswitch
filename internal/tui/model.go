@@ -49,7 +49,7 @@ type Model struct {
 	introMouthOpen  bool
 	introPhase      int
 	introReadyFrame int
-	introGhostsEat  int // ghosts eaten in frightened phase (0..3)
+	introGhostsEat  int // ghosts eaten in frightened phase (0..4)
 
 	selFlashFrame   int
 	selFlashProfile int

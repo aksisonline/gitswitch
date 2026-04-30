@@ -561,7 +561,12 @@ func (m Model) renderFrightenedTrack(numSlots int) string {
 		// Ghosts (only those not yet eaten)
 		ghostHere := false
 		for gi, g := range ghostBaseSlots {
-			gPos := g + retreat
+			gPos := g - retreat
+			if gPos < 0 {
+				gPos = 0
+			} else if gPos >= numSlots {
+				gPos = numSlots - 1
+			}
 			if gPos == slot && gi >= m.introGhostsEat {
 				ch = frightStyle.Render("ᗣ") + " "
 				ghostHere = true
@@ -683,7 +688,14 @@ func (m Model) viewTransition(pw int) string {
 	if step < 1 {
 		step = 1
 	}
+	// Snap to even column so it matches the slot := c*2 coordinate system.
 	pipeCol := innerW - 1 - m.transFrame*step
+	if pipeCol%2 != 0 {
+		pipeCol--
+	}
+	if pipeCol < 0 {
+		pipeCol = 0
+	}
 
 	body := ""
 	for r := 0; r < numLines; r++ {
