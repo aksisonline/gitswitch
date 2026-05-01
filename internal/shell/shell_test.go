@@ -15,47 +15,34 @@ func fishClearPattern() string { return "set -e __GITSWITCH_LAST_REPO" }
 
 // ── Prompt: nickname not email ───────────────────────────────────────────────
 
-func TestZshSnippetUsesNickname(t *testing.T) {
-	s := nudgeSnippetZsh()
-	if strings.Contains(s, "git config user.email") {
-		t.Error("zsh prompt should use gitswitch current --short, not git config user.email")
+func TestPromptSnippetsUsePromptFlag(t *testing.T) {
+	cases := []struct{ name, snippet string }{
+		{"zsh", nudgeSnippetZsh()},
+		{"bash", nudgeSnippetBash()},
+		{"fish", nudgeSnippetFish()},
+		{"omz", omzPluginContent()},
+		{"p10k", p10kSnippet()},
 	}
+	for _, c := range cases {
+		if strings.Contains(c.snippet, "git config user.email") {
+			t.Errorf("%s: prompt must not use git config user.email", c.name)
+		}
+		if !strings.Contains(c.snippet, "gitswitch current --prompt") {
+			t.Errorf("%s: prompt must use 'gitswitch current --prompt'", c.name)
+		}
+		if strings.Contains(c.snippet, "gitswitch current --short") && c.name != "starship" {
+			t.Errorf("%s: prompt must not use --short (reserved for Starship/scripts)", c.name)
+		}
+	}
+}
+
+func TestStarshipSnippetUsesShortFlag(t *testing.T) {
+	s := starshipSnippet()
 	if !strings.Contains(s, "gitswitch current --short") {
-		t.Error("zsh prompt missing 'gitswitch current --short'")
+		t.Error("starship snippet must use --short (outputs nick+email for display)")
 	}
-}
-
-func TestBashSnippetUsesNickname(t *testing.T) {
-	s := nudgeSnippetBash()
-	if strings.Contains(s, "git config user.email") {
-		t.Error("bash prompt should use gitswitch current --short, not git config user.email")
-	}
-	if !strings.Contains(s, "gitswitch current --short") {
-		t.Error("bash prompt missing 'gitswitch current --short'")
-	}
-}
-
-func TestFishSnippetUsesNickname(t *testing.T) {
-	s := nudgeSnippetFish()
-	if strings.Contains(s, "git config user.email") {
-		t.Error("fish prompt should use gitswitch current --short, not git config user.email")
-	}
-	if !strings.Contains(s, "gitswitch current --short") {
-		t.Error("fish prompt missing 'gitswitch current --short'")
-	}
-}
-
-func TestOMZSnippetUsesNickname(t *testing.T) {
-	s := omzPluginContent()
-	if strings.Contains(s, "git config user.email") {
-		t.Error("OMZ prompt should use gitswitch current --short, not git config user.email")
-	}
-}
-
-func TestP10kSnippetUsesNickname(t *testing.T) {
-	s := p10kSnippet()
-	if strings.Contains(s, "git config user.email") {
-		t.Error("P10k prompt should use gitswitch current --short, not git config user.email")
+	if strings.Contains(s, "gitswitch current --prompt") {
+		t.Error("starship snippet must not use --prompt")
 	}
 }
 
@@ -279,9 +266,6 @@ func TestInstallRaw_Idempotent(t *testing.T) {
 	tmp := t.TempDir()
 	rc := tmp + "/.zshrc"
 
-	// Simulate installing twice by writing marker manually, then calling Install.
-	// We can't call Install directly (it touches real $HOME), so test IsInstalled
-	// behaviour after writing the snippet once.
 	snippet := nudgeSnippetZsh()
 	if err := os.WriteFile(rc, []byte(snippet), 0644); err != nil {
 		t.Fatal(err)
@@ -289,9 +273,94 @@ func TestInstallRaw_Idempotent(t *testing.T) {
 	if !IsInstalled(rc) {
 		t.Fatal("marker should be present after first write")
 	}
-	// Writing again would create a duplicate — validate IsInstalled blocks it.
-	// (The Install function checks IsInstalled before appending.)
 	if !IsInstalled(rc) {
 		t.Error("second IsInstalled check should still be true — idempotency guard works")
+	}
+}
+
+// ── removeMarkerBlock ────────────────────────────────────────────────────────
+
+func TestRemoveMarkerBlock_RemovesBlock(t *testing.T) {
+	tmp := t.TempDir()
+	rc := tmp + "/rc.sh"
+	content := "before\n" + nudgeSnippetZsh() + "\nafter\n"
+	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeMarkerBlock(rc); err != nil {
+		t.Fatalf("removeMarkerBlock: %v", err)
+	}
+	got, _ := os.ReadFile(rc)
+	if strings.Contains(string(got), marker) {
+		t.Error("marker still present after removal")
+	}
+	if !strings.Contains(string(got), "before") || !strings.Contains(string(got), "after") {
+		t.Error("surrounding content was stripped")
+	}
+}
+
+func TestRemoveMarkerBlock_Idempotent(t *testing.T) {
+	tmp := t.TempDir()
+	rc := tmp + "/rc.sh"
+	content := "before\n" + nudgeSnippetZsh() + "\nafter\n"
+	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeMarkerBlock(rc); err != nil {
+		t.Fatal(err)
+	}
+	// second call on file with no markers should be a no-op
+	if err := removeMarkerBlock(rc); err != nil {
+		t.Errorf("second removeMarkerBlock should be no-op, got: %v", err)
+	}
+}
+
+func TestRemoveMarkerBlock_PreservesMode(t *testing.T) {
+	tmp := t.TempDir()
+	rc := tmp + "/rc.sh"
+	content := nudgeSnippetZsh()
+	if err := os.WriteFile(rc, []byte(content), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeMarkerBlock(rc); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode() != 0755 {
+		t.Errorf("file mode changed: got %v, want 0755", info.Mode())
+	}
+}
+
+func TestRemoveMarkerBlock_UnbalancedBegin(t *testing.T) {
+	tmp := t.TempDir()
+	rc := tmp + "/rc.sh"
+	content := marker + " begin\nsome content\n" // no end marker
+	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeMarkerBlock(rc); err == nil {
+		t.Error("expected error for begin-without-end marker")
+	}
+}
+
+func TestRemoveMarkerBlock_StarshipBlock(t *testing.T) {
+	tmp := t.TempDir()
+	toml := tmp + "/starship.toml"
+	content := "[palettes]\n" + marker + " begin\n" + starshipSnippet() + "\n" + marker + " end\n"
+	if err := os.WriteFile(toml, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeMarkerBlock(toml); err != nil {
+		t.Fatalf("removeMarkerBlock on starship.toml: %v", err)
+	}
+	got, _ := os.ReadFile(toml)
+	if strings.Contains(string(got), "custom.gitswitch") {
+		t.Error("starship block not removed")
+	}
+	if !strings.Contains(string(got), "[palettes]") {
+		t.Error("surrounding toml content was stripped")
 	}
 }

@@ -95,10 +95,10 @@ func nudgeSnippetZsh() string {
 __gitswitch_prompt() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
   local info nick color
-  info=$(gitswitch current --short 2>/dev/null)
+  info=$(gitswitch current --prompt 2>/dev/null)
   [[ -z "$info" ]] && return
   nick=$(echo "$info" | cut -f1)
-  color=$(echo "$info" | cut -f3)
+  color=$(echo "$info" | cut -f2)
   [[ -z "$color" ]] && color=141
   echo "%F{$color}[${nick}]%f"
 }
@@ -134,10 +134,10 @@ func nudgeSnippetBash() string {
 __gitswitch_prompt() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
   local info nick color
-  info=$(gitswitch current --short 2>/dev/null)
+  info=$(gitswitch current --prompt 2>/dev/null)
   [[ -z "$info" ]] && return
   nick=$(echo "$info" | cut -f1)
-  color=$(echo "$info" | cut -f3)
+  color=$(echo "$info" | cut -f2)
   [[ -z "$color" ]] && color=141
   printf '\[\e[38;5;%sm\][%s]\[\e[0m\] ' "$color" "$nick"
 }
@@ -173,11 +173,11 @@ func nudgeSnippetFish() string {
 ` + marker + ` begin
 function __gitswitch_prompt
   git rev-parse --git-dir > /dev/null 2>&1; or return
-  set info (gitswitch current --short 2>/dev/null)
+  set info (gitswitch current --prompt 2>/dev/null)
   test -z "$info"; and return
   set parts (string split \t $info)
   set nick $parts[1]
-  set color $parts[3]
+  set color $parts[2]
   test -z "$color"; and set color 141
   printf '\e[38;5;%sm[%s]\e[0m' $color $nick
 end
@@ -231,10 +231,10 @@ func omzPluginContent() string {
 __gitswitch_prompt() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
   local info nick color
-  info=$(gitswitch current --short 2>/dev/null)
+  info=$(gitswitch current --prompt 2>/dev/null)
   [[ -z "$info" ]] && return
   nick=$(echo "$info" | cut -f1)
-  color=$(echo "$info" | cut -f3)
+  color=$(echo "$info" | cut -f2)
   [[ -z "$color" ]] && color=141
   echo "%F{$color}[${nick}]%f"
 }
@@ -269,10 +269,10 @@ func p10kSnippet() string {
 function prompt_gitswitch() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
   local info nick color
-  info=$(gitswitch current --short 2>/dev/null)
+  info=$(gitswitch current --prompt 2>/dev/null)
   [[ -z "$info" ]] && return
   nick=$(echo "$info" | cut -f1)
-  color=$(echo "$info" | cut -f3)
+  color=$(echo "$info" | cut -f2)
   [[ -z "$color" ]] && color=141
   p10k segment -f "$color" -t "[$nick]"
 }
@@ -331,7 +331,7 @@ func installStarship(home string) (string, error) {
 		return "", err
 	}
 	defer f.Close()
-	snippet := marker + "\n" + starshipSnippet() + "\n"
+	snippet := marker + " begin\n" + starshipSnippet() + "\n" + marker + " end\n"
 	if _, err := f.WriteString(snippet); err != nil {
 		return "", err
 	}
@@ -372,10 +372,11 @@ func installP10k(sh Shell, home string) (string, error) {
 	), nil
 }
 
-// Uninstall removes the gitswitch marker block from all rc files it may have
-// been written to, and removes the OMZ plugin file if present.
+// Uninstall removes the gitswitch marker block from the rc file for the
+// provided shell, removes it from starship.toml if present, and removes the
+// OMZ plugin file if present.
 // Returns a human-readable description of what was removed.
-func Uninstall(sh Shell, fw Framework) (string, error) {
+func Uninstall(sh Shell, _ Framework) (string, error) {
 	home, _ := os.UserHomeDir()
 	var removed []string
 
@@ -413,8 +414,13 @@ func Uninstall(sh Shell, fw Framework) (string, error) {
 }
 
 // removeMarkerBlock strips the lines between (and including) the begin/end
-// marker lines from path, writing the result atomically.
+// marker lines from path, writing the result atomically via a temp file + rename
+// with the original file mode preserved.
 func removeMarkerBlock(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -422,12 +428,17 @@ func removeMarkerBlock(path string) error {
 	lines := strings.Split(string(data), "\n")
 	var out []string
 	inside := false
+	found := false
 	for _, line := range lines {
 		if strings.Contains(line, marker+" begin") {
 			inside = true
+			found = true
 			continue
 		}
 		if strings.Contains(line, marker+" end") {
+			if !inside {
+				return fmt.Errorf("unbalanced marker in %s: found end without begin", path)
+			}
 			inside = false
 			continue
 		}
@@ -435,7 +446,31 @@ func removeMarkerBlock(path string) error {
 			out = append(out, line)
 		}
 	}
-	return os.WriteFile(path, []byte(strings.Join(out, "\n")), 0644)
+	if inside {
+		return fmt.Errorf("unbalanced marker in %s: begin without end", path)
+	}
+	if !found {
+		return nil
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".gitswitch-uninstall-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.WriteString(strings.Join(out, "\n")); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Chmod(tmpName, info.Mode()); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 func installRaw(sh Shell) (string, error) {

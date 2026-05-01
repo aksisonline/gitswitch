@@ -197,9 +197,14 @@ var currentCmd = &cobra.Command{
 			return nil
 		}
 		if short {
+			fmt.Printf("%s\t%s\n", p.Nickname, p.Email)
+			return nil
+		}
+		prompt, _ := cmd.Flags().GetBool("prompt")
+		if prompt {
 			prefs, _ := store.LoadPrefs()
 			color := tui.ThemePromptColor(prefs.ColorTheme)
-			fmt.Printf("%s\t%s\t%s\n", p.Nickname, p.Email, color)
+			fmt.Printf("%s\t%s\n", p.Nickname, color)
 			return nil
 		}
 		fmt.Printf("%s — %s <%s>\n", p.Nickname, p.UserName, p.Email)
@@ -475,7 +480,8 @@ func main() {
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
-	currentCmd.Flags().Bool("short", false, "Output nickname and email tab-separated (for shell prompts)")
+	currentCmd.Flags().Bool("short", false, "Output nickname and email tab-separated (for Starship and scripts)")
+	currentCmd.Flags().Bool("prompt", false, "Output nickname and theme color tab-separated (for shell prompt functions)")
 	recordCmd.Flags().String("path", "", "Directory to record for (default: current working directory)")
 	recommendCmd.Flags().String("path", "", "Directory to check (default: current working directory)")
 	installCmd.Flags().String("shell", "", "Shell to install for: zsh, bash, or fish (default: auto-detect)")
