@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/history"
@@ -232,7 +233,11 @@ var versionCmd = &cobra.Command{
 		latest := ver.CachedLatestVersion(store.ConfigDir())
 		if latest != "" && ver.IsUpdateAvailable(version, latest) {
 			fmt.Printf("New version available: %s\n", latest)
-			fmt.Println("Run: gitswitch upgrade")
+			if isBrewInstall() {
+				fmt.Println("Run: brew upgrade gitswitch")
+			} else {
+				fmt.Println("Run: gitswitch upgrade")
+			}
 		} else if latest != "" {
 			fmt.Println("Already on latest version.")
 		}
@@ -256,10 +261,30 @@ var pacmanCmd = &cobra.Command{
 	},
 }
 
+// isBrewInstall reports whether the running binary lives inside a Homebrew
+// Cellar by resolving symlinks and checking the path.
+func isBrewInstall() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	resolved, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		resolved = exe
+	}
+	return strings.Contains(resolved, "/Cellar/") ||
+		strings.Contains(resolved, "/linuxbrew/")
+}
+
 var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Upgrade gitswitch to the latest version",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if isBrewInstall() {
+			fmt.Println("gitswitch was installed via Homebrew.")
+			fmt.Println("Run: brew upgrade gitswitch")
+			return nil
+		}
 		fmt.Println("Checking for updates...")
 		latest, err := ver.FetchLatestVersionFresh()
 		if err != nil {
