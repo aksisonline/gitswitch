@@ -197,7 +197,9 @@ var currentCmd = &cobra.Command{
 			return nil
 		}
 		if short {
-			fmt.Printf("%s\t%s\n", p.Nickname, p.Email)
+			prefs, _ := store.LoadPrefs()
+			color := tui.ThemePromptColor(prefs.ColorTheme)
+			fmt.Printf("%s\t%s\t%s\n", p.Nickname, p.Email, color)
 			return nil
 		}
 		fmt.Printf("%s — %s <%s>\n", p.Nickname, p.UserName, p.Email)
@@ -438,8 +440,38 @@ var installCmd = &cobra.Command{
 	},
 }
 
+var uninstallCmd = &cobra.Command{
+	Use:   "uninstall",
+	Short: "Remove shell integration written by 'gitswitch install'",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		shellFlag, _ := cmd.Flags().GetString("shell")
+
+		var sh shell.Shell
+		switch shellFlag {
+		case "zsh":
+			sh = shell.ShellZsh
+		case "bash":
+			sh = shell.ShellBash
+		case "fish":
+			sh = shell.ShellFish
+		default:
+			sh = shell.DetectShell()
+		}
+
+		fw := shell.DetectFramework()
+
+		result, err := shell.Uninstall(sh, fw)
+		if err != nil {
+			return fmt.Errorf("uninstall failed: %w", err)
+		}
+		fmt.Printf("✓ %s\n", result)
+		fmt.Println("  Reload your shell (or open a new terminal) to complete removal.")
+		return nil
+	},
+}
+
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, claudeCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
@@ -447,6 +479,7 @@ func main() {
 	recordCmd.Flags().String("path", "", "Directory to record for (default: current working directory)")
 	recommendCmd.Flags().String("path", "", "Directory to check (default: current working directory)")
 	installCmd.Flags().String("shell", "", "Shell to install for: zsh, bash, or fish (default: auto-detect)")
+	uninstallCmd.Flags().String("shell", "", "Shell to uninstall for: zsh, bash, or fish (default: auto-detect)")
 	claudeCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills) or 'project' (.claude/skills)")
 
 	if err := rootCmd.Execute(); err != nil {

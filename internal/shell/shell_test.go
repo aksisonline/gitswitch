@@ -79,22 +79,35 @@ func TestZshSnippetPromptHasGitCheck(t *testing.T) {
 
 func TestZshSnippetUsesLeftPROMPT(t *testing.T) {
 	s := nudgeSnippetZsh()
-	if !strings.Contains(s, "PROMPT='%F{cyan}$(__gitswitch_prompt)%f'") {
-		t.Error("zsh snippet should prepend cyan nickname to left PROMPT")
+	if !strings.Contains(s, "PROMPT='$(__gitswitch_prompt)'") {
+		t.Error("zsh snippet should prepend gitswitch_prompt to left PROMPT")
 	}
 }
 
-func TestBashSnippetHasCyanColor(t *testing.T) {
+func TestBashSnippetHasDynamicColor(t *testing.T) {
 	s := nudgeSnippetBash()
-	if !strings.Contains(s, `\e[36m`) {
-		t.Error("bash prompt missing cyan ANSI color code \\e[36m")
+	if !strings.Contains(s, `\e[38;5;`) {
+		t.Error("bash prompt missing 256-color ANSI format")
+	}
+	if strings.Contains(s, `\e[36m`) {
+		t.Error("bash prompt must not use hardcoded cyan")
 	}
 }
 
-func TestFishSnippetHasCyanColor(t *testing.T) {
+func TestFishSnippetHasDynamicColor(t *testing.T) {
 	s := nudgeSnippetFish()
-	if !strings.Contains(s, "set_color cyan") {
-		t.Error("fish prompt missing 'set_color cyan'")
+	if !strings.Contains(s, `\e[38;5;`) {
+		t.Error("fish prompt missing 256-color ANSI format")
+	}
+}
+
+func TestZshSnippetHasDynamicColor(t *testing.T) {
+	s := nudgeSnippetZsh()
+	if !strings.Contains(s, `%F{$color}`) {
+		t.Error("zsh prompt missing dynamic color variable")
+	}
+	if strings.Contains(s, `%F{cyan}`) {
+		t.Error("zsh prompt must not use hardcoded cyan")
 	}
 }
 

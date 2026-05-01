@@ -94,9 +94,13 @@ func nudgeSnippetZsh() string {
 ` + marker + ` begin
 __gitswitch_prompt() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
-  local nick
-  nick=$(gitswitch current --short 2>/dev/null | cut -f1)
-  [[ -n "$nick" ]] && echo "[${nick}]"
+  local info nick color
+  info=$(gitswitch current --short 2>/dev/null)
+  [[ -z "$info" ]] && return
+  nick=$(echo "$info" | cut -f1)
+  color=$(echo "$info" | cut -f3)
+  [[ -z "$color" ]] && color=141
+  echo "%F{$color}[${nick}]%f"
 }
 
 __gitswitch_nudge() {
@@ -116,7 +120,7 @@ __gitswitch_nudge() {
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
 __gitswitch_nudge
-PROMPT='%F{cyan}$(__gitswitch_prompt)%f'"$PROMPT"
+PROMPT='$(__gitswitch_prompt)'"$PROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
 ` + marker + ` end
@@ -129,9 +133,13 @@ func nudgeSnippetBash() string {
 ` + marker + ` begin
 __gitswitch_prompt() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
-  local nick
-  nick=$(gitswitch current --short 2>/dev/null | cut -f1)
-  [[ -n "$nick" ]] && printf '\[\e[36m\][%s]\[\e[0m\] ' "$nick"
+  local info nick color
+  info=$(gitswitch current --short 2>/dev/null)
+  [[ -z "$info" ]] && return
+  nick=$(echo "$info" | cut -f1)
+  color=$(echo "$info" | cut -f3)
+  [[ -z "$color" ]] && color=141
+  printf '\[\e[38;5;%sm\][%s]\[\e[0m\] ' "$color" "$nick"
 }
 
 __gitswitch_nudge() {
@@ -165,12 +173,13 @@ func nudgeSnippetFish() string {
 ` + marker + ` begin
 function __gitswitch_prompt
   git rev-parse --git-dir > /dev/null 2>&1; or return
-  set nick (gitswitch current --short 2>/dev/null | string split \t)[1]
-  if test -n "$nick"
-    set_color cyan
-    echo -n "[$nick]"
-    set_color normal
-  end
+  set info (gitswitch current --short 2>/dev/null)
+  test -z "$info"; and return
+  set parts (string split \t $info)
+  set nick $parts[1]
+  set color $parts[3]
+  test -z "$color"; and set color 141
+  printf '\e[38;5;%sm[%s]\e[0m' $color $nick
 end
 
 function __gitswitch_nudge
@@ -221,9 +230,13 @@ func omzPluginContent() string {
 	return `# gitswitch oh-my-zsh plugin
 __gitswitch_prompt() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
-  local nick
-  nick=$(gitswitch current --short 2>/dev/null | cut -f1)
-  [[ -n "$nick" ]] && echo "[${nick}]"
+  local info nick color
+  info=$(gitswitch current --short 2>/dev/null)
+  [[ -z "$info" ]] && return
+  nick=$(echo "$info" | cut -f1)
+  color=$(echo "$info" | cut -f3)
+  [[ -z "$color" ]] && color=141
+  echo "%F{$color}[${nick}]%f"
 }
 
 __gitswitch_nudge() {
@@ -243,7 +256,7 @@ __gitswitch_nudge() {
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
 __gitswitch_nudge
-PROMPT='%F{cyan}$(__gitswitch_prompt)%f'"$PROMPT"
+PROMPT='$(__gitswitch_prompt)'"$PROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
 `
@@ -255,9 +268,13 @@ func p10kSnippet() string {
 ` + marker + ` begin
 function prompt_gitswitch() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
-  local nick
-  nick=$(gitswitch current --short 2>/dev/null | cut -f1)
-  [[ -n "$nick" ]] && p10k segment -f cyan -t "[$nick]"
+  local info nick color
+  info=$(gitswitch current --short 2>/dev/null)
+  [[ -z "$info" ]] && return
+  nick=$(echo "$info" | cut -f1)
+  color=$(echo "$info" | cut -f3)
+  [[ -z "$color" ]] && color=141
+  p10k segment -f "$color" -t "[$nick]"
 }
 
 __gitswitch_nudge() {
