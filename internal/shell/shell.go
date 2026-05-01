@@ -93,9 +93,14 @@ func nudgeSnippetZsh() string {
 	return `
 ` + marker + ` begin
 __gitswitch_prompt() {
-  local email
-  email=$(git config user.email 2>/dev/null) || return
-  echo "[${email}]"
+  git rev-parse --git-dir > /dev/null 2>&1 || return
+  local info nick color
+  info=$(gitswitch current --prompt 2>/dev/null)
+  [[ -z "$info" ]] && return
+  nick=$(echo "$info" | cut -f1)
+  color=$(echo "$info" | cut -f2)
+  [[ -z "$color" ]] && color=141
+  echo "%F{$color}[${nick}]%f"
 }
 
 __gitswitch_nudge() {
@@ -127,9 +132,14 @@ func nudgeSnippetBash() string {
 	return `
 ` + marker + ` begin
 __gitswitch_prompt() {
-  local email
-  email=$(git config user.email 2>/dev/null) || return
-  echo "[${email}]"
+  git rev-parse --git-dir > /dev/null 2>&1 || return
+  local info nick color
+  info=$(gitswitch current --prompt 2>/dev/null)
+  [[ -z "$info" ]] && return
+  nick=$(echo "$info" | cut -f1)
+  color=$(echo "$info" | cut -f2)
+  [[ -z "$color" ]] && color=141
+  printf '\[\e[38;5;%sm\][%s]\[\e[0m\] ' "$color" "$nick"
 }
 
 __gitswitch_nudge() {
@@ -162,10 +172,14 @@ func nudgeSnippetFish() string {
 	return `
 ` + marker + ` begin
 function __gitswitch_prompt
-  set email (git config user.email 2>/dev/null)
-  if test -n "$email"
-    echo "[$email]"
-  end
+  git rev-parse --git-dir > /dev/null 2>&1; or return
+  set info (gitswitch current --prompt 2>/dev/null)
+  test -z "$info"; and return
+  set parts (string split \t $info)
+  set nick $parts[1]
+  set color $parts[2]
+  test -z "$color"; and set color 141
+  printf '\e[38;5;%sm[%s]\e[0m' $color $nick
 end
 
 function __gitswitch_nudge
@@ -215,9 +229,14 @@ format = "[$symbol($output)]($style) "
 func omzPluginContent() string {
 	return `# gitswitch oh-my-zsh plugin
 __gitswitch_prompt() {
-  local email
-  email=$(git config user.email 2>/dev/null) || return
-  echo "[${email}]"
+  git rev-parse --git-dir > /dev/null 2>&1 || return
+  local info nick color
+  info=$(gitswitch current --prompt 2>/dev/null)
+  [[ -z "$info" ]] && return
+  nick=$(echo "$info" | cut -f1)
+  color=$(echo "$info" | cut -f2)
+  [[ -z "$color" ]] && color=141
+  echo "%F{$color}[${nick}]%f"
 }
 
 __gitswitch_nudge() {
@@ -237,6 +256,7 @@ __gitswitch_nudge() {
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
 __gitswitch_nudge
+PROMPT='$(__gitswitch_prompt)'"$PROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
 `
@@ -247,9 +267,14 @@ func p10kSnippet() string {
 	return `
 ` + marker + ` begin
 function prompt_gitswitch() {
-  local email
-  email=$(git config user.email 2>/dev/null) || return
-  p10k segment -f cyan -t "[$email]"
+  git rev-parse --git-dir > /dev/null 2>&1 || return
+  local info nick color
+  info=$(gitswitch current --prompt 2>/dev/null)
+  [[ -z "$info" ]] && return
+  nick=$(echo "$info" | cut -f1)
+  color=$(echo "$info" | cut -f2)
+  [[ -z "$color" ]] && color=141
+  p10k segment -f "$color" -t "[$nick]"
 }
 
 __gitswitch_nudge() {
@@ -306,7 +331,7 @@ func installStarship(home string) (string, error) {
 		return "", err
 	}
 	defer f.Close()
-	snippet := marker + "\n" + starshipSnippet() + "\n"
+	snippet := marker + " begin\n" + starshipSnippet() + "\n" + marker + " end\n"
 	if _, err := f.WriteString(snippet); err != nil {
 		return "", err
 	}
@@ -345,6 +370,107 @@ func installP10k(sh Shell, home string) (string, error) {
 		"wrote nudge hook to %s\n  → for the prompt segment, add 'gitswitch' to POWERLEVEL9K_LEFT_PROMPT_ELEMENTS in ~/.p10k.zsh",
 		rcFile,
 	), nil
+}
+
+// Uninstall removes the gitswitch marker block from the rc file for the
+// provided shell, removes it from starship.toml if present, and removes the
+// OMZ plugin file if present.
+// Returns a human-readable description of what was removed.
+func Uninstall(sh Shell, _ Framework) (string, error) {
+	home, _ := os.UserHomeDir()
+	var removed []string
+
+	// rc file (raw, p10k, bash)
+	rcFile := RCFile(sh)
+	if IsInstalled(rcFile) {
+		if err := removeMarkerBlock(rcFile); err != nil {
+			return "", fmt.Errorf("could not clean %s: %w", rcFile, err)
+		}
+		removed = append(removed, rcFile)
+	}
+
+	// starship.toml
+	tomlPath := filepath.Join(home, ".config", "starship.toml")
+	if IsInstalled(tomlPath) {
+		if err := removeMarkerBlock(tomlPath); err != nil {
+			return "", fmt.Errorf("could not clean %s: %w", tomlPath, err)
+		}
+		removed = append(removed, tomlPath)
+	}
+
+	// OMZ plugin file
+	omzPlugin := filepath.Join(home, ".oh-my-zsh", "custom", "plugins", "gitswitch", "gitswitch.plugin.zsh")
+	if _, err := os.Stat(omzPlugin); err == nil {
+		if err := os.Remove(omzPlugin); err != nil {
+			return "", fmt.Errorf("could not remove %s: %w", omzPlugin, err)
+		}
+		removed = append(removed, omzPlugin)
+	}
+
+	if len(removed) == 0 {
+		return "nothing to remove — gitswitch shell integration was not installed", nil
+	}
+	return fmt.Sprintf("removed gitswitch integration from: %s", strings.Join(removed, ", ")), nil
+}
+
+// removeMarkerBlock strips the lines between (and including) the begin/end
+// marker lines from path, writing the result atomically via a temp file + rename
+// with the original file mode preserved.
+func removeMarkerBlock(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	var out []string
+	inside := false
+	found := false
+	for _, line := range lines {
+		if strings.Contains(line, marker+" begin") {
+			inside = true
+			found = true
+			continue
+		}
+		if strings.Contains(line, marker+" end") {
+			if !inside {
+				return fmt.Errorf("unbalanced marker in %s: found end without begin", path)
+			}
+			inside = false
+			continue
+		}
+		if !inside {
+			out = append(out, line)
+		}
+	}
+	if inside {
+		return fmt.Errorf("unbalanced marker in %s: begin without end", path)
+	}
+	if !found {
+		return nil
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".gitswitch-uninstall-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.WriteString(strings.Join(out, "\n")); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Chmod(tmpName, info.Mode()); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 func installRaw(sh Shell) (string, error) {

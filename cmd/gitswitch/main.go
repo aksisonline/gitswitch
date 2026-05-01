@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/history"
@@ -200,6 +201,13 @@ var currentCmd = &cobra.Command{
 			fmt.Printf("%s\t%s\n", p.Nickname, p.Email)
 			return nil
 		}
+		prompt, _ := cmd.Flags().GetBool("prompt")
+		if prompt {
+			prefs, _ := store.LoadPrefs()
+			color := tui.ThemePromptColor(prefs.ColorTheme)
+			fmt.Printf("%s\t%s\n", p.Nickname, color)
+			return nil
+		}
 		fmt.Printf("%s — %s <%s>\n", p.Nickname, p.UserName, p.Email)
 		return nil
 	},
@@ -225,7 +233,11 @@ var versionCmd = &cobra.Command{
 		latest := ver.CachedLatestVersion(store.ConfigDir())
 		if latest != "" && ver.IsUpdateAvailable(version, latest) {
 			fmt.Printf("New version available: %s\n", latest)
-			fmt.Println("Run: gitswitch upgrade")
+			if isBrewInstall() {
+				fmt.Println("Run: brew upgrade gitswitch")
+			} else {
+				fmt.Println("Run: gitswitch upgrade")
+			}
 		} else if latest != "" {
 			fmt.Println("Already on latest version.")
 		}
@@ -249,10 +261,30 @@ var pacmanCmd = &cobra.Command{
 	},
 }
 
+// isBrewInstall reports whether the running binary lives inside a Homebrew
+// Cellar by resolving symlinks and checking the path.
+func isBrewInstall() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	resolved, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		resolved = exe
+	}
+	return strings.Contains(resolved, "/Cellar/") ||
+		strings.Contains(resolved, "/linuxbrew/")
+}
+
 var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Upgrade gitswitch to the latest version",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if isBrewInstall() {
+			fmt.Println("gitswitch was installed via Homebrew.")
+			fmt.Println("Run: brew upgrade gitswitch")
+			return nil
+		}
 		fmt.Println("Checking for updates...")
 		latest, err := ver.FetchLatestVersionFresh()
 		if err != nil {
@@ -438,15 +470,47 @@ var installCmd = &cobra.Command{
 	},
 }
 
+var uninstallCmd = &cobra.Command{
+	Use:   "uninstall",
+	Short: "Remove shell integration written by 'gitswitch install'",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		shellFlag, _ := cmd.Flags().GetString("shell")
+
+		var sh shell.Shell
+		switch shellFlag {
+		case "zsh":
+			sh = shell.ShellZsh
+		case "bash":
+			sh = shell.ShellBash
+		case "fish":
+			sh = shell.ShellFish
+		default:
+			sh = shell.DetectShell()
+		}
+
+		fw := shell.DetectFramework()
+
+		result, err := shell.Uninstall(sh, fw)
+		if err != nil {
+			return fmt.Errorf("uninstall failed: %w", err)
+		}
+		fmt.Printf("✓ %s\n", result)
+		fmt.Println("  Reload your shell (or open a new terminal) to complete removal.")
+		return nil
+	},
+}
+
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, claudeCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
-	currentCmd.Flags().Bool("short", false, "Output nickname and email tab-separated (for shell prompts)")
+	currentCmd.Flags().Bool("short", false, "Output nickname and email tab-separated (for Starship and scripts)")
+	currentCmd.Flags().Bool("prompt", false, "Output nickname and theme color tab-separated (for shell prompt functions)")
 	recordCmd.Flags().String("path", "", "Directory to record for (default: current working directory)")
 	recommendCmd.Flags().String("path", "", "Directory to check (default: current working directory)")
 	installCmd.Flags().String("shell", "", "Shell to install for: zsh, bash, or fish (default: auto-detect)")
+	uninstallCmd.Flags().String("shell", "", "Shell to uninstall for: zsh, bash, or fish (default: auto-detect)")
 	claudeCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills) or 'project' (.claude/skills)")
 
 	if err := rootCmd.Execute(); err != nil {

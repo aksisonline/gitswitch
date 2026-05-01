@@ -38,6 +38,15 @@ var themeNames = [12]string{
 	"Violet", "Ember", "Matrix", "Steel",
 }
 
+// ThemePromptColor returns the ANSI 256-color index string for the primary
+// color of the given theme index. Safe to call from outside the TUI.
+func ThemePromptColor(index int) string {
+	if index < 0 || index >= len(normalThemes) {
+		index = 0
+	}
+	return string(normalThemes[index].Primary)
+}
+
 var arcadeTheme = ThemeColors{
 	Primary:   "226", // pac yellow
 	Accent:    "214", // coin gold
