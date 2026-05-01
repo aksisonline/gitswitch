@@ -100,7 +100,7 @@ __gitswitch_prompt() {
 
 __gitswitch_nudge() {
   local root
-  root=$(git rev-parse --show-toplevel 2>/dev/null) || return
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || { export __GITSWITCH_LAST_REPO=""; return; }
   [[ "$root" == "$__GITSWITCH_LAST_REPO" ]] && return
   export __GITSWITCH_LAST_REPO="$root"
   gitswitch record --path "$root" 2>/dev/null
@@ -137,7 +137,7 @@ __gitswitch_nudge() {
   [[ "$PWD" == "$__GITSWITCH_LAST_PWD" ]] && return
   export __GITSWITCH_LAST_PWD="$PWD"
   local root
-  root=$(git rev-parse --show-toplevel 2>/dev/null) || return
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || { export __GITSWITCH_LAST_REPO=""; return; }
   [[ "$root" == "$__GITSWITCH_LAST_REPO" ]] && return
   export __GITSWITCH_LAST_REPO="$root"
   gitswitch record --path "$root" 2>/dev/null
@@ -169,7 +169,7 @@ function __gitswitch_prompt
 end
 
 function __gitswitch_nudge
-  set root (git rev-parse --show-toplevel 2>/dev/null); or return
+  set root (git rev-parse --show-toplevel 2>/dev/null); or begin; set -gx __GITSWITCH_LAST_REPO ""; return; end
   if test "$root" = "$__GITSWITCH_LAST_REPO"
     return
   end
@@ -222,7 +222,7 @@ __gitswitch_prompt() {
 
 __gitswitch_nudge() {
   local root
-  root=$(git rev-parse --show-toplevel 2>/dev/null) || return
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || { export __GITSWITCH_LAST_REPO=""; return; }
   [[ "$root" == "$__GITSWITCH_LAST_REPO" ]] && return
   export __GITSWITCH_LAST_REPO="$root"
   gitswitch record --path "$root" 2>/dev/null
@@ -254,7 +254,7 @@ function prompt_gitswitch() {
 
 __gitswitch_nudge() {
   local root
-  root=$(git rev-parse --show-toplevel 2>/dev/null) || return
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || { export __GITSWITCH_LAST_REPO=""; return; }
   [[ "$root" == "$__GITSWITCH_LAST_REPO" ]] && return
   export __GITSWITCH_LAST_REPO="$root"
   gitswitch record --path "$root" 2>/dev/null
