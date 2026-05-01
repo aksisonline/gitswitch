@@ -116,7 +116,7 @@ __gitswitch_nudge() {
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
 __gitswitch_nudge
-RPROMPT='%F{cyan}$(__gitswitch_prompt)%f'"$RPROMPT"
+PROMPT='%F{cyan}$(__gitswitch_prompt)%f'"$PROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
 ` + marker + ` end
@@ -243,7 +243,7 @@ __gitswitch_nudge() {
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
 __gitswitch_nudge
-RPROMPT='%F{cyan}$(__gitswitch_prompt)%f'"$RPROMPT"
+PROMPT='%F{cyan}$(__gitswitch_prompt)%f'"$PROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
 `

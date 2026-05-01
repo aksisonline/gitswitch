@@ -77,13 +77,10 @@ func TestZshSnippetPromptHasGitCheck(t *testing.T) {
 
 // ── Prompt placement ─────────────────────────────────────────────────────────
 
-func TestZshSnippetUsesRPROMPT(t *testing.T) {
+func TestZshSnippetUsesLeftPROMPT(t *testing.T) {
 	s := nudgeSnippetZsh()
-	if !strings.Contains(s, "RPROMPT=") {
-		t.Error("zsh snippet should use RPROMPT (right-side prompt)")
-	}
-	if strings.Contains(s, "PROMPT='$(__gitswitch_prompt)") {
-		t.Error("zsh snippet must not prepend to left PROMPT")
+	if !strings.Contains(s, "PROMPT='%F{cyan}$(__gitswitch_prompt)%f'") {
+		t.Error("zsh snippet should prepend cyan nickname to left PROMPT")
 	}
 }
 
