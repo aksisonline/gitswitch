@@ -13,6 +13,94 @@ import (
 func zshClearPattern() string  { return "unset __GITSWITCH_LAST_REPO" }
 func fishClearPattern() string { return "set -e __GITSWITCH_LAST_REPO" }
 
+// ── Prompt: nickname not email ───────────────────────────────────────────────
+
+func TestZshSnippetUsesNickname(t *testing.T) {
+	s := nudgeSnippetZsh()
+	if strings.Contains(s, "git config user.email") {
+		t.Error("zsh prompt should use gitswitch current --short, not git config user.email")
+	}
+	if !strings.Contains(s, "gitswitch current --short") {
+		t.Error("zsh prompt missing 'gitswitch current --short'")
+	}
+}
+
+func TestBashSnippetUsesNickname(t *testing.T) {
+	s := nudgeSnippetBash()
+	if strings.Contains(s, "git config user.email") {
+		t.Error("bash prompt should use gitswitch current --short, not git config user.email")
+	}
+	if !strings.Contains(s, "gitswitch current --short") {
+		t.Error("bash prompt missing 'gitswitch current --short'")
+	}
+}
+
+func TestFishSnippetUsesNickname(t *testing.T) {
+	s := nudgeSnippetFish()
+	if strings.Contains(s, "git config user.email") {
+		t.Error("fish prompt should use gitswitch current --short, not git config user.email")
+	}
+	if !strings.Contains(s, "gitswitch current --short") {
+		t.Error("fish prompt missing 'gitswitch current --short'")
+	}
+}
+
+func TestOMZSnippetUsesNickname(t *testing.T) {
+	s := omzPluginContent()
+	if strings.Contains(s, "git config user.email") {
+		t.Error("OMZ prompt should use gitswitch current --short, not git config user.email")
+	}
+}
+
+func TestP10kSnippetUsesNickname(t *testing.T) {
+	s := p10kSnippet()
+	if strings.Contains(s, "git config user.email") {
+		t.Error("P10k prompt should use gitswitch current --short, not git config user.email")
+	}
+}
+
+// ── Prompt: only inside a git repo ───────────────────────────────────────────
+
+func TestZshSnippetPromptHasGitCheck(t *testing.T) {
+	for _, s := range []struct{ name, snippet string }{
+		{"zsh", nudgeSnippetZsh()},
+		{"bash", nudgeSnippetBash()},
+		{"fish", nudgeSnippetFish()},
+		{"omz", omzPluginContent()},
+		{"p10k", p10kSnippet()},
+	} {
+		if !strings.Contains(s.snippet, "git rev-parse --git-dir") {
+			t.Errorf("%s prompt function missing git-repo guard", s.name)
+		}
+	}
+}
+
+// ── Prompt placement ─────────────────────────────────────────────────────────
+
+func TestZshSnippetUsesRPROMPT(t *testing.T) {
+	s := nudgeSnippetZsh()
+	if !strings.Contains(s, "RPROMPT=") {
+		t.Error("zsh snippet should use RPROMPT (right-side prompt)")
+	}
+	if strings.Contains(s, "PROMPT='$(__gitswitch_prompt)") {
+		t.Error("zsh snippet must not prepend to left PROMPT")
+	}
+}
+
+func TestBashSnippetHasCyanColor(t *testing.T) {
+	s := nudgeSnippetBash()
+	if !strings.Contains(s, `\e[36m`) {
+		t.Error("bash prompt missing cyan ANSI color code \\e[36m")
+	}
+}
+
+func TestFishSnippetHasCyanColor(t *testing.T) {
+	s := nudgeSnippetFish()
+	if !strings.Contains(s, "set_color cyan") {
+		t.Error("fish prompt missing 'set_color cyan'")
+	}
+}
+
 func TestZshSnippetClearsLastRepo(t *testing.T) {
 	s := nudgeSnippetZsh()
 	if !strings.Contains(s, zshClearPattern()) {

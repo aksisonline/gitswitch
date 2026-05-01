@@ -93,9 +93,10 @@ func nudgeSnippetZsh() string {
 	return `
 ` + marker + ` begin
 __gitswitch_prompt() {
-  local email
-  email=$(git config user.email 2>/dev/null) || return
-  echo "[${email}]"
+  git rev-parse --git-dir > /dev/null 2>&1 || return
+  local nick
+  nick=$(gitswitch current --short 2>/dev/null | cut -f1)
+  [[ -n "$nick" ]] && echo "[${nick}]"
 }
 
 __gitswitch_nudge() {
@@ -115,7 +116,7 @@ __gitswitch_nudge() {
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
 __gitswitch_nudge
-PROMPT='$(__gitswitch_prompt)'"$PROMPT"
+RPROMPT='%F{cyan}$(__gitswitch_prompt)%f'"$RPROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
 ` + marker + ` end
@@ -127,9 +128,10 @@ func nudgeSnippetBash() string {
 	return `
 ` + marker + ` begin
 __gitswitch_prompt() {
-  local email
-  email=$(git config user.email 2>/dev/null) || return
-  echo "[${email}]"
+  git rev-parse --git-dir > /dev/null 2>&1 || return
+  local nick
+  nick=$(gitswitch current --short 2>/dev/null | cut -f1)
+  [[ -n "$nick" ]] && printf '\[\e[36m\][%s]\[\e[0m\] ' "$nick"
 }
 
 __gitswitch_nudge() {
@@ -162,9 +164,12 @@ func nudgeSnippetFish() string {
 	return `
 ` + marker + ` begin
 function __gitswitch_prompt
-  set email (git config user.email 2>/dev/null)
-  if test -n "$email"
-    echo "[$email]"
+  git rev-parse --git-dir > /dev/null 2>&1; or return
+  set nick (gitswitch current --short 2>/dev/null | string split \t)[1]
+  if test -n "$nick"
+    set_color cyan
+    echo -n "[$nick]"
+    set_color normal
   end
 end
 
@@ -215,9 +220,10 @@ format = "[$symbol($output)]($style) "
 func omzPluginContent() string {
 	return `# gitswitch oh-my-zsh plugin
 __gitswitch_prompt() {
-  local email
-  email=$(git config user.email 2>/dev/null) || return
-  echo "[${email}]"
+  git rev-parse --git-dir > /dev/null 2>&1 || return
+  local nick
+  nick=$(gitswitch current --short 2>/dev/null | cut -f1)
+  [[ -n "$nick" ]] && echo "[${nick}]"
 }
 
 __gitswitch_nudge() {
@@ -237,6 +243,7 @@ __gitswitch_nudge() {
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
 __gitswitch_nudge
+RPROMPT='%F{cyan}$(__gitswitch_prompt)%f'"$RPROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
 `
@@ -247,9 +254,10 @@ func p10kSnippet() string {
 	return `
 ` + marker + ` begin
 function prompt_gitswitch() {
-  local email
-  email=$(git config user.email 2>/dev/null) || return
-  p10k segment -f cyan -t "[$email]"
+  git rev-parse --git-dir > /dev/null 2>&1 || return
+  local nick
+  nick=$(gitswitch current --short 2>/dev/null | cut -f1)
+  [[ -n "$nick" ]] && p10k segment -f cyan -t "[$nick]"
 }
 
 __gitswitch_nudge() {
@@ -345,6 +353,72 @@ func installP10k(sh Shell, home string) (string, error) {
 		"wrote nudge hook to %s\n  → for the prompt segment, add 'gitswitch' to POWERLEVEL9K_LEFT_PROMPT_ELEMENTS in ~/.p10k.zsh",
 		rcFile,
 	), nil
+}
+
+// Uninstall removes the gitswitch marker block from all rc files it may have
+// been written to, and removes the OMZ plugin file if present.
+// Returns a human-readable description of what was removed.
+func Uninstall(sh Shell, fw Framework) (string, error) {
+	home, _ := os.UserHomeDir()
+	var removed []string
+
+	// rc file (raw, p10k, bash)
+	rcFile := RCFile(sh)
+	if IsInstalled(rcFile) {
+		if err := removeMarkerBlock(rcFile); err != nil {
+			return "", fmt.Errorf("could not clean %s: %w", rcFile, err)
+		}
+		removed = append(removed, rcFile)
+	}
+
+	// starship.toml
+	tomlPath := filepath.Join(home, ".config", "starship.toml")
+	if IsInstalled(tomlPath) {
+		if err := removeMarkerBlock(tomlPath); err != nil {
+			return "", fmt.Errorf("could not clean %s: %w", tomlPath, err)
+		}
+		removed = append(removed, tomlPath)
+	}
+
+	// OMZ plugin file
+	omzPlugin := filepath.Join(home, ".oh-my-zsh", "custom", "plugins", "gitswitch", "gitswitch.plugin.zsh")
+	if _, err := os.Stat(omzPlugin); err == nil {
+		if err := os.Remove(omzPlugin); err != nil {
+			return "", fmt.Errorf("could not remove %s: %w", omzPlugin, err)
+		}
+		removed = append(removed, omzPlugin)
+	}
+
+	if len(removed) == 0 {
+		return "nothing to remove — gitswitch shell integration was not installed", nil
+	}
+	return fmt.Sprintf("removed gitswitch integration from: %s", strings.Join(removed, ", ")), nil
+}
+
+// removeMarkerBlock strips the lines between (and including) the begin/end
+// marker lines from path, writing the result atomically.
+func removeMarkerBlock(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	var out []string
+	inside := false
+	for _, line := range lines {
+		if strings.Contains(line, marker+" begin") {
+			inside = true
+			continue
+		}
+		if strings.Contains(line, marker+" end") {
+			inside = false
+			continue
+		}
+		if !inside {
+			out = append(out, line)
+		}
+	}
+	return os.WriteFile(path, []byte(strings.Join(out, "\n")), 0644)
 }
 
 func installRaw(sh Shell) (string, error) {
