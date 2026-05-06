@@ -261,6 +261,16 @@ var pacmanCmd = &cobra.Command{
 	},
 }
 
+// gitswitchConfigDir returns ~/.config/gitswitch, or an error when the home
+// directory cannot be determined.
+func gitswitchConfigDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine home directory: %w", err)
+	}
+	return filepath.Join(home, ".config", "gitswitch"), nil
+}
+
 // isBrewInstall reports whether the running binary lives inside a Homebrew
 // Cellar by resolving symlinks and checking the path.
 func isBrewInstall() bool {
@@ -464,7 +474,10 @@ var installCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("install failed: %w", err)
 		}
-		configDir := filepath.Join(func() string { h, _ := os.UserHomeDir(); return h }(), ".config", "gitswitch")
+		configDir, err := gitswitchConfigDir()
+		if err != nil {
+			return err
+		}
 		_ = shell.WriteHookVersion(configDir, version)
 		fmt.Printf("✓ %s\n", result)
 		fmt.Println("  Reload your shell (or open a new terminal) to activate.")
@@ -476,7 +489,10 @@ var hookCheckCmd = &cobra.Command{
 	Use:    "hook-check",
 	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		configDir := filepath.Join(func() string { h, _ := os.UserHomeDir(); return h }(), ".config", "gitswitch")
+		configDir, err := gitswitchConfigDir()
+		if err != nil {
+			return err
+		}
 		if msg := shell.HookUpdateMessage(configDir, version); msg != "" {
 			fmt.Println(msg)
 		}
