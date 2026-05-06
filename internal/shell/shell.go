@@ -79,6 +79,28 @@ func RCFile(sh Shell) string {
 	}
 }
 
+// WriteHookVersion persists the installed hook version to configDir/hook-version.
+func WriteHookVersion(configDir, version string) error {
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(configDir, "hook-version"), []byte(version), 0644)
+}
+
+// HookUpdateMessage returns a one-line hint if the installed hook is older than
+// currentVersion, or "" if up-to-date or the version file is missing.
+func HookUpdateMessage(configDir, currentVersion string) string {
+	data, err := os.ReadFile(filepath.Join(configDir, "hook-version"))
+	if err != nil {
+		return ""
+	}
+	installed := strings.TrimSpace(string(data))
+	if installed == currentVersion || installed == "" {
+		return ""
+	}
+	return fmt.Sprintf("gitswitch: shell integration updated (%s → %s) — run: gitswitch install", installed, currentVersion)
+}
+
 // IsInstalled checks whether the gitswitch marker exists in the given file.
 func IsInstalled(path string) bool {
 	data, err := os.ReadFile(path)
@@ -121,6 +143,7 @@ autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
 __gitswitch_launch() {
   __gitswitch_nudge
+  gitswitch hook-check 2>/dev/null
   add-zsh-hook -d precmd __gitswitch_launch
 }
 add-zsh-hook precmd __gitswitch_launch
@@ -163,9 +186,13 @@ __gitswitch_nudge() {
   read -n 1 -s reply; echo
   [[ "$reply" =~ ^[Yy]$ ]] && gitswitch switch "$nickname"
 }
+__gitswitch_launch() {
+  [[ -n "$__GITSWITCH_LAUNCHED" ]] && return
+  export __GITSWITCH_LAUNCHED=1
+  gitswitch hook-check 2>/dev/null
+}
 PS1='$(__gitswitch_prompt)'"$PS1"
-PROMPT_COMMAND="__gitswitch_nudge${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
-__gitswitch_nudge
+PROMPT_COMMAND="__gitswitch_launch; __gitswitch_nudge${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
 source <(gitswitch completion bash)
 ` + marker + ` end
 `
@@ -209,6 +236,7 @@ function __gitswitch_cd_hook --on-variable PWD
   __gitswitch_nudge
 end
 __gitswitch_nudge
+gitswitch hook-check 2>/dev/null
 function fish_right_prompt
   __gitswitch_prompt
 end
@@ -261,6 +289,7 @@ autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
 __gitswitch_launch() {
   __gitswitch_nudge
+  gitswitch hook-check 2>/dev/null
   add-zsh-hook -d precmd __gitswitch_launch
 }
 add-zsh-hook precmd __gitswitch_launch
@@ -303,6 +332,7 @@ autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
 __gitswitch_launch() {
   __gitswitch_nudge
+  gitswitch hook-check 2>/dev/null
   add-zsh-hook -d precmd __gitswitch_launch
 }
 add-zsh-hook precmd __gitswitch_launch

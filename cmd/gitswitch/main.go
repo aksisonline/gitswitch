@@ -464,8 +464,22 @@ var installCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("install failed: %w", err)
 		}
+		configDir := filepath.Join(func() string { h, _ := os.UserHomeDir(); return h }(), ".config", "gitswitch")
+		_ = shell.WriteHookVersion(configDir, version)
 		fmt.Printf("✓ %s\n", result)
 		fmt.Println("  Reload your shell (or open a new terminal) to activate.")
+		return nil
+	},
+}
+
+var hookCheckCmd = &cobra.Command{
+	Use:    "hook-check",
+	Hidden: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		configDir := filepath.Join(func() string { h, _ := os.UserHomeDir(); return h }(), ".config", "gitswitch")
+		if msg := shell.HookUpdateMessage(configDir, version); msg != "" {
+			fmt.Println(msg)
+		}
 		return nil
 	},
 }
@@ -501,7 +515,7 @@ var uninstallCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
