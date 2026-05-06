@@ -119,7 +119,11 @@ __gitswitch_nudge() {
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
-__gitswitch_nudge
+__gitswitch_launch() {
+  __gitswitch_nudge
+  add-zsh-hook -d precmd __gitswitch_launch
+}
+add-zsh-hook precmd __gitswitch_launch
 PROMPT='$(__gitswitch_prompt)'"$PROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
@@ -255,7 +259,11 @@ __gitswitch_nudge() {
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
-__gitswitch_nudge
+__gitswitch_launch() {
+  __gitswitch_nudge
+  add-zsh-hook -d precmd __gitswitch_launch
+}
+add-zsh-hook precmd __gitswitch_launch
 PROMPT='$(__gitswitch_prompt)'"$PROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
@@ -293,7 +301,11 @@ __gitswitch_nudge() {
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook chpwd __gitswitch_nudge
-__gitswitch_nudge
+__gitswitch_launch() {
+  __gitswitch_nudge
+  add-zsh-hook -d precmd __gitswitch_launch
+}
+add-zsh-hook precmd __gitswitch_launch
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
 ` + marker + ` end
