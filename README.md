@@ -43,8 +43,7 @@ These are independent. You can have `gh` authenticated as your work account whil
 
 **Homebrew** (recommended):
 ```bash
-brew tap aksisonline/gitswitch
-brew install gitswitch
+brew install aksisonline/tap/gitswitch
 ```
 
 **Curl** (one-liner):

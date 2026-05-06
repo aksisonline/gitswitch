@@ -194,7 +194,7 @@ jobs:
       - name: Checkout homebrew-gitswitch
         uses: actions/checkout@v4
         with:
-          repository: aksisonline/homebrew-gitswitch
+          repository: aksisonline/homebrew-tap
           token: ${{ secrets.HOMEBREW_PAT }}
 
       - name: Download checksums

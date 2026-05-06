@@ -36,8 +36,7 @@ gitswitch list        # shows all profiles, ✓ marks the active one
 If `gitswitch` is not installed, say so clearly and offer the install instructions:
 ```bash
 # Homebrew (recommended):
-brew tap aksisonline/gitswitch
-brew install gitswitch
+brew install aksisonline/tap/gitswitch
 
 # Or, without Homebrew (curl one-liner):
 curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh | bash
