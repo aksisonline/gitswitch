@@ -66,8 +66,8 @@ func (m Model) viewHeader(subtitle string) string {
 }
 
 func (m Model) viewNormalHeader(subtitle string) string {
-	icon := styleTitle.Render("◆")
-	title := styleTitle.Render("Git-Switcher")
+	icon := styleTitle.Render("✦")
+	title := styleTitle.Render("gitswitch")
 	tagline := styleBrand.Render("identity manager for git")
 
 	var heading string
@@ -228,12 +228,8 @@ func (m Model) viewProfileItems(pw, nickColW int) string {
 				marker = styleItemDim.Render(" · ")
 			}
 		} else {
-			if isCursor && isActive {
-				ribbon = styleRibbonCursor.Render("▎")
-			} else if isCursor {
-				ribbon = styleRibbonCursor.Render("▎")
-			} else if isActive {
-				ribbon = styleRibbonActive.Render("▎")
+			if isCursor {
+				ribbon = styleRibbonCursor.Render("❯")
 			} else {
 				ribbon = " "
 			}
@@ -245,14 +241,14 @@ func (m Model) viewProfileItems(pw, nickColW int) string {
 		}
 
 		nick := p.Nickname + strings.Repeat(" ", max(0, nickColW-lipgloss.Width(p.Nickname)))
-		content := fmt.Sprintf("%s%s  %s", marker, nick, p.Email)
 
 		var line string
 		if isCursor {
-			// rendered with bg highlight; prepend ribbon outside the bg block
-			rowBody := styleItemActive(pw - 2).Render(" " + content)
-			line = " " + ribbon + rowBody
+			nickStyled := lipgloss.NewStyle().Foreground(colorYellow).Bold(true).Render(nick)
+			emailStyled := styleItemDim.Render(p.Email)
+			line = " " + ribbon + " " + marker + nickStyled + "  " + emailStyled
 		} else {
+			content := fmt.Sprintf("%s%s  %s", marker, nick, p.Email)
 			line = " " + ribbon + " " + styleItemInactive.Render(content)
 		}
 		items += "\n" + line

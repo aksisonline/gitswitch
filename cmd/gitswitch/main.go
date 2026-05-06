@@ -58,6 +58,18 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+func printSwitchResult(p *storage.Profile) {
+	fmt.Printf("✓ Switched to %s\n", p.Nickname)
+	fmt.Printf("  user.name  → %s\n", p.UserName)
+	fmt.Printf("  user.email → %s\n", p.Email)
+	if p.SSHKey != "" {
+		fmt.Printf("  SSH key    → %s\n", p.SSHKey)
+	}
+	if p.GHUser != "" {
+		fmt.Printf("  gh         → %s\n", p.GHUser)
+	}
+}
+
 func quickSwitch(nickname string) error {
 	p, err := store.Get(nickname)
 	if err != nil {
@@ -74,12 +86,12 @@ func quickSwitch(nickname string) error {
 		return err
 	}
 	if w := git.SwitchGHUser(p.GHUser); w != "" {
-		fmt.Printf("warning: %s\n", w)
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
 	if err := store.SetActive(p.Nickname); err != nil {
 		return err
 	}
-	fmt.Printf("✓ Switched to '%s' — %s <%s>\n", p.Nickname, p.UserName, p.Email)
+	printSwitchResult(p)
 	return nil
 }
 
@@ -111,7 +123,7 @@ var addCmd = &cobra.Command{
 		if err := store.Add(args[0], args[1], args[2], signKey, sshKey, ghUser); err != nil {
 			return err
 		}
-		fmt.Printf("Profile '%s' added\n", args[0])
+		fmt.Printf("✓ Profile '%s' added\n", args[0])
 		return nil
 	},
 }
@@ -136,12 +148,12 @@ var switchCmd = &cobra.Command{
 			return err
 		}
 		if w := git.SwitchGHUser(p.GHUser); w != "" {
-			fmt.Printf("warning: %s\n", w)
+			fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 		}
 		if err := store.SetActive(p.Nickname); err != nil {
 			return err
 		}
-		fmt.Printf("Switched to '%s' — %s <%s>\n", p.Nickname, p.UserName, p.Email)
+		printSwitchResult(p)
 		return nil
 	},
 }
@@ -177,7 +189,7 @@ var removeCmd = &cobra.Command{
 		if err := store.Remove(args[0]); err != nil {
 			return err
 		}
-		fmt.Printf("Profile '%s' removed\n", args[0])
+		fmt.Printf("✓ Profile '%s' removed\n", args[0])
 		return nil
 	},
 }
@@ -318,7 +330,7 @@ var pinCmd = &cobra.Command{
 		if err := history.Pin(repoKey, args[0]); err != nil {
 			return err
 		}
-		fmt.Printf("Pinned '%s' to this repo\n", args[0])
+		fmt.Printf("✓ Pinned '%s' to this repo\n", args[0])
 		return nil
 	},
 }
@@ -334,7 +346,7 @@ var unpinCmd = &cobra.Command{
 		if err := history.Unpin(repoKey); err != nil {
 			return err
 		}
-		fmt.Println("Unpinned — identity recommendation now based on usage history")
+		fmt.Println("✓ Unpinned — identity recommendation now based on usage history")
 		return nil
 	},
 }
@@ -460,14 +472,25 @@ var installCmd = &cobra.Command{
 
 		fw := shell.DetectFramework()
 
-		result, err := shell.Install(sh, fw)
+		fwName := map[shell.Framework]string{
+			shell.FrameworkStarship: "Starship",
+			shell.FrameworkOMZ:      "oh-my-zsh",
+			shell.FrameworkP10k:     "Powerlevel10k",
+			shell.FrameworkRaw:      "raw shell",
+		}[fw]
+		fmt.Printf("Detected: %s\n", fwName)
+
+		_, err := shell.Install(sh, fw)
 		if err != nil {
 			return fmt.Errorf("install failed: %w", err)
 		}
 		configDir := filepath.Join(func() string { h, _ := os.UserHomeDir(); return h }(), ".config", "gitswitch")
 		_ = shell.WriteHookVersion(configDir, version)
-		fmt.Printf("✓ %s\n", result)
-		fmt.Println("  Reload your shell (or open a new terminal) to activate.")
+		fmt.Println("✓ Prompt segment configured")
+		fmt.Println("✓ Tab completion enabled")
+		fmt.Println("✓ Identity nudge active")
+		rcFile := shell.RCFile(sh)
+		fmt.Printf("  Reload: source %s\n", rcFile)
 		return nil
 	},
 }

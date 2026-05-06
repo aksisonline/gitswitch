@@ -140,13 +140,15 @@ func applyTheme(tc ThemeColors, arcade bool) {
 // Width-dependent styles — read current vars at call time.
 
 func stylePanelBorder(w int) lipgloss.Style {
-	border := lipgloss.RoundedBorder()
 	if isArcadeMode {
-		border = lipgloss.DoubleBorder()
+		return lipgloss.NewStyle().
+			Border(lipgloss.DoubleBorder()).
+			BorderForeground(colorPurple).
+			Width(w).
+			PaddingLeft(1).
+			PaddingRight(1)
 	}
 	return lipgloss.NewStyle().
-		Border(border).
-		BorderForeground(colorPurple).
 		Width(w).
 		PaddingLeft(1).
 		PaddingRight(1)
