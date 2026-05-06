@@ -409,7 +409,7 @@ var recommendCmd = &cobra.Command{
 
 var claudeCmd = &cobra.Command{
 	Use:   "claude",
-	Short: "Install the git-switcher skill into Claude Code",
+	Short: "Install the gitswitch skill into Claude Code",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		scope, _ := cmd.Flags().GetString("scope")
 
@@ -424,7 +424,7 @@ var claudeCmd = &cobra.Command{
 			base = filepath.Join(home, ".claude")
 		}
 
-		dest := filepath.Join(base, "skills", "git-switcher")
+		dest := filepath.Join(base, "skills", "gitswitch")
 		if err := os.MkdirAll(dest, 0755); err != nil {
 			return fmt.Errorf("could not create skills directory: %w", err)
 		}

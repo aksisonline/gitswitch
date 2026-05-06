@@ -1,5 +1,5 @@
 ---
-name: git-switcher
+name: gitswitch
 description: >
   Switch git identity and GitHub account using the gitswitch tool when the user is
   committing or pushing as the wrong account. Use this skill whenever the user mentions:
@@ -11,7 +11,7 @@ description: >
   "gitswitch" — if the problem smells like a git identity mismatch, invoke this skill.
 ---
 
-# git-switcher skill
+# gitswitch skill
 
 `gitswitch` is a terminal tool (installed via Homebrew or curl) that manages multiple local git identities. It switches `git config user.name`, `git config user.email`, the SSH key, and (optionally) the `gh` CLI account — all at once, with one command.
 

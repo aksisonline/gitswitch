@@ -1,8 +1,8 @@
-# git-switcher
+# gitswitch
 
 A terminal UI for managing multiple local git identities. Switch the name, email, SSH key, and GitHub account that are used for your commits — instantly, without touching config files manually.
 
-![git-switcher TUI](https://img.shields.io/badge/built%20with-Go-00ADD8?style=flat-square&logo=go)
+![gitswitch TUI](https://img.shields.io/badge/built%20with-Go-00ADD8?style=flat-square&logo=go)
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 
 > **Credits:** Switching logic (SSH key management, `gh auth switch` integration, profile state detection) is inspired by [dankozlowski/git-switcher](https://github.com/dankozlowski/git-switcher). The TUI, profile storage, and CLI design are original to this project.
@@ -26,7 +26,7 @@ git config --global user.email "you@example.com"
 
 These are independent. You can have `gh` authenticated as your work account while every commit shows your personal email. The two tools solve different problems:
 
-| | `gh auth switch` | `git-switcher` |
+| | `gh auth switch` | `gitswitch` |
 |---|---|---|
 | **Controls** | GitHub API tokens | `git config user.name/email` |
 | **Affects** | `gh` CLI commands | Commit author identity |
@@ -35,7 +35,7 @@ These are independent. You can have `gh` authenticated as your work account whil
 | **Works with GitLab/Bitbucket** | No | Yes — any git remote |
 | **Talks to GitHub** | Yes (OAuth) | Optional — `gh auth switch` is best-effort |
 
-**The typical problem:** You push a commit to your company repo, only to see it attributed to your personal email. `gh auth switch` would not have helped. `git-switcher` would.
+**The typical problem:** You push a commit to your company repo, only to see it attributed to your personal email. `gh auth switch` would not have helped. `gitswitch` would.
 
 ---
 
@@ -54,7 +54,7 @@ curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/
 Or **build from source**:
 ```bash
 git clone https://github.com/aksisonline/gitswitch
-cd git-switcher
+cd gitswitch
 make install
 ```
 
@@ -155,11 +155,11 @@ source ~/.zshrc   # or open a new terminal
 
 ## Identity awareness
 
-git-switcher learns which identity you use in each repo and nudges you when something looks off.
+gitswitch learns which identity you use in each repo and nudges you when something looks off.
 
 ### How it works
 
-Each time you enter a git repo (new terminal or `cd`), git-switcher silently records which identity is currently active. Once a pattern is clear — the top identity has **≥3 entries** and **≥60% share** — it nudges:
+Each time you enter a git repo (new terminal or `cd`), gitswitch silently records which identity is currently active. Once a pattern is clear — the top identity has **≥3 entries** and **≥60% share** — it nudges:
 
 ```
 gitswitch: this repo usually uses work <alice@company.com> — switch? [y/N]
@@ -184,7 +184,7 @@ The pin takes permanent priority over usage counts.
 
 ## Claude Code skill
 
-Install the git-switcher skill directly into Claude Code so it can detect and fix git identity problems automatically:
+Install the gitswitch skill directly into Claude Code so it can detect and fix git identity problems automatically:
 
 ```bash
 gitswitch claude                   # install to ~/.claude/skills/ (all projects)
@@ -212,7 +212,7 @@ Profiles are stored at `~/.config/gitswitch/profiles.json`. UI preferences (colo
 
 ## How switching works
 
-On switch, `git-switcher` runs (in order):
+On switch, `gitswitch` runs (in order):
 
 1. `git config --global user.name "<UserName>"`
 2. `git config --global user.email "<Email>"`
