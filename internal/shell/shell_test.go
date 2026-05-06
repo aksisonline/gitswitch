@@ -364,3 +364,69 @@ func TestRemoveMarkerBlock_StarshipBlock(t *testing.T) {
 		t.Error("surrounding toml content was stripped")
 	}
 }
+
+// ── WriteHookVersion / HookUpdateMessage ─────────────────────────────────────
+
+func TestWriteHookVersion_CreatesFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := WriteHookVersion(dir, "v1.2.3"); err != nil {
+		t.Fatalf("WriteHookVersion: %v", err)
+	}
+	data, err := os.ReadFile(dir + "/hook-version")
+	if err != nil {
+		t.Fatalf("reading hook-version: %v", err)
+	}
+	if string(data) != "v1.2.3" {
+		t.Errorf("hook-version content: got %q, want %q", string(data), "v1.2.3")
+	}
+}
+
+func TestWriteHookVersion_Overwrites(t *testing.T) {
+	dir := t.TempDir()
+	_ = WriteHookVersion(dir, "v1.0.0")
+	if err := WriteHookVersion(dir, "v1.1.0"); err != nil {
+		t.Fatalf("WriteHookVersion overwrite: %v", err)
+	}
+	data, _ := os.ReadFile(dir + "/hook-version")
+	if string(data) != "v1.1.0" {
+		t.Errorf("expected overwritten version v1.1.0, got %q", string(data))
+	}
+}
+
+func TestHookUpdateMessage_UpToDate(t *testing.T) {
+	dir := t.TempDir()
+	_ = WriteHookVersion(dir, "v1.2.3")
+	if msg := HookUpdateMessage(dir, "v1.2.3"); msg != "" {
+		t.Errorf("expected empty message when versions match, got %q", msg)
+	}
+}
+
+func TestHookUpdateMessage_Stale(t *testing.T) {
+	dir := t.TempDir()
+	_ = WriteHookVersion(dir, "v1.2.3")
+	msg := HookUpdateMessage(dir, "v1.3.0")
+	if msg == "" {
+		t.Error("expected update hint when binary version is newer")
+	}
+	if !strings.Contains(msg, "v1.2.3") || !strings.Contains(msg, "v1.3.0") {
+		t.Errorf("update hint missing versions: %q", msg)
+	}
+	if !strings.Contains(msg, "gitswitch install") {
+		t.Errorf("update hint missing install command: %q", msg)
+	}
+}
+
+func TestHookUpdateMessage_MissingFile(t *testing.T) {
+	dir := t.TempDir()
+	if msg := HookUpdateMessage(dir, "v1.2.3"); msg != "" {
+		t.Errorf("expected empty message when hook-version file missing, got %q", msg)
+	}
+}
+
+func TestHookUpdateMessage_EmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(dir+"/hook-version", []byte("   "), 0644)
+	if msg := HookUpdateMessage(dir, "v1.2.3"); msg != "" {
+		t.Errorf("expected empty message when hook-version file is blank, got %q", msg)
+	}
+}

@@ -156,10 +156,10 @@ jobs:
 
       - name: Package skill file
         run: |
-          mkdir -p git-switcher-skill
-          cp cmd/gitswitch/skill/SKILL.md git-switcher-skill/SKILL.md
-          zip -j release/git-switcher.skill git-switcher-skill/SKILL.md
-          echo "Packaged skill: $(ls -lh release/git-switcher.skill)"
+          mkdir -p gitswitch-skill
+          cp cmd/gitswitch/skill/SKILL.md gitswitch-skill/SKILL.md
+          zip -j release/gitswitch.skill gitswitch-skill/SKILL.md
+          echo "Packaged skill: $(ls -lh release/gitswitch.skill)"
 
       - name: Update install script with version
         run: |
@@ -194,7 +194,7 @@ jobs:
       - name: Checkout homebrew-gitswitch
         uses: actions/checkout@v4
         with:
-          repository: aksisonline/homebrew-gitswitch
+          repository: aksisonline/homebrew-tap
           token: ${{ secrets.HOMEBREW_PAT }}
 
       - name: Download checksums

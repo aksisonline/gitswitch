@@ -249,7 +249,7 @@ Recommendation threshold (auto-learned, no pin): top identity has **≥3 entries
 gitswitch claude [--scope user|project]
 ```
 
-Installs the git-switcher skill into Claude Code. The skill teaches Claude to detect and fix git identity problems automatically.
+Installs the gitswitch skill into Claude Code. The skill teaches Claude to detect and fix git identity problems automatically.
 
 The SKILL.md is embedded in the binary — no network call required, always matches your installed version.
 
@@ -257,8 +257,8 @@ The SKILL.md is embedded in the binary — no network call required, always matc
 
 | Flag | Description |
 |------|-------------|
-| `--scope user` | Install to `~/.claude/skills/git-switcher/` (default — all projects) |
-| `--scope project` | Install to `.claude/skills/git-switcher/` (this project only) |
+| `--scope user` | Install to `~/.claude/skills/gitswitch/` (default — all projects) |
+| `--scope project` | Install to `.claude/skills/gitswitch/` (this project only) |
 
 After installing, reload Claude Code or open a new session to activate.
 

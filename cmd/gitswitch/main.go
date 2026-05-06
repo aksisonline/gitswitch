@@ -261,6 +261,16 @@ var pacmanCmd = &cobra.Command{
 	},
 }
 
+// gitswitchConfigDir returns ~/.config/gitswitch, or an error when the home
+// directory cannot be determined.
+func gitswitchConfigDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("could not determine home directory: %w", err)
+	}
+	return filepath.Join(home, ".config", "gitswitch"), nil
+}
+
 // isBrewInstall reports whether the running binary lives inside a Homebrew
 // Cellar by resolving symlinks and checking the path.
 func isBrewInstall() bool {
@@ -409,7 +419,7 @@ var recommendCmd = &cobra.Command{
 
 var claudeCmd = &cobra.Command{
 	Use:   "claude",
-	Short: "Install the git-switcher skill into Claude Code",
+	Short: "Install the gitswitch skill into Claude Code",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		scope, _ := cmd.Flags().GetString("scope")
 
@@ -424,7 +434,7 @@ var claudeCmd = &cobra.Command{
 			base = filepath.Join(home, ".claude")
 		}
 
-		dest := filepath.Join(base, "skills", "git-switcher")
+		dest := filepath.Join(base, "skills", "gitswitch")
 		if err := os.MkdirAll(dest, 0755); err != nil {
 			return fmt.Errorf("could not create skills directory: %w", err)
 		}
@@ -464,8 +474,28 @@ var installCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("install failed: %w", err)
 		}
+		configDir, err := gitswitchConfigDir()
+		if err != nil {
+			return err
+		}
+		_ = shell.WriteHookVersion(configDir, version)
 		fmt.Printf("✓ %s\n", result)
 		fmt.Println("  Reload your shell (or open a new terminal) to activate.")
+		return nil
+	},
+}
+
+var hookCheckCmd = &cobra.Command{
+	Use:    "hook-check",
+	Hidden: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		configDir, err := gitswitchConfigDir()
+		if err != nil {
+			return err
+		}
+		if msg := shell.HookUpdateMessage(configDir, version); msg != "" {
+			fmt.Println(msg)
+		}
 		return nil
 	},
 }
@@ -501,7 +531,7 @@ var uninstallCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
