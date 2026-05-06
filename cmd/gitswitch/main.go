@@ -493,7 +493,8 @@ var hookCheckCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if msg := shell.HookUpdateMessage(configDir, version); msg != "" {
+		rcFile := shell.RCFile(shell.DetectShell())
+		if msg := shell.HookUpdateMessage(configDir, rcFile, version); msg != "" {
 			fmt.Println(msg)
 		}
 		return nil

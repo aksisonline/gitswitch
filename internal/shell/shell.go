@@ -87,11 +87,17 @@ func WriteHookVersion(configDir, version string) error {
 	return os.WriteFile(filepath.Join(configDir, "hook-version"), []byte(version), 0644)
 }
 
-// HookUpdateMessage returns a one-line hint if the installed hook is older than
-// currentVersion, or "" if up-to-date or the version file is missing.
-func HookUpdateMessage(configDir, currentVersion string) string {
+// HookUpdateMessage returns a one-line hint if the installed hook is stale.
+// rcFile is the shell rc file (e.g. ~/.zshrc) — used to detect old installs
+// that predate the hook-version file.
+func HookUpdateMessage(configDir, rcFile, currentVersion string) string {
 	data, err := os.ReadFile(filepath.Join(configDir, "hook-version"))
 	if err != nil {
+		// No version file. If the hook marker IS in the rc file the user has
+		// an old install (pre hook-version) — nudge them to reinstall.
+		if IsInstalled(rcFile) {
+			return "gitswitch: shell integration may be outdated — run: gitswitch install"
+		}
 		return ""
 	}
 	installed := strings.TrimSpace(string(data))
@@ -381,18 +387,23 @@ func installStarship(home string) (string, error) {
 }
 
 func installOMZ(home string) (string, error) {
-	pluginDir := filepath.Join(home, ".oh-my-zsh", "custom", "plugins", "gitswitch")
-	pluginFile := filepath.Join(pluginDir, "gitswitch.plugin.zsh")
-	if _, err := os.Stat(pluginFile); err == nil {
-		return fmt.Sprintf("plugin already exists at %s", pluginFile), nil
+	// Write directly to .zshrc with a marker block — same as raw zsh.
+	// The OMZ plugin-file approach required the user to manually add
+	// 'gitswitch' to their plugins array, which meant the hook silently
+	// never loaded. Writing to .zshrc is guaranteed to run on every shell.
+	rcFile := filepath.Join(home, ".zshrc")
+	if IsInstalled(rcFile) {
+		return fmt.Sprintf("already installed in %s", rcFile), nil
 	}
-	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+	f, err := os.OpenFile(rcFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(pluginFile, []byte(omzPluginContent()), 0644); err != nil {
+	defer f.Close()
+	if _, err := f.WriteString(nudgeSnippetZsh()); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("wrote plugin to %s\n  → add 'gitswitch' to the plugins array in ~/.zshrc", pluginFile), nil
+	return fmt.Sprintf("wrote gitswitch integration to %s", rcFile), nil
 }
 
 func installP10k(sh Shell, home string) (string, error) {
