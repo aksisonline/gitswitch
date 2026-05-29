@@ -49,7 +49,7 @@ Two commands make outbound network requests, both initiated explicitly by you:
 
 gitswitch does not process personal data on behalf of any organization. The data gitswitch stores (your name, email, and credentials) is stored locally on your own machine, under your own control. Under GDPR, you are the data controller for your own local data. gitswitch, as a locally executed tool with no backend, does not act as a data processor.
 
-If you have questions or concerns, contact: privacy@gitswitch.dev
+If you have questions or concerns, contact: hello@aksisonline.com
 
 ---
 
@@ -62,7 +62,7 @@ gitswitch does not sell, share, or disclose personal information to any third pa
 ## Open source
 
 gitswitch is open source. You can inspect exactly what it does with your data at any time:
-https://github.com/aksisonline/git-switcher
+https://github.com/aksisonline/gitswitch
 
 ---
 
@@ -74,4 +74,4 @@ If this policy changes materially, the updated version will be posted at gitswit
 
 ## Contact
 
-Questions: privacy@gitswitch.dev
+Questions: hello@aksisonline.com
