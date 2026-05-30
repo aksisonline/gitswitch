@@ -10,6 +10,7 @@ import (
 	"github.com/aksisonline/gitswitch/internal/credential"
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/history"
+	wizard "github.com/aksisonline/gitswitch/internal/install"
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	"github.com/aksisonline/gitswitch/internal/tui"
@@ -456,47 +457,43 @@ var claudeCmd = &cobra.Command{
 
 var installCmd = &cobra.Command{
 	Use:   "install",
-	Short: "Install shell integration (prompt segment + identity nudge)",
+	Short: "Set up gitswitch — shell integration and HTTPS credential routing",
+	Long: `Interactive setup wizard. Detects your shell, shows what each step does,
+and asks before making any changes. Use --yes to accept all defaults without
+prompts (for scripts and CI).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		shellFlag, _ := cmd.Flags().GetString("shell")
+		yes, _ := cmd.Flags().GetBool("yes")
+		httpsDefault, _ := cmd.Flags().GetBool("https")
 
-		var sh shell.Shell
-		switch shellFlag {
-		case "zsh":
-			sh = shell.ShellZsh
-		case "bash":
-			sh = shell.ShellBash
-		case "fish":
-			sh = shell.ShellFish
-		default:
-			sh = shell.DetectShell()
-		}
-
-		fw := shell.DetectFramework()
-
-		result, err := shell.Install(sh, fw)
+		opts, err := wizard.Run(wizard.Config{
+			ShellOverride: shellFlag,
+			Yes:           yes,
+			HTTPSDefault:  httpsDefault,
+		}, os.Stdout)
 		if err != nil {
-			return fmt.Errorf("install failed: %w", err)
+			return fmt.Errorf("setup interrupted: %w", err)
 		}
-		configDir, err := gitswitchConfigDir()
-		if err != nil {
-			return err
-		}
-		_ = shell.WriteHookVersion(configDir, version)
-		fmt.Printf("✓ %s\n", result)
 
-		if https, _ := cmd.Flags().GetBool("https"); https {
-			if err := git.InstallCredentialHelper(); err != nil {
-				fmt.Printf("  warning: could not register HTTPS credential helper: %v\n", err)
-			} else {
-				fmt.Println("✓ HTTPS credential helper registered (git config --global credential.helper)")
-				if !git.IsGHInstalled() {
-					fmt.Println("  note: gh CLI not found — HTTPS routing stays inert until you set up gh")
-				}
+		var shellResult string
+		if opts.InstallShell {
+			shellResult, err = shell.Install(opts.Shell, opts.Framework)
+			if err != nil {
+				return fmt.Errorf("shell install failed: %w", err)
 			}
+			configDir, err := gitswitchConfigDir()
+			if err != nil {
+				return err
+			}
+			_ = shell.WriteHookVersion(configDir, version)
 		}
 
-		fmt.Println("  Reload your shell (or open a new terminal) to activate.")
+		var httpsErr error
+		if opts.InstallHTTPS {
+			httpsErr = git.InstallCredentialHelper()
+		}
+
+		wizard.PrintSummary(os.Stdout, shellResult, opts.InstallShell, opts.InstallHTTPS && httpsErr == nil, httpsErr)
 		return nil
 	},
 }
@@ -597,8 +594,9 @@ func main() {
 	currentCmd.Flags().Bool("prompt", false, "Output nickname and theme color tab-separated (for shell prompt functions)")
 	recordCmd.Flags().String("path", "", "Directory to record for (default: current working directory)")
 	recommendCmd.Flags().String("path", "", "Directory to check (default: current working directory)")
-	installCmd.Flags().String("shell", "", "Shell to install for: zsh, bash, or fish (default: auto-detect)")
-	installCmd.Flags().Bool("https", true, "Register gitswitch as a git HTTPS credential helper (delegates to gh)")
+	installCmd.Flags().String("shell", "", "Shell to target: zsh, bash, or fish (default: auto-detect; also skips interactive wizard)")
+	installCmd.Flags().Bool("https", true, "Register HTTPS credential helper (default: true; prompted interactively when omitted)")
+	installCmd.Flags().BoolP("yes", "y", false, "Accept all defaults without prompts (for scripts and CI)")
 	uninstallCmd.Flags().String("shell", "", "Shell to uninstall for: zsh, bash, or fish (default: auto-detect)")
 	claudeCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills) or 'project' (.claude/skills)")
 
