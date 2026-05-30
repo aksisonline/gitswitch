@@ -80,7 +80,12 @@ func RCFile(sh Shell) string {
 }
 
 // WriteHookVersion persists the installed hook version to configDir/hook-version.
+// Skips writing when version is "dev" so local/test builds don't corrupt the
+// version file and cause spurious "dev → vX.Y.Z" nudges for real installs.
 func WriteHookVersion(configDir, version string) error {
+	if version == "dev" || version == "" {
+		return nil
+	}
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return err
 	}
@@ -90,14 +95,23 @@ func WriteHookVersion(configDir, version string) error {
 // HookUpdateMessage returns a one-line hint shown in the terminal on shell
 // open when gitswitch needs attention. Returns "" when everything is current.
 //
-// Checks (in order):
-//  1. Shell hook is stale / missing → nudge to run `gitswitch install`
-//  2. Shell hook is current but HTTPS credential helper not registered →
-//     nudge to run `gitswitch install` to pick up the new feature
+// Checks (in priority order):
+//  1. No version file + shell marker present → old install, nudge to reinstall
+//  2. Version bumped + HTTPS not yet registered → combined "updated + new features" message
+//  3. Version bumped, HTTPS already registered → plain "shell updated" message
+//  4. Version current, HTTPS not registered → targeted HTTPS nudge
 //
 // credHelperInstalled should be the result of git.IsCredentialHelperInstalled().
-// Passing it as a bool avoids an import cycle (shell ← git).
+// Passing it as a variadic bool avoids an import cycle (shell ← git).
+// Dev/empty versions are ignored so local builds don't corrupt the version file.
 func HookUpdateMessage(configDir, rcFile, currentVersion string, credHelperInstalled ...bool) string {
+	// Dev binaries never trigger nudges — version tracking is for real releases only.
+	if currentVersion == "dev" || currentVersion == "" {
+		return ""
+	}
+
+	httpsNeeded := len(credHelperInstalled) > 0 && !credHelperInstalled[0] && IsInstalled(rcFile)
+
 	data, err := os.ReadFile(filepath.Join(configDir, "hook-version"))
 	if err != nil {
 		// No version file — old install predating hook-version tracking.
@@ -106,19 +120,27 @@ func HookUpdateMessage(configDir, rcFile, currentVersion string, credHelperInsta
 		}
 		return ""
 	}
+
 	installed := strings.TrimSpace(string(data))
-	if installed != currentVersion && installed != "" {
+
+	// Ignore stale "dev" entries left by test/local builds.
+	if installed == "dev" || installed == "" {
+		installed = currentVersion
+	}
+
+	versionBumped := installed != currentVersion
+
+	switch {
+	case versionBumped && httpsNeeded:
+		// One message covers both: version changed AND new feature waiting.
+		return fmt.Sprintf("gitswitch updated (%s → %s) — new features available. Run: gitswitch install", installed, currentVersion)
+	case versionBumped:
 		return fmt.Sprintf("gitswitch: shell integration updated (%s → %s) — run: gitswitch install", installed, currentVersion)
-	}
-
-	// Shell hook is current. Check whether the HTTPS credential helper has
-	// been activated. Only nudge when the caller supplies the flag (so that
-	// callers without access to git.IsCredentialHelperInstalled can omit it).
-	if len(credHelperInstalled) > 0 && !credHelperInstalled[0] && IsInstalled(rcFile) {
+	case httpsNeeded:
 		return "gitswitch: HTTPS credential routing available — run: gitswitch install"
+	default:
+		return ""
 	}
-
-	return ""
 }
 
 // IsInstalled checks whether the gitswitch marker exists in the given file.
