@@ -47,7 +47,42 @@ func Run(cfg Config, out io.Writer) (Options, error) {
 
 	reader := bufio.NewReader(os.Stdin)
 
+	// Detect if this is an upgrade (shell already installed, HTTPS not yet).
+	rcFile := shell.RCFile(sh)
+	alreadyHasShell := shell.IsInstalled(rcFile)
+	alreadyHasHTTPS := git.IsCredentialHelperInstalled()
+
 	printHeader(out)
+
+	// If upgrading from an older install, show a tailored greeting.
+	if alreadyHasShell && !alreadyHasHTTPS {
+		fmt.Fprintln(out, "  Upgrading from an earlier install.")
+		fmt.Fprintln(out, "  Shell integration is already active — skipping to new features.")
+		fmt.Fprintln(out)
+		opts.InstallShell = false // shell already there, nothing to do
+
+		// Skip step 1, go straight to HTTPS.
+		printStep(out, 1, 1, "HTTPS credential routing")
+		printHTTPSInfo(out)
+		fmt.Fprintln(out)
+		httpsInstall, err := prompt(reader, out, "Register HTTPS credential helper?", true)
+		if err != nil {
+			return opts, err
+		}
+		opts.InstallHTTPS = httpsInstall
+		fmt.Fprintln(out)
+		return opts, nil
+	}
+
+	// Skip step 1 entirely if shell already installed AND HTTPS already done.
+	if alreadyHasShell && alreadyHasHTTPS {
+		opts.InstallShell = false
+		opts.InstallHTTPS = false
+		fmt.Fprintln(out, "  Everything is already set up. Nothing to do.")
+		fmt.Fprintln(out, "  Run `gitswitch current` to see your active profile.")
+		fmt.Fprintln(out)
+		return opts, nil
+	}
 
 	// ── Step 1: Shell integration ─────────────────────────────────────────────
 	printStep(out, 1, 2, "Shell integration")
