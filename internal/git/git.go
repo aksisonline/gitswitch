@@ -46,9 +46,9 @@ func (c *Config) SetUser(name, email string) error {
 
 func (c *Config) SetSignKey(key string) error {
 	if key == "" {
-		if err := exec.Command("git", "config", c.scope(), "--unset", "user.signingkey").Run(); err != nil {
-			// Ignore error if the key is not set
-			return nil
+		// Best-effort unset — ignore "key not set" (exit 5) but surface real failures.
+		if err := exec.Command("git", "config", c.scope(), "--unset", "user.signingkey").Run(); err != nil && !isUnsetNothingErr(err) {
+			return fmt.Errorf("unset signingkey: %w", err)
 		}
 		return nil
 	}
@@ -62,9 +62,9 @@ func (c *Config) SetSignKey(key string) error {
 // Uses IdentitiesOnly=yes to prevent SSH agent fallback to other keys.
 func (c *Config) SetSSHKey(keyPath string) error {
 	if keyPath == "" {
-		if err := exec.Command("git", "config", c.scope(), "--unset", "core.sshCommand").Run(); err != nil {
-			// Ignore error if the key is not set
-			return nil
+		// Best-effort unset — ignore "key not set" (exit 5) but surface real failures.
+		if err := exec.Command("git", "config", c.scope(), "--unset", "core.sshCommand").Run(); err != nil && !isUnsetNothingErr(err) {
+			return fmt.Errorf("unset core.sshCommand: %w", err)
 		}
 		return nil
 	}
@@ -202,18 +202,29 @@ func InstallCredentialHelper() error {
 		return nil
 	}
 	existing := getGlobalCredentialHelpers()
-	// Reset the list, then re-add with gitswitch first.
+
+	// restore puts the original helper list back. Called on any failure after
+	// --unset-all so the user is never left without their keychain helpers.
+	restore := func() {
+		_ = exec.Command("git", "config", "--global", "--unset-all", "credential.helper").Run()
+		for _, e := range existing {
+			_ = exec.Command("git", "config", "--global", "--add", "credential.helper", e).Run()
+		}
+	}
+
+	// Wipe the list so we can re-add with gitswitch first.
 	if err := exec.Command("git", "config", "--global", "--unset-all", "credential.helper").Run(); err != nil {
-		// Exit code 5 = key was not set; that's fine.
 		if !isUnsetNothingErr(err) {
 			return fmt.Errorf("reset credential.helper: %w", err)
 		}
 	}
 	if err := exec.Command("git", "config", "--global", "--add", "credential.helper", credentialHelperValue).Run(); err != nil {
+		restore()
 		return fmt.Errorf("add credential.helper: %w", err)
 	}
 	for _, e := range existing {
 		if err := exec.Command("git", "config", "--global", "--add", "credential.helper", e).Run(); err != nil {
+			restore()
 			return fmt.Errorf("restore credential.helper %q: %w", e, err)
 		}
 	}
