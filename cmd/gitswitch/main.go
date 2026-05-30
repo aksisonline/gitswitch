@@ -313,7 +313,27 @@ var upgradeCmd = &cobra.Command{
 		if err := ver.RunUpgrade(latest); err != nil {
 			return fmt.Errorf("upgrade failed: %w", err)
 		}
-		fmt.Println("✓ Upgrade complete. Restart gitswitch to use the new version.")
+		fmt.Println("✓ Upgrade complete.")
+		fmt.Println()
+
+		// If shell is installed but credential helper is not, run the wizard
+		// immediately so the user can activate new features without a separate step.
+		sh := shell.DetectShell()
+		if shell.IsInstalled(shell.RCFile(sh)) && !git.IsCredentialHelperInstalled() {
+			fmt.Println("New features available in this version.")
+			fmt.Println("Launching setup to activate them...")
+			fmt.Println()
+			opts, err := wizard.Run(wizard.Config{HTTPSDefault: true}, os.Stdout)
+			if err == nil && opts.InstallHTTPS {
+				if herr := git.InstallCredentialHelper(); herr != nil {
+					fmt.Printf("  warning: could not register HTTPS credential helper: %v\n", herr)
+				} else {
+					wizard.PrintSummary(os.Stdout, "", false, true, nil)
+				}
+			}
+		} else {
+			fmt.Println("Restart your shell to use the new version.")
+		}
 		return nil
 	},
 }
@@ -507,7 +527,7 @@ var hookCheckCmd = &cobra.Command{
 			return err
 		}
 		rcFile := shell.RCFile(shell.DetectShell())
-		if msg := shell.HookUpdateMessage(configDir, rcFile, version); msg != "" {
+		if msg := shell.HookUpdateMessage(configDir, rcFile, version, git.IsCredentialHelperInstalled()); msg != "" {
 			fmt.Println(msg)
 		}
 		return nil
