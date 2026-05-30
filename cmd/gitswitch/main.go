@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/aksisonline/gitswitch/internal/credential"
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/history"
+	wizard "github.com/aksisonline/gitswitch/internal/install"
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	"github.com/aksisonline/gitswitch/internal/tui"
@@ -209,6 +211,9 @@ var currentCmd = &cobra.Command{
 			return nil
 		}
 		fmt.Printf("%s — %s <%s>\n", p.Nickname, p.UserName, p.Email)
+		if git.IsCredentialHelperInstalled() {
+			fmt.Println("HTTPS credential helper: active")
+		}
 		return nil
 	},
 }
@@ -308,7 +313,27 @@ var upgradeCmd = &cobra.Command{
 		if err := ver.RunUpgrade(latest); err != nil {
 			return fmt.Errorf("upgrade failed: %w", err)
 		}
-		fmt.Println("✓ Upgrade complete. Restart gitswitch to use the new version.")
+		fmt.Println("✓ Upgrade complete.")
+		fmt.Println()
+
+		// If shell is installed but credential helper is not, run the wizard
+		// immediately so the user can activate new features without a separate step.
+		sh := shell.DetectShell()
+		if shell.IsInstalled(shell.RCFile(sh)) && !git.IsCredentialHelperInstalled() {
+			fmt.Println("New features available in this version.")
+			fmt.Println("Launching setup to activate them...")
+			fmt.Println()
+			opts, err := wizard.Run(wizard.Config{HTTPSDefault: true}, os.Stdout)
+			if err == nil && opts.InstallHTTPS {
+				if herr := git.InstallCredentialHelper(); herr != nil {
+					fmt.Printf("  warning: could not register HTTPS credential helper: %v\n", herr)
+				} else {
+					wizard.PrintSummary(os.Stdout, "", false, true, nil)
+				}
+			}
+		} else {
+			fmt.Println("Restart your shell to use the new version.")
+		}
 		return nil
 	},
 }
@@ -452,35 +477,43 @@ var claudeCmd = &cobra.Command{
 
 var installCmd = &cobra.Command{
 	Use:   "install",
-	Short: "Install shell integration (prompt segment + identity nudge)",
+	Short: "Set up gitswitch — shell integration and HTTPS credential routing",
+	Long: `Interactive setup wizard. Detects your shell, shows what each step does,
+and asks before making any changes. Use --yes to accept all defaults without
+prompts (for scripts and CI).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		shellFlag, _ := cmd.Flags().GetString("shell")
+		yes, _ := cmd.Flags().GetBool("yes")
+		httpsDefault, _ := cmd.Flags().GetBool("https")
 
-		var sh shell.Shell
-		switch shellFlag {
-		case "zsh":
-			sh = shell.ShellZsh
-		case "bash":
-			sh = shell.ShellBash
-		case "fish":
-			sh = shell.ShellFish
-		default:
-			sh = shell.DetectShell()
-		}
-
-		fw := shell.DetectFramework()
-
-		result, err := shell.Install(sh, fw)
+		opts, err := wizard.Run(wizard.Config{
+			ShellOverride: shellFlag,
+			Yes:           yes,
+			HTTPSDefault:  httpsDefault,
+		}, os.Stdout)
 		if err != nil {
-			return fmt.Errorf("install failed: %w", err)
+			return fmt.Errorf("setup interrupted: %w", err)
 		}
-		configDir, err := gitswitchConfigDir()
-		if err != nil {
-			return err
+
+		var shellResult string
+		if opts.InstallShell {
+			shellResult, err = shell.Install(opts.Shell, opts.Framework)
+			if err != nil {
+				return fmt.Errorf("shell install failed: %w", err)
+			}
+			configDir, err := gitswitchConfigDir()
+			if err != nil {
+				return err
+			}
+			_ = shell.WriteHookVersion(configDir, version)
 		}
-		_ = shell.WriteHookVersion(configDir, version)
-		fmt.Printf("✓ %s\n", result)
-		fmt.Println("  Reload your shell (or open a new terminal) to activate.")
+
+		var httpsErr error
+		if opts.InstallHTTPS {
+			httpsErr = git.InstallCredentialHelper()
+		}
+
+		wizard.PrintSummary(os.Stdout, shellResult, opts.InstallShell, opts.InstallHTTPS && httpsErr == nil, httpsErr)
 		return nil
 	},
 }
@@ -494,10 +527,42 @@ var hookCheckCmd = &cobra.Command{
 			return err
 		}
 		rcFile := shell.RCFile(shell.DetectShell())
-		if msg := shell.HookUpdateMessage(configDir, rcFile, version); msg != "" {
+		if msg := shell.HookUpdateMessage(configDir, rcFile, version, git.IsCredentialHelperInstalled()); msg != "" {
 			fmt.Println(msg)
 		}
 		return nil
+	},
+}
+
+// credentialCmd is a git credential helper (registered as
+// `credential.helper = !gitswitch credential`). git invokes it with an
+// operation arg (get/store/erase) and pipes the credential description on
+// stdin. For `get`, gitswitch resolves the active/pinned profile for the
+// current repo and delegates to gh to fetch that account's token — it stores
+// nothing itself. store/erase are no-ops (gh owns its storage). On any case it
+// cannot serve, it writes nothing and exits 0 so git falls through.
+var credentialCmd = &cobra.Command{
+	Use:           "credential [get|store|erase]",
+	Hidden:        true,
+	Args:          cobra.MaximumNArgs(1),
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		op := ""
+		if len(args) == 1 {
+			op = args[0]
+		}
+		switch op {
+		case "get", "fill":
+			req, err := credential.ParseRequest(os.Stdin)
+			if err != nil {
+				return nil // graceful: exit 0, no output
+			}
+			return credential.Get(req, store, history.GetRepoKey(), os.Stdout)
+		default:
+			// store/approve/erase/reject/"" — gitswitch stores no tokens.
+			return nil
+		}
 	},
 }
 
@@ -526,13 +591,22 @@ var uninstallCmd = &cobra.Command{
 			return fmt.Errorf("uninstall failed: %w", err)
 		}
 		fmt.Printf("✓ %s\n", result)
+
+		if git.IsCredentialHelperInstalled() {
+			if err := git.UninstallCredentialHelper(); err != nil {
+				fmt.Printf("  warning: could not remove HTTPS credential helper: %v\n", err)
+			} else {
+				fmt.Println("✓ HTTPS credential helper removed")
+			}
+		}
+
 		fmt.Println("  Reload your shell (or open a new terminal) to complete removal.")
 		return nil
 	},
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
@@ -540,7 +614,9 @@ func main() {
 	currentCmd.Flags().Bool("prompt", false, "Output nickname and theme color tab-separated (for shell prompt functions)")
 	recordCmd.Flags().String("path", "", "Directory to record for (default: current working directory)")
 	recommendCmd.Flags().String("path", "", "Directory to check (default: current working directory)")
-	installCmd.Flags().String("shell", "", "Shell to install for: zsh, bash, or fish (default: auto-detect)")
+	installCmd.Flags().String("shell", "", "Shell to target: zsh, bash, or fish (default: auto-detect; also skips interactive wizard)")
+	installCmd.Flags().Bool("https", true, "Register HTTPS credential helper (default: true; prompted interactively when omitted)")
+	installCmd.Flags().BoolP("yes", "y", false, "Accept all defaults without prompts (for scripts and CI)")
 	uninstallCmd.Flags().String("shell", "", "Shell to uninstall for: zsh, bash, or fish (default: auto-detect)")
 	claudeCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills) or 'project' (.claude/skills)")
 

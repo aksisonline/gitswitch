@@ -87,24 +87,38 @@ func WriteHookVersion(configDir, version string) error {
 	return os.WriteFile(filepath.Join(configDir, "hook-version"), []byte(version), 0644)
 }
 
-// HookUpdateMessage returns a one-line hint if the installed hook is stale.
-// rcFile is the shell rc file (e.g. ~/.zshrc) — used to detect old installs
-// that predate the hook-version file.
-func HookUpdateMessage(configDir, rcFile, currentVersion string) string {
+// HookUpdateMessage returns a one-line hint shown in the terminal on shell
+// open when gitswitch needs attention. Returns "" when everything is current.
+//
+// Checks (in order):
+//  1. Shell hook is stale / missing → nudge to run `gitswitch install`
+//  2. Shell hook is current but HTTPS credential helper not registered →
+//     nudge to run `gitswitch install` to pick up the new feature
+//
+// credHelperInstalled should be the result of git.IsCredentialHelperInstalled().
+// Passing it as a bool avoids an import cycle (shell ← git).
+func HookUpdateMessage(configDir, rcFile, currentVersion string, credHelperInstalled ...bool) string {
 	data, err := os.ReadFile(filepath.Join(configDir, "hook-version"))
 	if err != nil {
-		// No version file. If the hook marker IS in the rc file the user has
-		// an old install (pre hook-version) — nudge them to reinstall.
+		// No version file — old install predating hook-version tracking.
 		if IsInstalled(rcFile) {
 			return "gitswitch: shell integration may be outdated — run: gitswitch install"
 		}
 		return ""
 	}
 	installed := strings.TrimSpace(string(data))
-	if installed == currentVersion || installed == "" {
-		return ""
+	if installed != currentVersion && installed != "" {
+		return fmt.Sprintf("gitswitch: shell integration updated (%s → %s) — run: gitswitch install", installed, currentVersion)
 	}
-	return fmt.Sprintf("gitswitch: shell integration updated (%s → %s) — run: gitswitch install", installed, currentVersion)
+
+	// Shell hook is current. Check whether the HTTPS credential helper has
+	// been activated. Only nudge when the caller supplies the flag (so that
+	// callers without access to git.IsCredentialHelperInstalled can omit it).
+	if len(credHelperInstalled) > 0 && !credHelperInstalled[0] && IsInstalled(rcFile) {
+		return "gitswitch: HTTPS credential routing available — run: gitswitch install"
+	}
+
+	return ""
 }
 
 // IsInstalled checks whether the gitswitch marker exists in the given file.
