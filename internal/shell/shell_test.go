@@ -396,7 +396,7 @@ func TestWriteHookVersion_Overwrites(t *testing.T) {
 func TestHookUpdateMessage_UpToDate(t *testing.T) {
 	dir := t.TempDir()
 	_ = WriteHookVersion(dir, "v1.2.3")
-	if msg := HookUpdateMessage(dir, "v1.2.3"); msg != "" {
+	if msg := HookUpdateMessage(dir, "", "v1.2.3"); msg != "" {
 		t.Errorf("expected empty message when versions match, got %q", msg)
 	}
 }
@@ -404,7 +404,7 @@ func TestHookUpdateMessage_UpToDate(t *testing.T) {
 func TestHookUpdateMessage_Stale(t *testing.T) {
 	dir := t.TempDir()
 	_ = WriteHookVersion(dir, "v1.2.3")
-	msg := HookUpdateMessage(dir, "v1.3.0")
+	msg := HookUpdateMessage(dir, "", "v1.3.0")
 	if msg == "" {
 		t.Error("expected update hint when binary version is newer")
 	}
@@ -418,7 +418,7 @@ func TestHookUpdateMessage_Stale(t *testing.T) {
 
 func TestHookUpdateMessage_MissingFile(t *testing.T) {
 	dir := t.TempDir()
-	if msg := HookUpdateMessage(dir, "v1.2.3"); msg != "" {
+	if msg := HookUpdateMessage(dir, "", "v1.2.3"); msg != "" {
 		t.Errorf("expected empty message when hook-version file missing, got %q", msg)
 	}
 }
@@ -426,7 +426,7 @@ func TestHookUpdateMessage_MissingFile(t *testing.T) {
 func TestHookUpdateMessage_EmptyFile(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.WriteFile(dir+"/hook-version", []byte("   "), 0644)
-	if msg := HookUpdateMessage(dir, "v1.2.3"); msg != "" {
+	if msg := HookUpdateMessage(dir, "", "v1.2.3"); msg != "" {
 		t.Errorf("expected empty message when hook-version file is blank, got %q", msg)
 	}
 }

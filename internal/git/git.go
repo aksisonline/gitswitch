@@ -1,10 +1,12 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -44,6 +46,10 @@ func (c *Config) SetUser(name, email string) error {
 
 func (c *Config) SetSignKey(key string) error {
 	if key == "" {
+		if err := exec.Command("git", "config", c.scope(), "--unset", "user.signingkey").Run(); err != nil {
+			// Ignore error if the key is not set
+			return nil
+		}
 		return nil
 	}
 	if err := exec.Command("git", "config", c.scope(), "user.signingkey", key).Run(); err != nil {
@@ -56,6 +62,10 @@ func (c *Config) SetSignKey(key string) error {
 // Uses IdentitiesOnly=yes to prevent SSH agent fallback to other keys.
 func (c *Config) SetSSHKey(keyPath string) error {
 	if keyPath == "" {
+		if err := exec.Command("git", "config", c.scope(), "--unset", "core.sshCommand").Run(); err != nil {
+			// Ignore error if the key is not set
+			return nil
+		}
 		return nil
 	}
 	expanded := ExpandPath(keyPath)
@@ -147,6 +157,91 @@ func GetGHUser() string {
 		}
 	}
 	return ""
+}
+
+// credentialHelperValue is the entry gitswitch adds to the global
+// credential.helper chain. The leading '!' tells git to run it as a shell
+// command (so it resolves gitswitch on PATH and appends the operation arg).
+const credentialHelperValue = "!gitswitch credential"
+
+// getGlobalCredentialHelpers returns the current global credential.helper
+// chain as a slice of non-empty entries, in order.
+func getGlobalCredentialHelpers() []string {
+	out, err := exec.Command("git", "config", "--global", "--get-all", "credential.helper").Output()
+	if err != nil {
+		return nil
+	}
+	var helpers []string
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			helpers = append(helpers, line)
+		}
+	}
+	return helpers
+}
+
+// IsCredentialHelperInstalled reports whether gitswitch is already registered
+// in the global credential.helper chain.
+func IsCredentialHelperInstalled() bool {
+	for _, h := range getGlobalCredentialHelpers() {
+		if h == credentialHelperValue {
+			return true
+		}
+	}
+	return false
+}
+
+// InstallCredentialHelper prepends gitswitch to the global credential.helper
+// chain so it is consulted first, while preserving any existing helpers
+// (osxkeychain, gh's per-host helper, etc.). Idempotent: a no-op if already
+// installed. gitswitch stays silent for hosts/repos it cannot serve, so git
+// falls through to the preserved helpers.
+func InstallCredentialHelper() error {
+	if IsCredentialHelperInstalled() {
+		return nil
+	}
+	existing := getGlobalCredentialHelpers()
+	// Reset the list, then re-add with gitswitch first.
+	if err := exec.Command("git", "config", "--global", "--unset-all", "credential.helper").Run(); err != nil {
+		// Exit code 5 = key was not set; that's fine.
+		if !isUnsetNothingErr(err) {
+			return fmt.Errorf("reset credential.helper: %w", err)
+		}
+	}
+	if err := exec.Command("git", "config", "--global", "--add", "credential.helper", credentialHelperValue).Run(); err != nil {
+		return fmt.Errorf("add credential.helper: %w", err)
+	}
+	for _, e := range existing {
+		if err := exec.Command("git", "config", "--global", "--add", "credential.helper", e).Run(); err != nil {
+			return fmt.Errorf("restore credential.helper %q: %w", e, err)
+		}
+	}
+	return nil
+}
+
+// UninstallCredentialHelper removes only gitswitch's entry from the global
+// credential.helper chain, preserving all others. Tolerates the helper not
+// being present.
+func UninstallCredentialHelper() error {
+	if err := exec.Command("git", "config", "--global", "--unset-all",
+		"credential.helper", "^"+regexp.QuoteMeta(credentialHelperValue)+"$").Run(); err != nil {
+		if isUnsetNothingErr(err) {
+			return nil
+		}
+		return fmt.Errorf("unset credential.helper: %w", err)
+	}
+	return nil
+}
+
+// isUnsetNothingErr reports whether err is git's exit code 5, returned when an
+// --unset/--unset-all targets a key/value that does not exist.
+func isUnsetNothingErr(err error) bool {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode() == 5
+	}
+	return false
 }
 
 // ExpandPath expands a leading ~/ to the user's home directory.
