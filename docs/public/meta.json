@@ -1,0 +1,32 @@
+{
+  "$comment": "Sidebar + ordering for gitswitch.dev docs. Source of truth lives here in the git-switcher repo; the website (gitswitch-web-v3) fetches this at build time. Edit docs here and the site rebuilds via repository_dispatch.",
+  "groups": [
+    {
+      "label": "Getting Started",
+      "items": ["intro", "installation", "quick-start"]
+    },
+    {
+      "label": "Features",
+      "items": [
+        "features/commit-identity",
+        "features/ssh-keys",
+        "features/gpg",
+        "features/github-sync",
+        "features/identity-awareness",
+        "features/shell"
+      ]
+    },
+    {
+      "label": "CLI Reference",
+      "items": ["cli/commands", "cli/profiles", "cli/config"]
+    },
+    {
+      "label": "Scenarios",
+      "items": [
+        "scenarios/freelancer",
+        "scenarios/oss",
+        "scenarios/multi-github"
+      ]
+    }
+  ]
+}
