@@ -1,3 +1,5 @@
+# Template only — the maintained formula lives in aksisonline/homebrew-tap.
+# This file is not updated on release; do not install from it directly.
 class Gitswitch < Formula
   desc "Manage multiple git profiles locally"
   homepage "https://github.com/aksisonline/gitswitch"
