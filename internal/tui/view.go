@@ -38,6 +38,8 @@ func (m Model) View() string {
 		body = m.viewDeleteConfirm(pw)
 	case StateTips:
 		body = m.viewTips(pw)
+	case StateNoProfiles:
+		return m.viewNoProfiles()
 	default:
 		body = m.viewList(pw)
 	}
@@ -791,6 +793,33 @@ func (m Model) footerKeys(pw int, pairs [][2]string) string {
 		lines = append(lines, currentLine)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m Model) viewNoProfiles() string {
+	w := m.width
+	h := m.height
+	if w == 0 {
+		w = 80
+	}
+	if h == 0 {
+		h = 24
+	}
+
+	title := styleTitle.Render("gitswitch")
+	sub := styleBrand.Render("No accounts set up yet.")
+
+	optLogin := fmt.Sprintf("  %s  Log in with GitHub", styleFooterKey.Render("[L]"))
+	optAdd := fmt.Sprintf("  %s  Add profile manually", styleFooterKey.Render("[A]"))
+	optQuit := fmt.Sprintf("  %s  Quit", styleFooterKey.Render("[Q]"))
+
+	content := title + "\n\n" + sub + "\n\n" + optLogin + "\n" + optAdd + "\n" + optQuit
+
+	pw := m.panelWidth()
+	if pw > w-4 && w-4 > 40 {
+		pw = w - 4
+	}
+	box := stylePanelBorder(pw).Render(content)
+	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 }
 
 // Ensure Model satisfies tea.Model at compile time.

@@ -20,6 +20,7 @@ const (
 	StateSelectFlash
 	StateTransition
 	StateExitAnim
+	StateNoProfiles
 )
 
 type Model struct {
@@ -62,6 +63,8 @@ type Model struct {
 	// pacman score state — purely cosmetic
 	score   int
 	hiScore int
+
+	LaunchLogin bool
 }
 
 var formLabels = [6]string{
@@ -116,6 +119,9 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 	}
 	for _, opt := range opts {
 		opt(m)
+	}
+	if len(profiles) == 0 && !m.arcadeMode {
+		m.state = StateNoProfiles
 	}
 	return m, nil
 }

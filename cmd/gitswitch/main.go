@@ -55,8 +55,16 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
-		return err
+		result, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
+		if err != nil {
+			return err
+		}
+		if final, ok := result.(tui.Model); ok && final.LaunchLogin {
+			fmt.Println()
+			fmt.Println("  Run  gs login  to connect your first GitHub account.")
+			fmt.Println()
+		}
+		return nil
 	},
 }
 
@@ -91,13 +99,9 @@ func ensureInitialized() error {
 		return err
 	}
 	if len(profiles) == 0 {
-		fmt.Println("First startup: importing existing git config...")
-		if err := store.ImportCurrent(); err != nil {
-			fmt.Printf("Could not auto-import: %v\n", err)
-			fmt.Println("Tip: gitswitch add <nickname> <user-name> <email>")
-			return nil
-		}
-		fmt.Println("✓ Imported as 'default' profile")
+		// Try to import current git config silently as a convenience.
+		// If it fails, the TUI will show the welcome screen instead.
+		_ = store.ImportCurrent()
 	}
 	return nil
 }
@@ -261,7 +265,7 @@ var pacmanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
+		_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 		return err
 	},
 }
