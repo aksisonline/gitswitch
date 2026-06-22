@@ -14,6 +14,7 @@ type Profile struct {
 	SignKey  string `json:"sign_key,omitempty"`
 	SSHKey   string `json:"ssh_key,omitempty"`  // path to SSH private key, e.g. ~/.ssh/id_work
 	GHUser   string `json:"gh_user,omitempty"`  // GitHub CLI username for gh auth switch
+	TokenRef string `json:"token_ref,omitempty"` // keychain ref: "gitswitch:<nickname>:<host>"
 	Active   bool   `json:"active"`
 }
 
