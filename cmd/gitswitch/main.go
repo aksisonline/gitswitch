@@ -104,13 +104,9 @@ func ensureInitialized() error {
 		return err
 	}
 	if len(profiles) == 0 {
-		fmt.Println("First startup: importing existing git config...")
-		if err := store.ImportCurrent(); err != nil {
-			fmt.Printf("Could not auto-import: %v\n", err)
-			fmt.Println("Tip: gitswitch add <nickname> <user-name> <email>")
-			return nil
-		}
-		fmt.Println("✓ Imported as 'default' profile")
+		// Try to import current git config silently as a convenience.
+		// If it fails, the TUI will show the welcome screen instead.
+		_ = store.ImportCurrent()
 	}
 	return nil
 }
