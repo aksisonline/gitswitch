@@ -12,7 +12,9 @@ import (
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/history"
 	wizard "github.com/aksisonline/gitswitch/internal/install"
+	gsoauth "github.com/aksisonline/gitswitch/internal/oauth"
 	"github.com/aksisonline/gitswitch/internal/prereqs"
+	secretsStore "github.com/aksisonline/gitswitch/internal/secrets"
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	"github.com/aksisonline/gitswitch/internal/tui"
@@ -578,6 +580,91 @@ var credentialCmd = &cobra.Command{
 	},
 }
 
+var loginCmd = &cobra.Command{
+	Use:   "login",
+	Short: "Connect a GitHub account",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		host, _ := cmd.Flags().GetString("host")
+		clientID, _ := cmd.Flags().GetString("client-id")
+		profileName, _ := cmd.Flags().GetString("profile")
+
+		fmt.Println()
+		fmt.Println("  ┌──────────────────────────────────────────┐")
+		fmt.Println("  │  gitswitch · Log in with GitHub          │")
+		fmt.Println("  └──────────────────────────────────────────┘")
+
+		token, user, err := gsoauth.Login(host, clientID)
+		if err != nil {
+			fmt.Println()
+			fmt.Printf("  ✗  %v\n\n", err)
+			return nil
+		}
+
+		nickname := profileName
+		if nickname == "" {
+			nickname = user.Login
+		}
+
+		// Store token in OS keychain
+		ref := fmt.Sprintf("gitswitch:%s:%s", nickname, host)
+		if host == "" {
+			ref = fmt.Sprintf("gitswitch:%s:github.com", nickname)
+		}
+		secrets := secretsStore.Default()
+		if secrets.Available() {
+			if err := secrets.Set(ref, token); err != nil {
+				fmt.Printf("  ⚠  Could not store token in keychain: %v\n", err)
+			}
+		}
+
+		// Create profile
+		name := user.Name
+		if name == "" {
+			name = user.Login
+		}
+		if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
+			// Profile exists — update TokenRef only
+			_ = store.Update(nickname, storage.Profile{
+				Nickname: nickname,
+				UserName: name,
+				Email:    user.Email,
+				GHUser:   user.Login,
+				TokenRef: ref,
+			})
+		} else {
+			// Set TokenRef on the newly created profile
+			_ = store.Update(nickname, storage.Profile{
+				Nickname: nickname,
+				UserName: name,
+				Email:    user.Email,
+				GHUser:   user.Login,
+				TokenRef: ref,
+			})
+		}
+
+		// Make first profile active
+		profiles, _ := store.Load()
+		if len(profiles) == 1 {
+			_ = store.SetActive(nickname)
+		}
+
+		fmt.Println()
+		fmt.Printf("  ✓  Logged in as %s (%s)\n", user.Login, func() string {
+			if host == "" {
+				return "github.com"
+			}
+			return host
+		}())
+		fmt.Printf("  ✓  Profile %q created\n", nickname)
+		if secrets.Available() {
+			fmt.Println("  ✓  Token stored in keychain")
+		}
+		fmt.Println()
+		fmt.Printf("  Next: run  gs switch %s  to activate\n\n", nickname)
+		return nil
+	},
+}
+
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall",
 	Short: "Remove shell integration written by 'gitswitch install'",
@@ -698,7 +785,7 @@ var setupCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, doctorCmd, setupCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, doctorCmd, setupCmd, loginCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
@@ -713,6 +800,9 @@ func main() {
 	claudeCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills) or 'project' (.claude/skills)")
 	doctorCmd.Flags().Bool("json", false, "Output machine-readable JSON")
 	setupCmd.Flags().Bool("agent", false, "Emit machine-readable setup manifest for AI agents")
+	loginCmd.Flags().String("host", "", "GitHub host (default: github.com)")
+	loginCmd.Flags().String("client-id", "", "OAuth app client ID (overrides built-in)")
+	loginCmd.Flags().String("profile", "", "Profile nickname to create (default: GitHub username)")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
