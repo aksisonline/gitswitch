@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/history"
 	wizard "github.com/aksisonline/gitswitch/internal/install"
+	"github.com/aksisonline/gitswitch/internal/prereqs"
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	"github.com/aksisonline/gitswitch/internal/tui"
@@ -605,8 +607,88 @@ var uninstallCmd = &cobra.Command{
 	},
 }
 
+var doctorCmd = &cobra.Command{
+	Use:   "doctor",
+	Short: "Check that git and gh are installed and up to date",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		r := prereqs.Check()
+		if jsonOut {
+			fmt.Printf("%s\n", r.JSON())
+			return nil
+		}
+		fmt.Println()
+		if r.Git.Installed {
+			fmt.Printf("  ✓  git %s\n", r.Git.Version)
+		} else {
+			fmt.Println("  ✗  git  not found")
+		}
+		if r.GH.Installed {
+			fmt.Printf("  ✓  gh  %s\n", r.GH.Version)
+		} else {
+			fmt.Println("  ⚠  gh   not found (optional)")
+		}
+		fmt.Println()
+		prereqs.PrintWarnings(r)
+		return nil
+	},
+}
+
+var setupCmd = &cobra.Command{
+	Use:   "setup",
+	Short: "Check requirements and show next steps",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agentMode, _ := cmd.Flags().GetBool("agent")
+		r := prereqs.Check()
+
+		if agentMode {
+			profiles, _ := store.Load()
+			manifest := map[string]interface{}{
+				"tool":    "gitswitch",
+				"version": version,
+				"state": map[string]interface{}{
+					"profiles":    len(profiles),
+					"git":         r.Git,
+					"gh":          r.GH,
+				},
+			}
+			b, _ := json.MarshalIndent(manifest, "", "  ")
+			fmt.Printf("%s\n", b)
+			return nil
+		}
+
+		fmt.Println()
+		fmt.Println("  Checking requirements...")
+		fmt.Println()
+		if r.Git.Installed {
+			fmt.Printf("  ✓  git %s\n", r.Git.Version)
+		} else {
+			fmt.Println("  ✗  git  not found")
+		}
+		if r.GH.Installed {
+			fmt.Printf("  ✓  gh  %s\n", r.GH.Version)
+		} else {
+			fmt.Println("  ⚠  gh   not found")
+		}
+		fmt.Println()
+		prereqs.PrintWarnings(r)
+
+		if r.AllOK() {
+			profiles, _ := store.Load()
+			if len(profiles) == 0 {
+				fmt.Println("  No accounts yet.  Run  gs login  to get started.")
+				fmt.Println()
+			} else {
+				fmt.Printf("  %d profile(s) configured.  Run  gs  to open the picker.\n", len(profiles))
+				fmt.Println()
+			}
+		}
+		return nil
+	},
+}
+
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, doctorCmd, setupCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
@@ -619,6 +701,8 @@ func main() {
 	installCmd.Flags().BoolP("yes", "y", false, "Accept all defaults without prompts (for scripts and CI)")
 	uninstallCmd.Flags().String("shell", "", "Shell to uninstall for: zsh, bash, or fish (default: auto-detect)")
 	claudeCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills) or 'project' (.claude/skills)")
+	doctorCmd.Flags().Bool("json", false, "Output machine-readable JSON")
+	setupCmd.Flags().Bool("agent", false, "Emit machine-readable setup manifest for AI agents")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
