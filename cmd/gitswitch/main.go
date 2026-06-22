@@ -41,7 +41,8 @@ func init() {
 
 var rootCmd = &cobra.Command{
 	Use:   "gitswitch [nickname]",
-	Short: "Manage git profiles — run without args for interactive UI",
+	Short: "Switch between GitHub accounts on one machine",
+	Long:  `Run without arguments to open the profile picker.`,
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := ensureInitialized(); err != nil {
@@ -55,8 +56,16 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
-		return err
+		result, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
+		if err != nil {
+			return err
+		}
+		if final, ok := result.(tui.Model); ok && final.LaunchLogin {
+			fmt.Println()
+			fmt.Println("  Run  gs login  to connect your first GitHub account.")
+			fmt.Println()
+		}
+		return nil
 	},
 }
 
@@ -234,14 +243,15 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show current version and check for updates",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Printf("gitswitch %s\n", version)
+		bin := filepath.Base(os.Args[0])
+		fmt.Printf("%s %s\n", bin, version)
 		latest := ver.CachedLatestVersion(store.ConfigDir())
 		if latest != "" && ver.IsUpdateAvailable(version, latest) {
 			fmt.Printf("New version available: %s\n", latest)
 			if isBrewInstall() {
-				fmt.Println("Run: brew upgrade gitswitch")
+				fmt.Printf("Run: brew upgrade gitswitch\n")
 			} else {
-				fmt.Println("Run: gitswitch upgrade")
+				fmt.Printf("Run: %s upgrade\n", bin)
 			}
 		} else if latest != "" {
 			fmt.Println("Already on latest version.")
@@ -261,7 +271,7 @@ var pacmanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
+		_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 		return err
 	},
 }

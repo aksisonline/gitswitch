@@ -48,6 +48,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if mm, ok := msg.(tea.MouseMsg); ok {
+		return m.handleMouse(mm)
+	}
 	switch m.state {
 	case StateIntro:
 		if km, ok := msg.(tea.KeyMsg); ok {
@@ -67,6 +70,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateDelete(msg)
 	case StateTips:
 		return m.updateTips(msg)
+	case StateNoProfiles:
+		return m.updateNoProfiles(msg)
 	case StateSelectFlash, StateTransition, StateExitAnim:
 		if km, ok := msg.(tea.KeyMsg); ok && km.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -463,6 +468,77 @@ func (m Model) tickIntro() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, arcadeTickCmd()
+	}
+	return m, nil
+}
+
+func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		if m.state == StateList && m.cursor > 0 {
+			m.cursor--
+			m.statusMsg = ""
+		}
+	case tea.MouseButtonWheelDown:
+		if m.state == StateList && m.cursor < len(m.profiles)-1 {
+			m.cursor++
+			m.statusMsg = ""
+		}
+	case tea.MouseButtonLeft:
+		if m.state == StateList && len(m.profiles) > 0 {
+			listStartY := 7
+			if m.active != nil {
+				listStartY = 8
+			}
+			idx := msg.Y - listStartY
+			if idx >= 0 && idx < len(m.profiles) {
+				m.cursor = idx
+				p := m.profiles[m.cursor]
+				if m.arcadeMode {
+					m.selFlashFrame = 0
+					m.selFlashProfile = m.cursor
+					m.state = StateSelectFlash
+					return m, arcadeTickCmd()
+				}
+				return m, m.switchProfileCmd(p)
+			}
+		}
+		if m.state == StateNoProfiles {
+			listStartY := 8
+			switch msg.Y - listStartY {
+			case 0:
+				m.LaunchLogin = true
+				return m, tea.Quit
+			case 1:
+				m.state = StateAdd
+				m.formFields = [6]string{}
+				m.formFocus = 0
+				m.statusMsg = ""
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m Model) updateNoProfiles(msg tea.Msg) (tea.Model, tea.Cmd) {
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch strings.ToLower(km.String()) {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "a":
+		m.state = StateAdd
+		m.formFields = [6]string{}
+		m.formFocus = 0
+		m.statusMsg = ""
+	case "l", "enter":
+		m.LaunchLogin = true
+		return m, tea.Quit
 	}
 	return m, nil
 }

@@ -64,4 +64,20 @@ else
 fi
 
 echo "✓ gitswitch installed to $INSTALL_DIR/gitswitch"
-gitswitch --help | head -1
+
+# Create gs short alias (symlink → gitswitch)
+GS_PATH="$INSTALL_DIR/gs"
+if [ -e "$GS_PATH" ] && [ ! -L "$GS_PATH" ]; then
+  echo "⚠  $GS_PATH already exists and is not a symlink — skipping gs alias"
+  echo "   (possible conflict with another tool; gs will not be created)"
+else
+  if [ ! -w "$INSTALL_DIR" ]; then
+    sudo ln -sf "$INSTALL_DIR/gitswitch" "$GS_PATH"
+  else
+    ln -sf "$INSTALL_DIR/gitswitch" "$GS_PATH"
+  fi
+  echo "✓ gs alias created at $GS_PATH"
+fi
+
+echo ""
+echo "Run  gs login  to connect your first GitHub account."
