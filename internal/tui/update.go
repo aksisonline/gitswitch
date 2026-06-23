@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -19,6 +20,10 @@ type switchDoneMsg struct {
 }
 
 type upgradeDoneMsg struct {
+	err error
+}
+
+type editorDoneMsg struct {
 	err error
 }
 
@@ -60,6 +65,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.tickTransition()
 		case StateExitAnim:
 			return m.tickExitAnim()
+		}
+		return m, nil
+	}
+	if ed, ok := msg.(editorDoneMsg); ok {
+		if ed.err != nil {
+			m.statusMsg = fmt.Sprintf("editor: %v", ed.err)
+			m.statusIsErr = true
 		}
 		return m, nil
 	}
@@ -182,9 +194,15 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.openShellConfirm(!m.shellEnabled)
 					return m, nil
 				}
-			case 2: // Settings — nothing interactive yet
+			case 2: // Settings
+				if m.settingsFocus == 0 {
+					return m, m.openConfigEditor()
+				}
 			}
 		case "a":
+			if m.tabIndex != 0 {
+				break
+			}
 			if m.arcadeMode {
 				m.formFields = [6]string{}
 				m.formFocus = 0
@@ -198,6 +216,9 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = StateWizardAddMore
 			m.statusMsg = ""
 		case "e":
+			if m.tabIndex != 0 {
+				break
+			}
 			if m.arcadeMode && len(m.profiles) > 0 {
 				p := m.profiles[m.cursor]
 				m.editingNick = p.Nickname
@@ -744,8 +765,10 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				withinItem := itemOffset % 5
 				if withinItem > 0 && withinItem < 5 && itemIdx >= 0 && itemIdx <= 1 {
 					m.settingsFocus = itemIdx
-					if itemIdx == 1 { // theme box
-						// right side of line1 = cycle forward
+					if itemIdx == 0 { // config location — open in editor
+						return m, m.openConfigEditor()
+					}
+					if itemIdx == 1 { // theme box — cycle
 						if contentX > pw/2 {
 							m.colorTheme = (m.colorTheme + 1) % 12
 						} else {
@@ -965,4 +988,19 @@ func (m Model) updateNoProfiles(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+func (m Model) openConfigEditor() tea.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		editor = "vi"
+	}
+	configPath := m.store.ConfigDir() + "/config.yaml"
+	cmd := exec.Command(editor, configPath)
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return editorDoneMsg{err: err}
+	})
 }
