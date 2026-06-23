@@ -115,7 +115,8 @@ type Model struct {
 	// Upgrade splash
 	splashSeen020 bool
 
-	LaunchLogin bool
+	LaunchLogin  bool
+	LaunchOAuth  bool
 }
 
 var formLabels = [6]string{

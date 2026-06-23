@@ -64,10 +64,62 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if final, ok := result.(tui.Model); ok && final.LaunchLogin {
-			fmt.Println()
-			fmt.Println("  Run  gs login  to connect your first GitHub account.")
-			fmt.Println()
+		if final, ok := result.(tui.Model); ok {
+			if final.LaunchLogin {
+				fmt.Println()
+				fmt.Println("  Run  gs login  to connect your first GitHub account.")
+				fmt.Println()
+			}
+			if final.LaunchOAuth {
+				fmt.Println()
+				fmt.Println("  ┌──────────────────────────────────────────┐")
+				fmt.Println("  │  gitswitch · Log in with GitHub          │")
+				fmt.Println("  └──────────────────────────────────────────┘")
+				token, user, err := gsoauth.Login("", "")
+				if err != nil {
+					fmt.Printf("\n  ✗  %v\n\n", err)
+					return nil
+				}
+				nickname := user.Login
+				ref := fmt.Sprintf("gitswitch:%s:github.com", nickname)
+				secrets := secretsStore.Default()
+				if secrets.Available() {
+					if err := secrets.Set(ref, token); err != nil {
+						fmt.Printf("  ⚠  Could not store token in keychain: %v\n", err)
+					}
+				}
+				name := user.Name
+				if name == "" {
+					name = user.Login
+				}
+				if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
+					_ = store.Update(nickname, storage.Profile{
+						Nickname: nickname,
+						UserName: name,
+						Email:    user.Email,
+						GHUser:   user.Login,
+						TokenRef: ref,
+					})
+				} else {
+					_ = store.Update(nickname, storage.Profile{
+						Nickname: nickname,
+						UserName: name,
+						Email:    user.Email,
+						GHUser:   user.Login,
+						TokenRef: ref,
+					})
+				}
+				profiles, _ := store.Load()
+				if len(profiles) == 1 {
+					_ = store.SetActive(nickname)
+				}
+				fmt.Printf("\n  ✓  Logged in as %s (github.com)\n", user.Login)
+				fmt.Printf("  ✓  Profile %q created\n", nickname)
+				if secrets.Available() {
+					fmt.Println("  ✓  Token stored in keychain")
+				}
+				fmt.Printf("\n  Next: run  gs switch %s  to activate\n\n", nickname)
+			}
 		}
 		return nil
 	},

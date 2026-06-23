@@ -683,7 +683,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			switch {
 			case relY >= 9 && relY <= 11: // OAuth button
 				m.wizardStep = 0
-				m.statusMsg = "GitHub OAuth coming in v0.2.1 — use Add Manually for now"
+				m.LaunchOAuth = true
+				return m, tea.Quit
 			case relY >= 13 && relY <= 15: // Manual button
 				m.wizardStep = 1
 				m.state = StateAdd
@@ -778,7 +779,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if m.state == StateNoProfiles {
 			switch relY - 8 {
 			case 0:
-				m.LaunchLogin = true
+				m.LaunchOAuth = true
 				return m, tea.Quit
 			case 1:
 				m.state = StateWizardAddMore
@@ -862,7 +863,8 @@ func (m Model) updateWizard(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case StateWizardAddMore:
 				switch m.wizardStep {
 				case 0: // OAuth
-					m.statusMsg = "GitHub OAuth coming in v0.2.1 — use Add Manually for now"
+					m.LaunchOAuth = true
+					return m, tea.Quit
 				case 1: // Manual
 					m.state = StateAdd
 					m.statusMsg = ""
@@ -959,7 +961,7 @@ func (m Model) updateNoProfiles(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = ""
 		return m, m.openProfileForm(false, [6]string{})
 	case "l", "enter":
-		m.LaunchLogin = true
+		m.LaunchOAuth = true
 		return m, tea.Quit
 	}
 	return m, nil
