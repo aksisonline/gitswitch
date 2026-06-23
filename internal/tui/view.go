@@ -40,8 +40,27 @@ func (m Model) View() string {
 		body = m.viewTips(pw)
 	case StateNoProfiles:
 		return m.viewNoProfiles()
+	case StateWhatsNew:
+		body = m.viewWhatsNew(pw)
+	case StateWizardWelcome:
+		body = m.viewWizardWelcome(pw)
+	case StateWizardDetect:
+		body = m.viewWizardDetect(pw)
+	case StateWizardImport:
+		body = m.viewWizardImport(pw)
+	case StateWizardAddMore:
+		body = m.viewWizardAddMore(pw)
+	case StateWizardDone:
+		body = m.viewWizardDone(pw)
 	default:
-		body = m.viewList(pw)
+		switch m.tabIndex {
+		case 1:
+			body = m.viewUtilitiesTab(pw)
+		case 2:
+			body = m.viewSettingsTab(pw)
+		default:
+			body = m.viewAccountsTab(pw)
+		}
 	}
 	if m.width > 0 && m.height > 0 {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, body)
@@ -201,7 +220,11 @@ func (m Model) nickColumnWidth() int {
 			nickColW = nickW
 		}
 	}
-	return nickColW + 2
+	result := nickColW + 2
+	if result > 22 {
+		result = 22
+	}
+	return result
 }
 
 func (m Model) viewProfileItems(pw, nickColW int) string {
@@ -247,7 +270,11 @@ func (m Model) viewProfileItems(pw, nickColW int) string {
 		}
 
 		nick := p.Nickname + strings.Repeat(" ", max(0, nickColW-lipgloss.Width(p.Nickname)))
-		content := fmt.Sprintf("%s%s  %s", marker, nick, p.Email)
+		emailMaxW := pw - nickColW - 9 // marker(3) + nick + 2spaces + ribbon(1) + padding(3)
+		if emailMaxW < 8 {
+			emailMaxW = 8
+		}
+		content := fmt.Sprintf("%s%s  %s", marker, nick, truncate(p.Email, emailMaxW))
 
 		var line string
 		if isCursor {
@@ -821,6 +848,7 @@ func (m Model) viewNoProfiles() string {
 	box := stylePanelBorder(pw).Render(content)
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 }
+
 
 // Ensure Model satisfies tea.Model at compile time.
 var _ tea.Model = Model{}

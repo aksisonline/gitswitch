@@ -67,7 +67,9 @@ func (s *Store) ConfigDir() string {
 }
 
 type Prefs struct {
-	ColorTheme int `json:"color_theme"`
+	ColorTheme    int  `json:"color_theme"`
+	SplashSeen020 bool `json:"splash_seen_020"`
+	ShellEnabled  bool `json:"shell_enabled"`
 }
 
 func (s *Store) prefsPath() string {

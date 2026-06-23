@@ -21,6 +21,12 @@ const (
 	StateTransition
 	StateExitAnim
 	StateNoProfiles
+	StateWhatsNew      // one-time upgrade splash for v0.1.x users
+	StateWizardWelcome // new-user onboarding step 0
+	StateWizardDetect  // new-user step 1: scanning for existing configs
+	StateWizardImport  // new-user step 2: import confirmation
+	StateWizardAddMore // new-user step 3: add more accounts
+	StateWizardDone    // new-user step 4: complete
 )
 
 type Model struct {
@@ -63,6 +69,24 @@ type Model struct {
 	// pacman score state — purely cosmetic
 	score   int
 	hiScore int
+
+	// Tab navigation (used when state == StateList)
+	tabIndex int // 0=Accounts 1=Utilities 2=Settings
+
+	// Utilities tab focus (0=shell, 1=precommit, 2=credential)
+	utilityFocus int
+	// Settings tab focus (0=config, 1=theme)
+	settingsFocus int
+	// Shell integration toggle
+	shellEnabled bool
+
+	// New-user wizard
+	wizardStep       int
+	detectedProfiles []storage.Profile
+	importSelected   []bool
+
+	// Upgrade splash
+	splashSeen020 bool
 
 	LaunchLogin bool
 }
@@ -115,13 +139,18 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		active:         active,
 		state:          StateList,
 		currentVersion: currentVersion,
-		colorTheme:     prefs.ColorTheme,
+		colorTheme:   prefs.ColorTheme,
+		shellEnabled: prefs.ShellEnabled,
 	}
 	for _, opt := range opts {
 		opt(m)
 	}
-	if len(profiles) == 0 && !m.arcadeMode {
-		m.state = StateNoProfiles
+	if !m.arcadeMode {
+		if len(profiles) == 0 {
+			m.state = StateWizardWelcome
+		} else if !prefs.SplashSeen020 {
+			m.state = StateWhatsNew
+		}
 	}
 	return m, nil
 }
