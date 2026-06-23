@@ -39,6 +39,7 @@ const (
 	StateExitAnim
 	StateNoProfiles
 	StateWhatsNew      // one-time upgrade splash for v0.1.x users
+	StateUpdatePrompt  // shown when a newer version is found on launch
 	StateWizardWelcome // new-user onboarding step 0
 	StateWizardDetect  // new-user step 1: scanning for existing configs
 	StateWizardImport  // new-user step 2: import confirmation
@@ -189,8 +190,9 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 
 func (m Model) Init() tea.Cmd {
 	configDir := m.store.ConfigDir()
+	cv := m.currentVersion
 	versionCmd := func() tea.Msg {
-		latest := ver.CachedLatestVersion(configDir)
+		latest := ver.CachedLatestVersion(configDir, cv)
 		return versionCheckMsg{latest: latest}
 	}
 	if m.arcadeMode {

@@ -40,6 +40,8 @@ func (m Model) View() string {
 		body = m.viewTips(pw)
 	case StateNoProfiles:
 		return m.viewNoProfiles()
+	case StateUpdatePrompt:
+		body = m.viewUpdatePrompt(pw)
 	case StateWhatsNew:
 		body = m.viewWhatsNew(pw)
 	case StateWizardWelcome:

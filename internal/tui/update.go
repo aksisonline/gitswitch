@@ -41,6 +41,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if vc, ok := msg.(versionCheckMsg); ok {
 		m.latestVersion = vc.latest
 		m.updateAvailable = ver.IsUpdateAvailable(m.currentVersion, vc.latest)
+		if m.updateAvailable && m.state == StateList {
+			m.state = StateUpdatePrompt
+		}
 		return m, nil
 	}
 	if dcm, ok := msg.(detectConfigsMsg); ok {
@@ -114,6 +117,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case StateUpdatePrompt:
+		return m.updateUpdatePrompt(msg)
 	case StateList:
 		return m.updateList(msg)
 	case StateAdd, StateEdit:
@@ -1007,4 +1012,30 @@ func (m Model) openConfigEditor() tea.Cmd {
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return editorDoneMsg{err: err}
 	})
+}
+
+func (m Model) updateUpdatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch km.String() {
+	case "y", "Y", "enter":
+		cmd, err := ver.UpgradeCommand(m.latestVersion)
+		if err != nil {
+			m.statusMsg = fmt.Sprintf("upgrade error: %v", err)
+			m.statusIsErr = true
+			m.state = StateList
+			return m, nil
+		}
+		return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+			return upgradeDoneMsg{err: err}
+		})
+	case "n", "N", "esc", "q":
+		m.state = StateList
+		return m, nil
+	case "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
 }

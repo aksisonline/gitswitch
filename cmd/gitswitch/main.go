@@ -304,7 +304,7 @@ var versionCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		bin := filepath.Base(os.Args[0])
 		fmt.Printf("%s %s\n", bin, version)
-		latest := ver.CachedLatestVersion(store.ConfigDir())
+		latest := ver.CachedLatestVersion(store.ConfigDir(), version)
 		if latest != "" && ver.IsUpdateAvailable(version, latest) {
 			fmt.Printf("New version available: %s\n", latest)
 			if isBrewInstall() {
