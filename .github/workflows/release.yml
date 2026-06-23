@@ -112,12 +112,22 @@ jobs:
         include:
           - goos: darwin
             goarch: amd64
+            ext: ""
           - goos: darwin
             goarch: arm64
+            ext: ""
           - goos: linux
             goarch: amd64
+            ext: ""
           - goos: linux
             goarch: arm64
+            ext: ""
+          - goos: windows
+            goarch: amd64
+            ext: ".exe"
+          - goos: windows
+            goarch: arm64
+            ext: ".exe"
 
     steps:
       - name: Checkout
@@ -134,16 +144,17 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          OUTPUT="gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}"
+          BASE="gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}"
+          OUTPUT="${BASE}${{ matrix.ext }}"
           go build -trimpath -ldflags="-s -w -X main.version=${{ needs.version.outputs.new_tag }}" -o "$OUTPUT" ./cmd/gitswitch
-          sha256sum "$OUTPUT" > "$OUTPUT.sha256"
+          sha256sum "$OUTPUT" > "${BASE}.sha256"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}
+            gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
             gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
 
   publish:
@@ -174,6 +185,11 @@ jobs:
           cp cmd/gitswitch/skill/SKILL.md gitswitch-skill/SKILL.md
           zip -j release/gitswitch.skill gitswitch-skill/SKILL.md
           echo "Packaged skill: $(ls -lh release/gitswitch.skill)"
+
+      - name: Include install scripts
+        run: |
+          cp .github/install.ps1 release/install.ps1
+          cp .github/install.cmd release/install.cmd
 
       - name: Update install script with version
         run: |

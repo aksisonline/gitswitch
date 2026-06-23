@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ const (
 	githubReleaseURL  = "https://api.github.com/repos/aksisonline/gitswitch/releases/latest"
 	githubReleasesURL = "https://api.github.com/repos/aksisonline/gitswitch/releases?per_page=20"
 	installScriptURL  = "https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh"
+	installScriptPS1  = "https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.ps1"
 	cacheTTL          = 24 * time.Hour
 )
 
@@ -234,8 +236,18 @@ func UpgradeCommand(targetVersion string) (*exec.Cmd, error) {
 	if !semverRe.MatchString(targetVersion) {
 		return nil, fmt.Errorf("invalid version format: %q", targetVersion)
 	}
-	script := fmt.Sprintf(`curl -fsSL %s | bash -s -- %s`, installScriptURL, targetVersion)
-	cmd := exec.Command("sh", "-c", script)
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		// PowerShell: set version env var then run install script
+		script := fmt.Sprintf(
+			`$env:GS_VERSION='%s'; Invoke-Expression (Invoke-WebRequest -Uri '%s' -UseBasicParsing).Content`,
+			targetVersion, installScriptPS1,
+		)
+		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+	} else {
+		script := fmt.Sprintf(`curl -fsSL %s | bash -s -- %s`, installScriptURL, targetVersion)
+		cmd = exec.Command("sh", "-c", script)
+	}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

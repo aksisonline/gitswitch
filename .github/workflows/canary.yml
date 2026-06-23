@@ -111,12 +111,22 @@ jobs:
         include:
           - goos: darwin
             goarch: amd64
+            ext: ""
           - goos: darwin
             goarch: arm64
+            ext: ""
           - goos: linux
             goarch: amd64
+            ext: ""
           - goos: linux
             goarch: arm64
+            ext: ""
+          - goos: windows
+            goarch: amd64
+            ext: ".exe"
+          - goos: windows
+            goarch: arm64
+            ext: ".exe"
 
     steps:
       - name: Checkout
@@ -133,17 +143,18 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          OUTPUT="gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}"
+          BASE="gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}"
+          OUTPUT="${BASE}${{ matrix.ext }}"
           go build -trimpath -ldflags="-s -w -X main.version=${{ needs.version.outputs.new_tag }}" \
             -o "$OUTPUT" ./cmd/gitswitch
-          sha256sum "$OUTPUT" > "$OUTPUT.sha256"
+          sha256sum "$OUTPUT" > "${BASE}.sha256"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}
+            gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
             gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
 
   publish:
@@ -174,6 +185,11 @@ jobs:
           cp cmd/gitswitch/skill/SKILL.md gitswitch-skill/SKILL.md
           zip -j release/gitswitch.skill gitswitch-skill/SKILL.md
 
+      - name: Include install scripts
+        run: |
+          cp .github/install.ps1 release/install.ps1
+          cp .github/install.cmd release/install.cmd
+
       - name: Create git tag
         run: |
           git config user.name "github-actions[bot]"
@@ -193,14 +209,20 @@ jobs:
             > Test it and report issues before the stable v0.2.0 drops.
 
             ### Install this beta
-            ```bash
-            # macOS arm64
-            curl -fsSL https://github.com/aksisonline/gitswitch/releases/download/${{ needs.version.outputs.new_tag }}/gitswitch-darwin-arm64 \
-              -o /usr/local/bin/gitswitch && chmod +x /usr/local/bin/gitswitch
 
-            # macOS amd64
-            curl -fsSL https://github.com/aksisonline/gitswitch/releases/download/${{ needs.version.outputs.new_tag }}/gitswitch-darwin-amd64 \
-              -o /usr/local/bin/gitswitch && chmod +x /usr/local/bin/gitswitch
+            **macOS / Linux**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh | bash -s -- ${{ needs.version.outputs.new_tag }}
+            ```
+
+            **Windows — PowerShell**
+            ```powershell
+            $env:GS_VERSION="${{ needs.version.outputs.new_tag }}"; irm https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.ps1 | iex
+            ```
+
+            **Windows — Command Prompt**
+            ```cmd
+            curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.cmd -o install.cmd && install.cmd ${{ needs.version.outputs.new_tag }}
             ```
           files: release/*
           token: ${{ secrets.GITHUB_TOKEN }}
