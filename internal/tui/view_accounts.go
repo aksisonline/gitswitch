@@ -73,6 +73,7 @@ func (m Model) viewAccountsTab(pw int) string {
 		{"enter", "switch"},
 		{"a", "add"},
 		{"e", "edit"},
+		{"v", secondaryToggleLabel(m.showUsername)},
 		{"?", "cli tips"},
 		{"q", "quit"},
 	}
@@ -89,6 +90,14 @@ func (m Model) viewAccountsTab(pw int) string {
 	}
 	footer := footerSep + divider(pw) + "\n" + m.footerKeys(pw, footerPairs)
 	return top + stylePanelBorder(pw).Render(header+currentLine+items+updateBanner+statusLine+footer)
+}
+
+// secondaryToggleLabel returns the footer hint for the email/username toggle.
+func secondaryToggleLabel(showUsername bool) string {
+	if showUsername {
+		return "emails"
+	}
+	return "usernames"
 }
 
 // ensure fmt is used (for Sprintf in callers that might need it)

@@ -70,6 +70,9 @@ type Prefs struct {
 	ColorTheme    int  `json:"color_theme"`
 	SplashSeen020 bool `json:"splash_seen_020"`
 	ShellEnabled  bool `json:"shell_enabled"`
+	// ShowUsername toggles the Accounts secondary column between email
+	// (zero value / default) and the GitHub username.
+	ShowUsername bool `json:"show_username"`
 }
 
 func (s *Store) prefsPath() string {

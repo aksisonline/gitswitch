@@ -5,8 +5,24 @@ import (
 	"github.com/aksisonline/gitswitch/internal/storage"
 	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// openProfileForm builds the huh add/edit form seeded from the given values
+// and returns the form's Init command. edit=true wires the edit copy.
+func (m *Model) openProfileForm(edit bool, seed [6]string) tea.Cmd {
+	m.formData = &profileFormData{
+		nickname: seed[0],
+		userName: seed[1],
+		email:    seed[2],
+		signKey:  seed[3],
+		sshKey:   seed[4],
+		ghUser:   seed[5],
+	}
+	m.form = newProfileForm(m.formData, edit, m.panelWidth()-6)
+	return m.form.Init()
+}
 
 type State int
 
@@ -27,6 +43,7 @@ const (
 	StateWizardImport  // new-user step 2: import confirmation
 	StateWizardAddMore // new-user step 3: add more accounts
 	StateWizardDone    // new-user step 4: complete
+	StateShellConfirm  // confirm install/uninstall of shell integration
 )
 
 type Model struct {
@@ -38,9 +55,13 @@ type Model struct {
 	width    int
 	height   int
 
-	formFields  [6]string // nickname, user_name, email, sign_key, ssh_key, gh_user
+	formFields  [6]string // seed values when entering the add/edit form
 	formFocus   int
 	editingNick string
+
+	// huh-powered add/edit form (nil unless in StateAdd/StateEdit)
+	form     *huh.Form
+	formData *profileFormData
 
 	statusMsg   string
 	statusIsErr bool
@@ -79,6 +100,12 @@ type Model struct {
 	settingsFocus int
 	// Shell integration toggle
 	shellEnabled bool
+	// Accounts secondary column: false=email (default), true=GitHub username
+	showUsername bool
+
+	// Shell-integration confirm dialog state
+	pendingShellInstall bool // true = about to install, false = about to remove
+	shellReturnTab      int  // tab to return to after the dialog
 
 	// New-user wizard
 	wizardStep       int
@@ -139,8 +166,10 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		active:         active,
 		state:          StateList,
 		currentVersion: currentVersion,
-		colorTheme:   prefs.ColorTheme,
-		shellEnabled: prefs.ShellEnabled,
+		colorTheme:     prefs.ColorTheme,
+		shellEnabled:   prefs.ShellEnabled,
+		showUsername:   prefs.ShowUsername,
+		splashSeen020:  prefs.SplashSeen020,
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -165,6 +194,17 @@ func (m Model) Init() tea.Cmd {
 		return tea.Batch(versionCmd, arcadeTickCmd())
 	}
 	return versionCmd
+}
+
+// savePrefs persists all current preference fields in one place so callers
+// never accidentally clobber a field by omitting it from a struct literal.
+func (m *Model) savePrefs() error {
+	return m.store.SavePrefs(storage.Prefs{
+		ColorTheme:    m.colorTheme,
+		SplashSeen020: m.splashSeen020,
+		ShellEnabled:  m.shellEnabled,
+		ShowUsername:  m.showUsername,
+	})
 }
 
 func (m Model) panelWidth() int {

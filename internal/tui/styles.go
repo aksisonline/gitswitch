@@ -184,18 +184,24 @@ func styleChipBox() lipgloss.Style {
 		Padding(0, 1)
 }
 
-// divider draws the panel separator. Normal mode uses a dashed pattern;
+// divider draws the panel separator spanning the usable inner width.
+// w is the panel width (panelWidth); the border's L/R padding consumes 2
+// columns, so the rule itself is w-2 wide. Normal mode uses a dashed pattern;
 // arcade mode draws pellet dots.
 func divider(w int) string {
+	iw := w - 2
+	if iw < 1 {
+		iw = 1
+	}
 	if isArcadeMode {
 		dots := ""
-		for i := 0; i < w; i += 2 {
+		for i := 0; i < iw; i += 2 {
 			dots += "·"
-			if i+1 < w {
+			if i+1 < iw {
 				dots += " "
 			}
 		}
 		return styleDivider.Render(dots)
 	}
-	return styleDivider.Render(strings.Repeat("┄", w))
+	return styleDivider.Render(strings.Repeat("┄", iw))
 }

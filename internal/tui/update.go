@@ -9,6 +9,7 @@ import (
 	"github.com/aksisonline/gitswitch/internal/storage"
 	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 )
 
 type switchDoneMsg struct {
@@ -61,6 +62,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.tickExitAnim()
 		}
 		return m, nil
+	}
+	if sd, ok := msg.(shellDoneMsg); ok {
+		if sd.err != nil {
+			m.statusMsg = fmt.Sprintf("shell integration: %v", sd.err)
+			m.statusIsErr = true
+		} else {
+			m.shellEnabled = sd.installed
+			_ = m.savePrefs()
+			if sd.installed {
+				m.statusMsg = "shell integration installed — restart your shell to apply"
+			} else {
+				m.statusMsg = "shell integration removed — restart your shell to apply"
+			}
+			m.statusIsErr = false
+		}
+		m.state = StateList
+		m.tabIndex = m.shellReturnTab
+		return m, nil
+	}
+	if m.state == StateShellConfirm {
+		return m.updateShellConfirm(msg)
 	}
 	if mm, ok := msg.(tea.MouseMsg); ok {
 		return m.handleMouse(mm)
@@ -157,17 +179,8 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case 1: // Utilities — toggle focused item
 				if m.utilityFocus == 0 {
-					m.shellEnabled = !m.shellEnabled
-					_ = m.store.SavePrefs(storage.Prefs{
-						ColorTheme:    m.colorTheme,
-						SplashSeen020: m.splashSeen020,
-						ShellEnabled:  m.shellEnabled,
-					})
-					if m.shellEnabled {
-						m.statusMsg = "shell integration enabled"
-					} else {
-						m.statusMsg = "shell integration disabled"
-					}
+					m.openShellConfirm(!m.shellEnabled)
+					return m, nil
 				}
 			case 2: // Settings — nothing interactive yet
 			}
@@ -200,9 +213,9 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				p := m.profiles[m.cursor]
 				m.state = StateEdit
 				m.editingNick = p.Nickname
-				m.formFields = [6]string{p.Nickname, p.UserName, p.Email, p.SignKey, p.SSHKey, p.GHUser}
-				m.formFocus = 0
 				m.statusMsg = ""
+				seed := [6]string{p.Nickname, p.UserName, p.Email, p.SignKey, p.SSHKey, p.GHUser}
+				return m, m.openProfileForm(true, seed)
 			}
 		case "?":
 			if m.arcadeMode {
@@ -215,7 +228,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			if !m.arcadeMode {
 				m.colorTheme = (m.colorTheme + 1) % 12
-				if err := m.store.SavePrefs(storage.Prefs{ColorTheme: m.colorTheme, SplashSeen020: m.splashSeen020, ShellEnabled: m.shellEnabled}); err != nil {
+				if err := m.savePrefs(); err != nil {
 					m.statusMsg = fmt.Sprintf("theme: %s — could not save: %v", themeNames[m.colorTheme], err)
 					m.statusIsErr = true
 				} else {
@@ -226,16 +239,27 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "left":
 			if !m.arcadeMode && m.tabIndex == 2 {
 				m.colorTheme = (m.colorTheme + 11) % 12
-				if err := m.store.SavePrefs(storage.Prefs{ColorTheme: m.colorTheme, SplashSeen020: m.splashSeen020, ShellEnabled: m.shellEnabled}); err != nil {
+				if err := m.savePrefs(); err != nil {
 					m.statusMsg = "could not save theme"
 				}
 			}
 		case "right":
 			if !m.arcadeMode && m.tabIndex == 2 {
 				m.colorTheme = (m.colorTheme + 1) % 12
-				if err := m.store.SavePrefs(storage.Prefs{ColorTheme: m.colorTheme, SplashSeen020: m.splashSeen020, ShellEnabled: m.shellEnabled}); err != nil {
+				if err := m.savePrefs(); err != nil {
 					m.statusMsg = "could not save theme"
 				}
+			}
+		case "v":
+			if m.tabIndex == 0 {
+				m.showUsername = !m.showUsername
+				_ = m.savePrefs()
+				if m.showUsername {
+					m.statusMsg = "showing GitHub usernames"
+				} else {
+					m.statusMsg = "showing emails"
+				}
+				m.statusIsErr = false
 			}
 		case "1", "2", "3":
 			if !m.arcadeMode {
@@ -299,58 +323,62 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.state == StateEdit {
-		if km, ok := msg.(tea.KeyMsg); ok && km.String() == "ctrl+d" {
-			m.state = StateDeleteConfirm
-			return m, nil
-		}
+	// Lazily build the form if we arrived here without one (e.g. arcade path).
+	if m.form == nil {
+		cmd := m.openProfileForm(m.state == StateEdit, m.formFields)
+		return m, cmd
 	}
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
+
+	if km, ok := msg.(tea.KeyMsg); ok {
+		switch km.String() {
 		case "esc":
-			if m.arcadeMode {
-				return m, m.startBackTransition()
-			}
-			m.state = StateList
-		case "tab", "down":
-			if m.formFocus < 5 {
-				m.formFocus++
-			}
-		case "shift+tab", "up":
-			if m.formFocus > 0 {
-				m.formFocus--
-			}
-		case "enter":
-			if m.formFocus < 5 {
-				m.formFocus++
-			} else {
-				cmd := m.submitForm()
-				return m, cmd
-			}
-		case "backspace":
-			f := &m.formFields[m.formFocus]
-			if len(*f) > 0 {
-				*f = (*f)[:len(*f)-1]
-			}
-		default:
-			if msg.Paste {
-				m.formFields[m.formFocus] += string(msg.Runes)
-			} else if len(msg.String()) == 1 {
-				m.formFields[m.formFocus] += msg.String()
+			return m.closeForm()
+		case "ctrl+d":
+			if m.state == StateEdit {
+				m.form = nil
+				m.formData = nil
+				m.state = StateDeleteConfirm
+				return m, nil
 			}
 		}
 	}
+
+	fm, cmd := m.form.Update(msg)
+	if f, ok := fm.(*huh.Form); ok {
+		m.form = f
+	}
+
+	switch m.form.State {
+	case huh.StateCompleted:
+		return m, m.submitForm()
+	case huh.StateAborted:
+		return m, tea.Quit
+	}
+	return m, cmd
+}
+
+// closeForm tears down the form and returns to the list (or arcade transition).
+func (m Model) closeForm() (tea.Model, tea.Cmd) {
+	m.form = nil
+	m.formData = nil
+	if m.arcadeMode {
+		return m, m.startBackTransition()
+	}
+	m.state = StateList
 	return m, nil
 }
 
 func (m *Model) submitForm() tea.Cmd {
-	nickname := strings.TrimSpace(m.formFields[0])
-	userName := strings.TrimSpace(m.formFields[1])
-	email := strings.TrimSpace(m.formFields[2])
-	signKey := strings.TrimSpace(m.formFields[3])
-	sshKey := strings.TrimSpace(m.formFields[4])
-	ghUser := strings.TrimSpace(m.formFields[5])
+	d := m.formData
+	m.form = nil
+	m.formData = nil
+
+	nickname := strings.TrimSpace(d.nickname)
+	userName := strings.TrimSpace(d.userName)
+	email := strings.TrimSpace(d.email)
+	signKey := strings.TrimSpace(d.signKey)
+	sshKey := strings.TrimSpace(d.sshKey)
+	ghUser := strings.TrimSpace(d.ghUser)
 
 	if nickname == "" || userName == "" || email == "" {
 		m.statusMsg = "nickname, user name and email are required"
@@ -500,6 +528,9 @@ func (m Model) tickTransition() (tea.Model, tea.Cmd) {
 	m.transFrame++
 	if m.transFrame >= 6 {
 		m.state = m.transTarget
+		if m.transTarget == StateAdd || m.transTarget == StateEdit {
+			return m, m.openProfileForm(m.transTarget == StateEdit, m.formFields)
+		}
 		return m, nil
 	}
 	return m, arcadeTickCmd()
@@ -632,7 +663,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if m.state == StateWhatsNew {
 			m.state = StateList
 			m.splashSeen020 = true
-			_ = m.store.SavePrefs(storage.Prefs{ColorTheme: m.colorTheme, SplashSeen020: true})
+			_ = m.savePrefs()
 			return m, nil
 		}
 
@@ -656,9 +687,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			case relY >= 13 && relY <= 15: // Manual button
 				m.wizardStep = 1
 				m.state = StateAdd
-				m.formFields = [6]string{}
-				m.formFocus = 0
 				m.statusMsg = ""
+				return m, m.openProfileForm(false, [6]string{})
 			case relY >= 17 && relY <= 19: // Done button
 				m.wizardStep = 2
 				m.state = StateList
@@ -697,18 +727,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				if withinItem > 0 && withinItem < 5 && itemIdx >= 0 && itemIdx <= 2 {
 					m.utilityFocus = itemIdx
 					if itemIdx == 0 {
-						// clicking the shell integration toggle area — toggle it
-						m.shellEnabled = !m.shellEnabled
-						_ = m.store.SavePrefs(storage.Prefs{
-							ColorTheme:    m.colorTheme,
-							SplashSeen020: m.splashSeen020,
-							ShellEnabled:  m.shellEnabled,
-						})
-						if m.shellEnabled {
-							m.statusMsg = "shell integration enabled"
-						} else {
-							m.statusMsg = "shell integration disabled"
-						}
+						// clicking the shell integration toggle — open confirm dialog
+						m.openShellConfirm(!m.shellEnabled)
 					}
 					return m, nil
 				}
@@ -730,11 +750,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 						} else {
 							m.colorTheme = (m.colorTheme + 11) % 12
 						}
-						_ = m.store.SavePrefs(storage.Prefs{
-							ColorTheme:    m.colorTheme,
-							SplashSeen020: m.splashSeen020,
-							ShellEnabled:  m.shellEnabled,
-						})
+						_ = m.savePrefs()
 					}
 					return m, nil
 				}
@@ -785,19 +801,13 @@ func (m Model) updateWhatsNew(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// any key dismisses
 			m.state = StateList
 			m.splashSeen020 = true
-			_ = m.store.SavePrefs(storage.Prefs{
-				ColorTheme:    m.colorTheme,
-				SplashSeen020: true,
-			})
+			_ = m.savePrefs()
 		}
 	}
 	if mm, ok := msg.(tea.MouseMsg); ok && mm.Action == tea.MouseActionPress && mm.Button == tea.MouseButtonLeft {
 		m.state = StateList
 		m.splashSeen020 = true
-		_ = m.store.SavePrefs(storage.Prefs{
-			ColorTheme:    m.colorTheme,
-			SplashSeen020: true,
-		})
+		_ = m.savePrefs()
 	}
 	return m, nil
 }
@@ -855,9 +865,8 @@ func (m Model) updateWizard(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.statusMsg = "GitHub OAuth coming in v0.2.1 — use Add Manually for now"
 				case 1: // Manual
 					m.state = StateAdd
-					m.formFields = [6]string{}
-					m.formFocus = 0
 					m.statusMsg = ""
+					return m, m.openProfileForm(false, [6]string{})
 				default: // Done (wizardStep==2 or unset)
 					m.state = StateList
 					m.tabIndex = 0
@@ -947,9 +956,8 @@ func (m Model) updateNoProfiles(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "a":
 		m.state = StateAdd
-		m.formFields = [6]string{}
-		m.formFocus = 0
 		m.statusMsg = ""
+		return m, m.openProfileForm(false, [6]string{})
 	case "l", "enter":
 		m.LaunchLogin = true
 		return m, tea.Quit

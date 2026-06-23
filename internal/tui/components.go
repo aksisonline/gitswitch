@@ -47,7 +47,7 @@ func renderToggle(on bool) string {
 // line1 and line2 must each be exactly (pw-6) terminal columns wide.
 // Use the renderItemLine helper to build them.
 func renderItemBox(pw int, focused bool, disabled bool, line1, line2 string) string {
-	dashW := pw - 4 // ┌ + dashes + ┐ fills pw-2 visual chars (inside 2-space indent)
+	dashW := pw - 6 // 2-space indent + ┌ + dashes + ┐ spans the usable inner width (pw-2)
 	if dashW < 2 {
 		dashW = 2
 	}
@@ -60,8 +60,16 @@ func renderItemBox(pw int, focused bool, disabled bool, line1, line2 string) str
 		b = styleBrand
 	}
 
-	top := "  " + b.Render("┌"+strings.Repeat("─", dashW)+"┐")
-	mid1 := "  " + b.Render("│") + " " + line1 + " " + b.Render("│")
+	// Focused (and enabled) boxes get a yellow cursor arrow in place of the indent.
+	indentTop, indentMid := "  ", "  "
+	if focused && !disabled {
+		arrow := lipgloss.NewStyle().Foreground(colorYellow).Bold(true).Render("❯")
+		indentTop = arrow + " "
+		indentMid = arrow + " "
+	}
+
+	top := indentTop + b.Render("┌"+strings.Repeat("─", dashW)+"┐")
+	mid1 := indentMid + b.Render("│") + " " + line1 + " " + b.Render("│")
 	mid2 := "  " + b.Render("│") + " " + line2 + " " + b.Render("│")
 	bot := "  " + b.Render("└"+strings.Repeat("─", dashW)+"┘")
 
@@ -70,9 +78,10 @@ func renderItemBox(pw int, focused bool, disabled bool, line1, line2 string) str
 
 // itemInnerW returns the writable character width inside a box built by
 // renderItemBox for the given panel width.
-// Formula: pw - 6 (2-space indent + left-│ + 1-space pad + 1-space pad + right-│)
+// Formula: pw - 8 (2-space indent + left-│ + 1-space pad + content + 1-space pad
+// + right-│, with the box outer width held to the usable inner width pw-2).
 func itemInnerW(pw int) int {
-	w := pw - 6
+	w := pw - 8
 	if w < 0 {
 		return 0
 	}
