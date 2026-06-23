@@ -65,6 +65,13 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		if final, ok := result.(tui.Model); ok {
+			if final.PendingReloadCmd != "" {
+				fmt.Println()
+				fmt.Println("  Shell integration installed. Reload your shell:")
+				fmt.Println()
+				fmt.Printf("    %s\n", final.PendingReloadCmd)
+				fmt.Println()
+			}
 			if final.LaunchLogin {
 				fmt.Println()
 				fmt.Println("  Run  gs login  to connect your first GitHub account.")

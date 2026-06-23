@@ -2,6 +2,7 @@ package tui
 
 import (
 	"github.com/aksisonline/gitswitch/internal/git"
+	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
@@ -115,8 +116,9 @@ type Model struct {
 	// Upgrade splash
 	splashSeen020 bool
 
-	LaunchLogin  bool
-	LaunchOAuth  bool
+	LaunchLogin      bool
+	LaunchOAuth      bool
+	PendingReloadCmd string
 }
 
 var formLabels = [6]string{
@@ -168,7 +170,7 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		state:          StateList,
 		currentVersion: currentVersion,
 		colorTheme:     prefs.ColorTheme,
-		shellEnabled:   prefs.ShellEnabled,
+		shellEnabled:   shell.IsInstalled(shell.RCFile(shell.DetectShell())),
 		showUsername:   prefs.ShowUsername,
 		splashSeen020:  prefs.SplashSeen020,
 	}

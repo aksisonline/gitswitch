@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/aksisonline/gitswitch/internal/git"
+	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
@@ -83,9 +84,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.shellEnabled = sd.installed
 			_ = m.savePrefs()
 			if sd.installed {
-				m.statusMsg = "shell integration installed — restart your shell to apply"
+				rc := shell.RCFile(shell.DetectShell())
+				m.statusMsg = fmt.Sprintf("installed — run: source %s", rc)
+				m.PendingReloadCmd = fmt.Sprintf("source %s", rc)
 			} else {
 				m.statusMsg = "shell integration removed — restart your shell to apply"
+				m.PendingReloadCmd = ""
 			}
 			m.statusIsErr = false
 		}
