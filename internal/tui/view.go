@@ -307,12 +307,13 @@ func (m Model) viewProfileItems(pw, nickColW int) string {
 }
 
 func (m Model) viewStatusLine(compact bool) string {
-	if m.statusMsg == "" {
-		return ""
-	}
 	sep := "\n\n"
 	if compact {
 		sep = "\n"
+	}
+	// Always reserve the line so panel height never changes (mouse grid stays stable).
+	if m.statusMsg == "" {
+		return sep + "  " + styleBrand.Render(" ")
 	}
 	if m.statusIsErr {
 		prefix := "✕ "

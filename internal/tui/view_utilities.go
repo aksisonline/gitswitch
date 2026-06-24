@@ -23,7 +23,6 @@ func (m Model) viewUtilitiesTab(pw int) string {
 
 	sep := "\n\n"
 	footer := sep + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
-		{"↑/↓", "move"},
 		{"enter", "toggle"},
 		{"1/2/3", "tabs"},
 		{"q", "quit"},

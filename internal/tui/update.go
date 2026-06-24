@@ -161,9 +161,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor--
 				}
 			case 1:
-				if m.utilityFocus > 0 {
-					m.utilityFocus--
-				}
+				// only one active item — navigation disabled until more ship
 			case 2:
 				if m.settingsFocus > 0 {
 					m.settingsFocus--
@@ -177,9 +175,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor++
 				}
 			case 1:
-				if m.utilityFocus < 2 {
-					m.utilityFocus++
-				}
+				// only one active item — navigation disabled until more ship
 			case 2:
 				if m.settingsFocus < 1 {
 					m.settingsFocus++
