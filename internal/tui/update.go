@@ -12,6 +12,7 @@ import (
 	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type switchDoneMsg struct {
@@ -616,38 +617,61 @@ func (m Model) tickIntro() (tea.Model, tea.Cmd) {
 }
 
 // panelTopY returns the absolute screen Y of the panel's top border.
-// Uses a state-aware height estimate since View() has a value receiver.
+// Renders the actual panel body and measures it with lipgloss.Height so
+// the value always matches what lipgloss.Place produces in View().
 func (m Model) panelTopY() int {
 	if m.height == 0 {
 		return 0
 	}
-	var panelH int
+	pw := m.panelWidth()
+	var body string
 	switch m.state {
-	case StateWizardWelcome:
-		panelH = 20
-	case StateWizardDetect:
-		panelH = 16
-	case StateWizardImport:
-		panelH = 14 + len(m.detectedProfiles)*3
-	case StateWizardAddMore:
-		panelH = 26 // header(1) + tabgap(2) + 3 items×5 + footer(3) + border(2) + margin
-	case StateWizardDone:
-		panelH = 20
+	case StateIntro:
+		body = m.viewIntro(pw)
+	case StateSelectFlash:
+		body = m.viewSelectFlash(pw)
+	case StateTransition:
+		body = m.viewTransition(pw)
+	case StateExitAnim:
+		body = m.viewExitAnim(pw)
+	case StateAdd:
+		body = m.viewForm("Add Profile", pw)
+	case StateEdit:
+		body = m.viewForm(fmt.Sprintf("Edit  %s", m.editingNick), pw)
+	case StateDeleteConfirm:
+		body = m.viewDeleteConfirm(pw)
+	case StateTips:
+		body = m.viewTips(pw)
+	case StateNoProfiles:
+		return 0
+	case StateUpdatePrompt:
+		body = m.viewUpdatePrompt(pw)
 	case StateWhatsNew:
-		panelH = 24
+		body = m.viewWhatsNew(pw)
+	case StateWizardWelcome:
+		body = m.viewWizardWelcome(pw)
+	case StateWizardDetect:
+		body = m.viewWizardDetect(pw)
+	case StateWizardImport:
+		body = m.viewWizardImport(pw)
+	case StateWizardAddMore:
+		body = m.viewWizardAddMore(pw)
+	case StateWizardDone:
+		body = m.viewWizardDone(pw)
+	case StateShellConfirm:
+		body = m.viewShellConfirm(pw)
 	default:
-		if m.tabIndex == 1 { // utilities: 3 items
-			panelH = 22
-		} else if m.tabIndex == 2 { // settings: 2 items
-			panelH = 18
-		} else {
-			panelH = 13 + len(m.profiles)
-			if panelH < 16 {
-				panelH = 16
-			}
+		switch m.tabIndex {
+		case 1:
+			body = m.viewUtilitiesTab(pw)
+		case 2:
+			body = m.viewSettingsTab(pw)
+		default:
+			body = m.viewAccountsTab(pw)
 		}
 	}
-	top := (m.height - panelH) / 2
+	actualH := lipgloss.Height(body)
+	top := (m.height - actualH) / 2
 	if top < 0 {
 		top = 0
 	}
