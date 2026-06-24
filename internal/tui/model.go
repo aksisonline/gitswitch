@@ -178,6 +178,13 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 	for _, opt := range opts {
 		opt(m)
 	}
+	if store.WasMigrated() {
+		if store.BakCreated() {
+			m.statusMsg = "Profiles migrated to config.yaml (backup: profiles.json.v1.bak)"
+		} else {
+			m.statusMsg = "Profiles migrated to config.yaml"
+		}
+	}
 	if !m.arcadeMode {
 		if len(profiles) == 0 {
 			m.state = StateWizardWelcome

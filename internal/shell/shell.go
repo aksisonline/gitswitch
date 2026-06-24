@@ -116,6 +116,12 @@ func HookUpdateMessage(configDir, rcFile, currentVersion string, credHelperInsta
 	if err != nil {
 		// No version file — old install predating hook-version tracking.
 		if IsInstalled(rcFile) {
+			// If the hook already contains hook-check it's the current format —
+			// stamp the version file silently so we don't fire this check again.
+			if InstalledHookIsCurrent(rcFile) {
+				_ = WriteHookVersion(configDir, currentVersion)
+				return ""
+			}
 			return "gitswitch: shell integration may be outdated — run: gitswitch install"
 		}
 		return ""
@@ -150,6 +156,17 @@ func IsInstalled(path string) bool {
 		return false
 	}
 	return strings.Contains(string(data), marker)
+}
+
+// InstalledHookIsCurrent returns true when the installed hook already contains
+// "gitswitch hook-check", the fingerprint added alongside hook-version tracking.
+// Its presence means the hook is already the current format and no reinstall is needed.
+func InstalledHookIsCurrent(rcFile string) bool {
+	data, err := os.ReadFile(rcFile)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), "gitswitch hook-check")
 }
 
 // nudgeSnippetZsh returns the zsh nudge + prompt + completion snippet.
