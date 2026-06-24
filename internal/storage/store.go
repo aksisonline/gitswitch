@@ -41,11 +41,16 @@ type configFile struct {
 type Store struct {
 	path        string
 	wasMigrated bool
+	bakCreated  bool
 }
 
 // WasMigrated reports whether Load() performed a first-run migration from
 // profiles.json to config.yaml during this session.
 func (s *Store) WasMigrated() bool { return s.wasMigrated }
+
+// BakCreated reports whether the .v1.bak backup file was successfully created
+// during migration. False means profiles.json may still be present.
+func (s *Store) BakCreated() bool { return s.bakCreated }
 
 func New() (*Store, error) {
 	home, err := os.UserHomeDir()
@@ -115,9 +120,13 @@ func (s *Store) Load() ([]Profile, error) {
 	if data, err := os.ReadFile(s.yamlPath()); err == nil {
 		var cf configFile
 		if err := yaml.Unmarshal(data, &cf); err != nil {
-			// config.yaml corrupt — try the v1 backup before giving up
+			// config.yaml corrupt — try backups before giving up
 			if bakData, bakErr := os.ReadFile(s.legacyJSONPath() + ".v1.bak"); bakErr == nil {
 				return s.migrateFromJSON(bakData)
+			}
+			// Also try original profiles.json in case .v1.bak rename failed
+			if jsonData, jsonErr := os.ReadFile(s.legacyJSONPath()); jsonErr == nil {
+				return s.migrateFromJSON(jsonData)
 			}
 			return nil, fmt.Errorf("parse config.yaml: %w (no backup found)", err)
 		}
@@ -138,8 +147,8 @@ func (s *Store) Load() ([]Profile, error) {
 	}
 	// Write config.yaml atomically and rename old file
 	if saveErr := s.Save(profiles); saveErr == nil {
-		_ = os.Rename(s.legacyJSONPath(), s.legacyJSONPath()+".v1.bak")
 		s.wasMigrated = true
+		s.bakCreated = os.Rename(s.legacyJSONPath(), s.legacyJSONPath()+".v1.bak") == nil
 	}
 	return profiles, nil
 }
@@ -181,7 +190,13 @@ func (s *Store) Save(profiles []Profile) error {
 	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.yamlPath())
+	if err := os.Rename(tmp, s.yamlPath()); err != nil {
+		// On Windows, Rename fails when the destination already exists.
+		// Remove dest and retry once.
+		_ = os.Remove(s.yamlPath())
+		return os.Rename(tmp, s.yamlPath())
+	}
+	return nil
 }
 
 func (s *Store) Add(nickname, userName, email, signKey, sshKey, ghUser string) error {
