@@ -370,7 +370,7 @@ var upgradeCmd = &cobra.Command{
 			return nil
 		}
 		fmt.Println("Checking for updates...")
-		latest, err := ver.FetchLatestVersionFresh()
+		latest, err := ver.FetchLatestVersionFreshFor(version)
 		if err != nil {
 			return fmt.Errorf("could not fetch latest version: %w", err)
 		}

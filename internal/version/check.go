@@ -49,7 +49,12 @@ func CachedLatestVersion(configDir, currentVersion string) string {
 	if data, err := os.ReadFile(cachePath); err == nil {
 		var c cache
 		if json.Unmarshal(data, &c) == nil && time.Since(c.CheckedAt) < cacheTTL {
-			return c.LatestVersion
+			// Discard stale cache: if cached latest is behind current, the user
+			// upgraded and the cache is from the previous install (e.g. 0.1.x left
+			// version-check.json with v0.1.22; we're now running v0.2.0).
+			if compareVersions(c.LatestVersion, currentVersion) >= 0 {
+				return c.LatestVersion
+			}
 		}
 	}
 
@@ -75,6 +80,18 @@ func CachedLatestVersion(configDir, currentVersion string) string {
 func FetchLatestVersionFresh() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	return fetchLatestStable(ctx)
+}
+
+// FetchLatestVersionFreshFor fetches the best available version for the given
+// current version, bypassing the cache. Beta builds use the full releases list
+// so users can discover newer betas; stable builds use the latest-release endpoint.
+func FetchLatestVersionFreshFor(currentVersion string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if IsBeta(currentVersion) {
+		return fetchLatestForBeta(ctx, currentVersion)
+	}
 	return fetchLatestStable(ctx)
 }
 

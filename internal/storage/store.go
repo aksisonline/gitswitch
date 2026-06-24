@@ -39,8 +39,13 @@ type configFile struct {
 }
 
 type Store struct {
-	path string
+	path        string
+	wasMigrated bool
 }
+
+// WasMigrated reports whether Load() performed a first-run migration from
+// profiles.json to config.yaml during this session.
+func (s *Store) WasMigrated() bool { return s.wasMigrated }
 
 func New() (*Store, error) {
 	home, err := os.UserHomeDir()
@@ -110,7 +115,11 @@ func (s *Store) Load() ([]Profile, error) {
 	if data, err := os.ReadFile(s.yamlPath()); err == nil {
 		var cf configFile
 		if err := yaml.Unmarshal(data, &cf); err != nil {
-			return nil, fmt.Errorf("parse config.yaml: %w", err)
+			// config.yaml corrupt — try the v1 backup before giving up
+			if bakData, bakErr := os.ReadFile(s.legacyJSONPath() + ".v1.bak"); bakErr == nil {
+				return s.migrateFromJSON(bakData)
+			}
+			return nil, fmt.Errorf("parse config.yaml: %w (no backup found)", err)
 		}
 		return cf.Profiles, nil
 	}
@@ -127,9 +136,10 @@ func (s *Store) Load() ([]Profile, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Write config.yaml and rename old file
+	// Write config.yaml atomically and rename old file
 	if saveErr := s.Save(profiles); saveErr == nil {
 		_ = os.Rename(s.legacyJSONPath(), s.legacyJSONPath()+".v1.bak")
+		s.wasMigrated = true
 	}
 	return profiles, nil
 }
@@ -167,7 +177,11 @@ func (s *Store) Save(profiles []Profile) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.yamlPath(), data, 0600)
+	tmp := s.yamlPath() + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.yamlPath())
 }
 
 func (s *Store) Add(nickname, userName, email, signKey, sshKey, ghUser string) error {
