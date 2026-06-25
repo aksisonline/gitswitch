@@ -71,6 +71,7 @@ type Model struct {
 
 	currentVersion  string
 	latestVersion   string
+	releaseNotes    string
 	updateAvailable bool
 
 	colorTheme int // 0-11 normal palette index
@@ -216,8 +217,8 @@ func (m Model) Init() tea.Cmd {
 	configDir := m.store.ConfigDir()
 	cv := m.currentVersion
 	versionCmd := func() tea.Msg {
-		latest := ver.CachedLatestVersion(configDir, cv)
-		return versionCheckMsg{latest: latest}
+		rel := ver.CachedLatestRelease(configDir, cv)
+		return versionCheckMsg{latest: rel.Version, notes: rel.Notes}
 	}
 	if m.arcadeMode {
 		return tea.Batch(versionCmd, arcadeTickCmd())

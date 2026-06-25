@@ -28,7 +28,14 @@ var semverRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+(-beta\.\d+)?$`)
 
 type cache struct {
 	LatestVersion string    `json:"latest_version"`
+	ReleaseNotes  string    `json:"release_notes"`
 	CheckedAt     time.Time `json:"checked_at"`
+}
+
+// Release bundles a version tag with its GitHub release body.
+type Release struct {
+	Version string
+	Notes   string
 }
 
 // IsBeta reports whether version is a pre-release beta build.
@@ -40,6 +47,13 @@ func IsBeta(version string) bool {
 // version using a 24-hour disk cache. Beta builds check for newer betas AND
 // stable releases; stable builds check stable releases only.
 func CachedLatestVersion(configDir, currentVersion string) string {
+	r := CachedLatestRelease(configDir, currentVersion)
+	return r.Version
+}
+
+// CachedLatestRelease returns the best available release (version + notes) for
+// the given current version using a 24-hour disk cache.
+func CachedLatestRelease(configDir, currentVersion string) Release {
 	cacheFile := "version-check.json"
 	if IsBeta(currentVersion) {
 		cacheFile = "version-check-beta.json"
@@ -53,7 +67,7 @@ func CachedLatestVersion(configDir, currentVersion string) string {
 			// upgraded and the cache is from the previous install (e.g. 0.1.x left
 			// version-check.json with v0.1.22; we're now running v0.2.0).
 			if compareVersions(c.LatestVersion, currentVersion) >= 0 {
-				return c.LatestVersion
+				return Release{Version: c.LatestVersion, Notes: c.ReleaseNotes}
 			}
 		}
 	}
@@ -61,19 +75,19 @@ func CachedLatestVersion(configDir, currentVersion string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var latest string
+	var rel Release
 	var err error
 	if IsBeta(currentVersion) {
-		latest, err = fetchLatestForBeta(ctx, currentVersion)
+		rel, err = fetchLatestReleaseForBeta(ctx, currentVersion)
 	} else {
-		latest, err = fetchLatestStable(ctx)
+		rel, err = fetchLatestReleaseStable(ctx)
 	}
 	if err != nil {
-		return ""
+		return Release{}
 	}
 
-	_ = saveCache(cachePath, latest)
-	return latest
+	_ = saveCacheRelease(cachePath, rel)
+	return rel
 }
 
 // FetchLatestVersionFresh always fetches from GitHub API, bypassing the cache.
@@ -96,96 +110,111 @@ func FetchLatestVersionFreshFor(currentVersion string) (string, error) {
 }
 
 func fetchLatestStable(ctx context.Context) (string, error) {
+	r, err := fetchLatestReleaseStable(ctx)
+	return r.Version, err
+}
+
+func fetchLatestReleaseStable(ctx context.Context) (Release, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubReleaseURL, nil)
 	if err != nil {
-		return "", err
+		return Release{}, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "gitswitch-updater")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return Release{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("github API returned %d", resp.StatusCode)
+		return Release{}, fmt.Errorf("github API returned %d", resp.StatusCode)
 	}
 
 	var result struct {
 		TagName string `json:"tag_name"`
+		Body    string `json:"body"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return Release{}, err
 	}
-	return result.TagName, nil
+	return Release{Version: result.TagName, Notes: result.Body}, nil
 }
 
 // fetchLatestForBeta returns the best available version for a beta user:
 // the highest beta of the same target release, or the stable release if it
 // has shipped (stable always wins over any beta of the same base).
 func fetchLatestForBeta(ctx context.Context, currentVersion string) (string, error) {
+	r, err := fetchLatestReleaseForBeta(ctx, currentVersion)
+	return r.Version, err
+}
+
+func fetchLatestReleaseForBeta(ctx context.Context, currentVersion string) (Release, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubReleasesURL, nil)
 	if err != nil {
-		return "", err
+		return Release{}, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "gitswitch-updater")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return Release{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("github API returned %d", resp.StatusCode)
+		return Release{}, fmt.Errorf("github API returned %d", resp.StatusCode)
 	}
 
 	var releases []struct {
 		TagName    string `json:"tag_name"`
 		Prerelease bool   `json:"prerelease"`
 		Draft      bool   `json:"draft"`
+		Body       string `json:"body"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		return "", err
+		return Release{}, err
 	}
 
 	// Base version we're targeting (e.g. v0.2.0 from v0.2.0-beta.1)
 	base := strings.SplitN(currentVersion, "-", 2)[0]
 
-	var bestBeta, bestStable string
+	var bestBeta, bestStable Release
 	for _, r := range releases {
 		if r.Draft || !semverRe.MatchString(r.TagName) {
 			continue
 		}
 		if !r.Prerelease {
-			// Stable release for our base version → promote immediately
 			if strings.HasPrefix(r.TagName, base) || compareVersions(r.TagName, base) >= 0 {
-				if bestStable == "" || compareVersions(r.TagName, bestStable) > 0 {
-					bestStable = r.TagName
+				if bestStable.Version == "" || compareVersions(r.TagName, bestStable.Version) > 0 {
+					bestStable = Release{Version: r.TagName, Notes: r.Body}
 				}
 			}
 		} else if strings.HasPrefix(r.TagName, base+"-beta.") {
-			if bestBeta == "" || compareVersions(r.TagName, bestBeta) > 0 {
-				bestBeta = r.TagName
+			if bestBeta.Version == "" || compareVersions(r.TagName, bestBeta.Version) > 0 {
+				bestBeta = Release{Version: r.TagName, Notes: r.Body}
 			}
 		}
 	}
 
 	// Stable beats beta — if the stable is out, recommend it
-	if bestStable != "" {
+	if bestStable.Version != "" {
 		return bestStable, nil
 	}
-	if bestBeta != "" {
+	if bestBeta.Version != "" {
 		return bestBeta, nil
 	}
-	return currentVersion, nil
+	return Release{Version: currentVersion}, nil
 }
 
 func saveCache(cachePath, version string) error {
-	data, err := json.Marshal(cache{LatestVersion: version, CheckedAt: time.Now()})
+	return saveCacheRelease(cachePath, Release{Version: version})
+}
+
+func saveCacheRelease(cachePath string, rel Release) error {
+	data, err := json.Marshal(cache{LatestVersion: rel.Version, ReleaseNotes: rel.Notes, CheckedAt: time.Now()})
 	if err != nil {
 		return err
 	}

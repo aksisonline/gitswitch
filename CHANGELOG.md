@@ -5,6 +5,17 @@ Format: `[version] — date — summary`
 
 ---
 
+## [v0.2.0-beta.12] — 2026-06-25
+
+### Fixed
+- **Shell alias actually applied** — toggling or renaming the alias now auto-reinstalls the shell integration block in-place (uninstall + install) so the change takes effect on next shell reload. No manual reinstall required.
+- `shell.Install` no longer overrides an empty alias with `"gs"` — empty now correctly skips the alias line.
+
+### Added
+- **Release notes in update screen** — when a newer version is available, the update prompt shows the GitHub release body (what's changed) fetched alongside the version check and cached to disk.
+
+---
+
 ## [v0.2.0-beta.11] — 2026-06-25
 
 ### Added

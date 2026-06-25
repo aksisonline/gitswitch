@@ -32,6 +32,7 @@ type editorDoneMsg struct {
 
 type versionCheckMsg struct {
 	latest string
+	notes  string
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -42,6 +43,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if vc, ok := msg.(versionCheckMsg); ok {
 		m.latestVersion = vc.latest
+		m.releaseNotes = vc.notes
 		m.updateAvailable = ver.IsUpdateAvailable(m.currentVersion, vc.latest)
 		if m.updateAvailable && m.state == StateList {
 			m.state = StateUpdatePrompt
@@ -113,7 +115,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if val != "" {
 					m.shellAlias = val
 					_ = m.savePrefs()
-					m.statusMsg = "alias updated — reinstall shell integration to apply"
+					if m.shellEnabled && !m.shellAliasDisabled {
+						return m, m.reinstallShellCmd()
+					}
+					m.statusMsg = "alias renamed"
 					m.statusIsErr = false
 				}
 				m.aliasEditing = false
@@ -234,10 +239,13 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.settingsFocus == 2 {
 					m.shellAliasDisabled = !m.shellAliasDisabled
 					_ = m.savePrefs()
+					if m.shellEnabled {
+						return m, m.reinstallShellCmd()
+					}
 					if !m.shellAliasDisabled {
-						m.statusMsg = "alias enabled — reinstall shell integration to apply"
+						m.statusMsg = "alias enabled — install shell integration to apply"
 					} else {
-						m.statusMsg = "alias disabled — reinstall shell integration to apply"
+						m.statusMsg = "alias disabled"
 					}
 					m.statusIsErr = false
 					return m, nil
@@ -859,10 +867,13 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 						}
 						m.shellAliasDisabled = !m.shellAliasDisabled
 						_ = m.savePrefs()
+						if m.shellEnabled {
+							return m, m.reinstallShellCmd()
+						}
 						if !m.shellAliasDisabled {
-							m.statusMsg = "alias enabled — reinstall shell integration to apply"
+							m.statusMsg = "alias enabled — install shell integration to apply"
 						} else {
-							m.statusMsg = "alias disabled — reinstall shell integration to apply"
+							m.statusMsg = "alias disabled"
 						}
 						m.statusIsErr = false
 					}

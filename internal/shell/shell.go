@@ -418,12 +418,9 @@ source <(gitswitch completion zsh)
 }
 
 // Install writes the appropriate integration for the detected framework.
-// alias is the short command alias to add (e.g. "gs"); defaults to "gs" if empty.
+// alias is the short command alias to add (e.g. "gs"); pass "" to skip the alias line.
 // Returns a human-readable description of what was done.
 func Install(sh Shell, fw Framework, alias string) (string, error) {
-	if alias == "" {
-		alias = "gs"
-	}
 	home, _ := os.UserHomeDir()
 
 	switch fw {
@@ -496,6 +493,15 @@ func installP10k(sh Shell, home string, alias string) (string, error) {
 		"wrote nudge hook to %s\n  → for the prompt segment, add 'gitswitch' to POWERLEVEL9K_LEFT_PROMPT_ELEMENTS in ~/.p10k.zsh",
 		rcFile,
 	), nil
+}
+
+// Reinstall removes the existing integration block and writes a fresh one.
+// Use this to apply alias changes without requiring a manual uninstall/install cycle.
+func Reinstall(sh Shell, fw Framework, alias string) (string, error) {
+	if _, err := Uninstall(sh, fw); err != nil {
+		return "", fmt.Errorf("reinstall (uninstall phase): %w", err)
+	}
+	return Install(sh, fw, alias)
 }
 
 // Uninstall removes the gitswitch marker block from the rc file for the

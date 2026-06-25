@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 func (m Model) viewUpdatePrompt(pw int) string {
 	header := m.viewHeader("") + m.viewTabHeader()
@@ -24,9 +28,29 @@ func (m Model) viewUpdatePrompt(pw int) string {
 		chip = styleChipBox().Render("UPDATE")
 		title = sep + "  " + chip + "  " + styleCurrentVal.Render("New version available")
 		body = sep +
-			"  " + styleBrand.Render("  "+m.latestVersion+" is ready to install.") +
-			sep +
-			"  " + styleBrand.Render("  "+truncate("Your profiles are unchanged. Restart after upgrade to apply.", iw-4))
+			"  " + styleBrand.Render("  "+m.latestVersion+" is ready to install.")
+
+		// Release notes block
+		if m.releaseNotes != "" {
+			body += sep + "  " + styleItemDim.Render("What's new:") + "\n"
+			noteStyle := lipgloss.NewStyle().Foreground(colorDim)
+			for _, line := range strings.Split(m.releaseNotes, "\n") {
+				line = strings.TrimRight(line, "\r")
+				if line == "" {
+					continue
+				}
+				// Trim markdown heading markers, render as plain text
+				line = strings.TrimLeft(line, "#")
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				body += "  " + noteStyle.Render(truncate(line, iw-4)) + "\n"
+			}
+		} else {
+			body += sep +
+				"  " + styleBrand.Render("  "+truncate("Your profiles are unchanged. Restart after upgrade to apply.", iw-4))
+		}
 	}
 
 	yesLabel := "  Yes, update now  "

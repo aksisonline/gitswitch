@@ -55,6 +55,21 @@ func (m Model) runShellAction(install bool) tea.Cmd {
 	}
 }
 
+// reinstallShellCmd removes the existing integration block and rewrites it
+// with the current alias setting, then signals the shell to be reloaded.
+func (m Model) reinstallShellCmd() tea.Cmd {
+	return func() tea.Msg {
+		sh := shell.DetectShell()
+		fw := shell.DetectFramework()
+		alias := m.shellAlias
+		if m.shellAliasDisabled {
+			alias = ""
+		}
+		res, err := shell.Reinstall(sh, fw, alias)
+		return shellDoneMsg{installed: true, result: res, err: err}
+	}
+}
+
 func (m Model) updateShellConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
