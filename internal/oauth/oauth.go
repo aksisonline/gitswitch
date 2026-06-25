@@ -33,8 +33,12 @@ func Login(host, clientID string) (token string, user GHUser, err error) {
 		host = "github.com"
 	}
 
+	ghHost, err := ghOAuth.NewGitHubHost("https://" + host)
+	if err != nil {
+		return "", GHUser{}, fmt.Errorf("invalid host %q: %w", host, err)
+	}
 	flow := &ghOAuth.Flow{
-		Host:     ghOAuth.GitHubHost(host),
+		Host:     ghHost,
 		ClientID: clientID,
 		Scopes:   defaultScopes,
 		DisplayCode: func(code, verificationURL string) error {
