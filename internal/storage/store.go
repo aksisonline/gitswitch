@@ -83,7 +83,8 @@ type Prefs struct {
 	// ShowUsername toggles the Accounts secondary column between email
 	// (zero value / default) and the GitHub username.
 	ShowUsername bool   `json:"show_username"`
-	ShellAlias   string `json:"shell_alias"`
+	ShellAlias         string `json:"shell_alias"`
+	ShellAliasDisabled bool   `json:"shell_alias_disabled"` // zero value = enabled (default on)
 }
 
 func (s *Store) prefsPath() string {

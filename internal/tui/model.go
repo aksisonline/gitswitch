@@ -119,9 +119,10 @@ type Model struct {
 	splashSeen020 bool
 
 	// Shell alias (editable in Settings tab)
-	shellAlias   string
-	aliasEditing bool
-	aliasInput   textinput.Model
+	shellAlias         string
+	shellAliasDisabled bool
+	aliasEditing       bool
+	aliasInput         textinput.Model
 
 	LaunchLogin      bool
 	LaunchOAuth      bool
@@ -187,8 +188,9 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		shellEnabled:   shell.IsInstalled(shell.RCFile(shell.DetectShell())),
 		showUsername:   prefs.ShowUsername,
 		splashSeen020:  prefs.SplashSeen020,
-		shellAlias:     shellAlias,
-		aliasInput:     aliasInput,
+		shellAlias:         shellAlias,
+		shellAliasDisabled: prefs.ShellAliasDisabled,
+		aliasInput:         aliasInput,
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -231,7 +233,8 @@ func (m *Model) savePrefs() error {
 		SplashSeen020: m.splashSeen020,
 		ShellEnabled:  m.shellEnabled,
 		ShowUsername:  m.showUsername,
-		ShellAlias:    m.shellAlias,
+		ShellAlias:         m.shellAlias,
+		ShellAliasDisabled: m.shellAliasDisabled,
 	})
 }
 

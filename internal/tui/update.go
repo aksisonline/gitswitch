@@ -232,10 +232,15 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.openConfigEditor()
 				}
 				if m.settingsFocus == 2 {
-					m.aliasInput.SetValue(m.shellAlias)
-					m.aliasInput.Focus()
-					m.aliasEditing = true
-					return m, textinput.Blink
+					m.shellAliasDisabled = !m.shellAliasDisabled
+					_ = m.savePrefs()
+					if !m.shellAliasDisabled {
+						m.statusMsg = "alias enabled — reinstall shell integration to apply"
+					} else {
+						m.statusMsg = "alias disabled — reinstall shell integration to apply"
+					}
+					m.statusIsErr = false
+					return m, nil
 				}
 			}
 		case "a":
@@ -255,6 +260,12 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = StateWizardAddMore
 			m.statusMsg = ""
 		case "e":
+			if m.tabIndex == 2 && m.settingsFocus == 2 {
+				m.aliasInput.SetValue(m.shellAlias)
+				m.aliasInput.Focus()
+				m.aliasEditing = true
+				return m, textinput.Blink
+			}
 			if m.tabIndex != 0 {
 				break
 			}
@@ -839,11 +850,21 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 						}
 						_ = m.savePrefs()
 					}
-					if itemIdx == 2 { // alias box — enter edit mode
-						m.aliasInput.SetValue(m.shellAlias)
-						m.aliasInput.Focus()
-						m.aliasEditing = true
-						return m, textinput.Blink
+					if itemIdx == 2 { // alias box: right side = rename, left = toggle
+						if contentX > pw*3/4 {
+							m.aliasInput.SetValue(m.shellAlias)
+							m.aliasInput.Focus()
+							m.aliasEditing = true
+							return m, textinput.Blink
+						}
+						m.shellAliasDisabled = !m.shellAliasDisabled
+						_ = m.savePrefs()
+						if !m.shellAliasDisabled {
+							m.statusMsg = "alias enabled — reinstall shell integration to apply"
+						} else {
+							m.statusMsg = "alias disabled — reinstall shell integration to apply"
+						}
+						m.statusIsErr = false
 					}
 					return m, nil
 				}

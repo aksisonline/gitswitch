@@ -57,14 +57,17 @@ func (m Model) viewSettingsTab(pw int) string {
 	if m.arcadeMode {
 		aliasTitle = "COMMAND ALIAS"
 	}
-	aliasEditChip := lipgloss.NewStyle().Foreground(colorPurple).Render("[✎ edit]")
+	aliasEditChip := lipgloss.NewStyle().Foreground(colorPurple).Render("[✎ rename]")
 	aliasLine1 := titleWithRight(styleItemDim.Render(aliasTitle), aliasEditChip, iw)
 	var aliasLine2 string
 	if m.aliasEditing && m.settingsFocus == 2 {
 		aliasLine2 = lipgloss.NewStyle().Foreground(colorGreen).Render(m.aliasInput.View())
+	} else if m.shellAliasDisabled {
+		toggleDot := lipgloss.NewStyle().Foreground(colorDim).Render("○")
+		aliasLine2 = padTo(toggleDot+" "+styleItemDim.Render("disabled"), iw)
 	} else {
-		hint := styleBrand.Render("  also callable as: ") + styleCurrentVal.Render(m.shellAlias)
-		aliasLine2 = padTo(hint, iw)
+		toggleDot := lipgloss.NewStyle().Foreground(colorGreen).Render("●")
+		aliasLine2 = padTo(toggleDot+" "+styleCurrentVal.Render(m.shellAlias), iw)
 	}
 	aliasBox := renderItemBox(pw, m.settingsFocus == 2, false, aliasLine1, aliasLine2)
 
@@ -74,6 +77,13 @@ func (m Model) viewSettingsTab(pw int) string {
 		footerHints = [][2]string{
 			{"enter", "save"},
 			{"esc", "cancel"},
+		}
+	} else if m.settingsFocus == 2 {
+		footerHints = [][2]string{
+			{"↑/↓", "move"},
+			{"enter", "toggle on/off"},
+			{"e", "rename alias"},
+			{"q", "quit"},
 		}
 	} else {
 		footerHints = [][2]string{

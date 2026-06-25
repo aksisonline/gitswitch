@@ -171,8 +171,9 @@ func InstalledHookIsCurrent(rcFile string) bool {
 
 // nudgeSnippetZsh returns the zsh nudge + prompt + completion snippet.
 func nudgeSnippetZsh(alias string) string {
-	if alias == "" {
-		alias = "gs"
+	aliasLine := ""
+	if alias != "" {
+		aliasLine = "alias " + alias + "=gitswitch\n"
 	}
 	return `
 ` + marker + ` begin
@@ -212,15 +213,15 @@ add-zsh-hook precmd __gitswitch_launch
 PROMPT='$(__gitswitch_prompt)'"$PROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
-alias ` + alias + `=gitswitch
-` + marker + ` end
+` + aliasLine + marker + ` end
 `
 }
 
 // nudgeSnippetBash returns the bash nudge + prompt + completion snippet.
 func nudgeSnippetBash(alias string) string {
-	if alias == "" {
-		alias = "gs"
+	aliasLine := ""
+	if alias != "" {
+		aliasLine = "alias " + alias + "=gitswitch\n"
 	}
 	return `
 ` + marker + ` begin
@@ -260,15 +261,15 @@ __gitswitch_launch() {
 PS1='$(__gitswitch_prompt)'"$PS1"
 PROMPT_COMMAND="__gitswitch_launch; __gitswitch_nudge${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
 source <(gitswitch completion bash)
-alias ` + alias + `=gitswitch
-` + marker + ` end
+` + aliasLine + marker + ` end
 `
 }
 
 // nudgeSnippetFish returns the fish nudge + cd hook + completion snippet.
 func nudgeSnippetFish(alias string) string {
-	if alias == "" {
-		alias = "gs"
+	aliasLine := ""
+	if alias != "" {
+		aliasLine = "alias " + alias + " gitswitch\n"
 	}
 	return `
 ` + marker + ` begin
@@ -311,8 +312,7 @@ function fish_right_prompt
   __gitswitch_prompt
 end
 gitswitch completion fish | source
-alias ` + alias + ` gitswitch
-` + marker + ` end
+` + aliasLine + marker + ` end
 `
 }
 
@@ -372,8 +372,9 @@ source <(gitswitch completion zsh)
 
 // p10kSnippet returns the P10k segment function for manual insertion.
 func p10kSnippet(alias string) string {
-	if alias == "" {
-		alias = "gs"
+	aliasLine := ""
+	if alias != "" {
+		aliasLine = "alias " + alias + "=gitswitch\n"
 	}
 	return `
 ` + marker + ` begin
@@ -412,8 +413,7 @@ __gitswitch_launch() {
 add-zsh-hook precmd __gitswitch_launch
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
-alias ` + alias + `=gitswitch
-` + marker + ` end
+` + aliasLine + marker + ` end
 `
 }
 
