@@ -82,7 +82,8 @@ type Prefs struct {
 	ShellEnabled  bool `json:"shell_enabled"`
 	// ShowUsername toggles the Accounts secondary column between email
 	// (zero value / default) and the GitHub username.
-	ShowUsername bool `json:"show_username"`
+	ShowUsername bool   `json:"show_username"`
+	ShellAlias   string `json:"shell_alias"`
 }
 
 func (s *Store) prefsPath() string {
@@ -103,6 +104,9 @@ func (s *Store) LoadPrefs() (Prefs, error) {
 	}
 	if p.ColorTheme < 0 || p.ColorTheme >= 12 {
 		p.ColorTheme = 0
+	}
+	if p.ShellAlias == "" {
+		p.ShellAlias = "gs"
 	}
 	return p, nil
 }

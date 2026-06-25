@@ -566,7 +566,7 @@ prompts (for scripts and CI).`,
 
 		var shellResult string
 		if opts.InstallShell {
-			shellResult, err = shell.Install(opts.Shell, opts.Framework)
+			shellResult, err = shell.Install(opts.Shell, opts.Framework, "gs")
 			if err != nil {
 				return fmt.Errorf("shell install failed: %w", err)
 			}

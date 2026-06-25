@@ -170,7 +170,10 @@ func InstalledHookIsCurrent(rcFile string) bool {
 }
 
 // nudgeSnippetZsh returns the zsh nudge + prompt + completion snippet.
-func nudgeSnippetZsh() string {
+func nudgeSnippetZsh(alias string) string {
+	if alias == "" {
+		alias = "gs"
+	}
 	return `
 ` + marker + ` begin
 __gitswitch_prompt() {
@@ -209,12 +212,16 @@ add-zsh-hook precmd __gitswitch_launch
 PROMPT='$(__gitswitch_prompt)'"$PROMPT"
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
+alias ` + alias + `=gitswitch
 ` + marker + ` end
 `
 }
 
 // nudgeSnippetBash returns the bash nudge + prompt + completion snippet.
-func nudgeSnippetBash() string {
+func nudgeSnippetBash(alias string) string {
+	if alias == "" {
+		alias = "gs"
+	}
 	return `
 ` + marker + ` begin
 __gitswitch_prompt() {
@@ -253,12 +260,16 @@ __gitswitch_launch() {
 PS1='$(__gitswitch_prompt)'"$PS1"
 PROMPT_COMMAND="__gitswitch_launch; __gitswitch_nudge${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
 source <(gitswitch completion bash)
+alias ` + alias + `=gitswitch
 ` + marker + ` end
 `
 }
 
 // nudgeSnippetFish returns the fish nudge + cd hook + completion snippet.
-func nudgeSnippetFish() string {
+func nudgeSnippetFish(alias string) string {
+	if alias == "" {
+		alias = "gs"
+	}
 	return `
 ` + marker + ` begin
 function __gitswitch_prompt
@@ -300,6 +311,7 @@ function fish_right_prompt
   __gitswitch_prompt
 end
 gitswitch completion fish | source
+alias ` + alias + ` gitswitch
 ` + marker + ` end
 `
 }
@@ -359,7 +371,10 @@ source <(gitswitch completion zsh)
 }
 
 // p10kSnippet returns the P10k segment function for manual insertion.
-func p10kSnippet() string {
+func p10kSnippet(alias string) string {
+	if alias == "" {
+		alias = "gs"
+	}
 	return `
 ` + marker + ` begin
 function prompt_gitswitch() {
@@ -397,24 +412,29 @@ __gitswitch_launch() {
 add-zsh-hook precmd __gitswitch_launch
 autoload -U compinit; compinit
 source <(gitswitch completion zsh)
+alias ` + alias + `=gitswitch
 ` + marker + ` end
 `
 }
 
 // Install writes the appropriate integration for the detected framework.
+// alias is the short command alias to add (e.g. "gs"); defaults to "gs" if empty.
 // Returns a human-readable description of what was done.
-func Install(sh Shell, fw Framework) (string, error) {
+func Install(sh Shell, fw Framework, alias string) (string, error) {
+	if alias == "" {
+		alias = "gs"
+	}
 	home, _ := os.UserHomeDir()
 
 	switch fw {
 	case FrameworkStarship:
 		return installStarship(home)
 	case FrameworkOMZ:
-		return installOMZ(home)
+		return installOMZ(home, alias)
 	case FrameworkP10k:
-		return installP10k(sh, home)
+		return installP10k(sh, home, alias)
 	default:
-		return installRaw(sh)
+		return installRaw(sh, alias)
 	}
 }
 
@@ -439,7 +459,7 @@ func installStarship(home string) (string, error) {
 	return fmt.Sprintf("wrote [custom.gitswitch] block to %s", tomlPath), nil
 }
 
-func installOMZ(home string) (string, error) {
+func installOMZ(home string, alias string) (string, error) {
 	// Write directly to .zshrc with a marker block — same as raw zsh.
 	// The OMZ plugin-file approach required the user to manually add
 	// 'gitswitch' to their plugins array, which meant the hook silently
@@ -453,13 +473,13 @@ func installOMZ(home string) (string, error) {
 		return "", err
 	}
 	defer f.Close()
-	if _, err := f.WriteString(nudgeSnippetZsh()); err != nil {
+	if _, err := f.WriteString(nudgeSnippetZsh(alias)); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("wrote gitswitch integration to %s", rcFile), nil
 }
 
-func installP10k(sh Shell, home string) (string, error) {
+func installP10k(sh Shell, home string, alias string) (string, error) {
 	rcFile := RCFile(sh)
 	if IsInstalled(rcFile) {
 		return fmt.Sprintf("nudge hook already installed in %s", rcFile), nil
@@ -469,7 +489,7 @@ func installP10k(sh Shell, home string) (string, error) {
 		return "", err
 	}
 	defer f.Close()
-	if _, err := f.WriteString(p10kSnippet()); err != nil {
+	if _, err := f.WriteString(p10kSnippet(alias)); err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(
@@ -579,7 +599,7 @@ func removeMarkerBlock(path string) error {
 	return os.Rename(tmpName, path)
 }
 
-func installRaw(sh Shell) (string, error) {
+func installRaw(sh Shell, alias string) (string, error) {
 	rcFile := RCFile(sh)
 	if IsInstalled(rcFile) {
 		return fmt.Sprintf("already installed in %s", rcFile), nil
@@ -588,13 +608,13 @@ func installRaw(sh Shell) (string, error) {
 	var snippet string
 	switch sh {
 	case ShellZsh:
-		snippet = nudgeSnippetZsh()
+		snippet = nudgeSnippetZsh(alias)
 	case ShellBash:
-		snippet = nudgeSnippetBash()
+		snippet = nudgeSnippetBash(alias)
 	case ShellFish:
-		snippet = nudgeSnippetFish()
+		snippet = nudgeSnippetFish(alias)
 	default:
-		snippet = nudgeSnippetBash()
+		snippet = nudgeSnippetBash(alias)
 	}
 
 	f, err := os.OpenFile(rcFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)

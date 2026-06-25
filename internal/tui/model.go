@@ -5,6 +5,7 @@ import (
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	ver "github.com/aksisonline/gitswitch/internal/version"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -117,6 +118,11 @@ type Model struct {
 	// Upgrade splash
 	splashSeen020 bool
 
+	// Shell alias (editable in Settings tab)
+	shellAlias   string
+	aliasEditing bool
+	aliasInput   textinput.Model
+
 	LaunchLogin      bool
 	LaunchOAuth      bool
 	PendingReloadCmd string
@@ -164,6 +170,13 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 	if prefs.ColorTheme < 0 || prefs.ColorTheme >= len(normalThemes) {
 		prefs.ColorTheme = 0
 	}
+	shellAlias := prefs.ShellAlias
+	if shellAlias == "" {
+		shellAlias = "gs"
+	}
+	aliasInput := textinput.New()
+	aliasInput.CharLimit = 32
+	aliasInput.Width = 20
 	m := &Model{
 		store:          store,
 		profiles:       profiles,
@@ -174,6 +187,8 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		shellEnabled:   shell.IsInstalled(shell.RCFile(shell.DetectShell())),
 		showUsername:   prefs.ShowUsername,
 		splashSeen020:  prefs.SplashSeen020,
+		shellAlias:     shellAlias,
+		aliasInput:     aliasInput,
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -216,6 +231,7 @@ func (m *Model) savePrefs() error {
 		SplashSeen020: m.splashSeen020,
 		ShellEnabled:  m.shellEnabled,
 		ShowUsername:  m.showUsername,
+		ShellAlias:    m.shellAlias,
 	})
 }
 

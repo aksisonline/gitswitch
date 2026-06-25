@@ -43,7 +43,7 @@ func (m Model) runShellAction(install bool) tea.Cmd {
 		sh := shell.DetectShell()
 		fw := shell.DetectFramework()
 		if install {
-			res, err := shell.Install(sh, fw)
+			res, err := shell.Install(sh, fw, m.shellAlias)
 			return shellDoneMsg{installed: true, result: res, err: err}
 		}
 		res, err := shell.Uninstall(sh, fw)

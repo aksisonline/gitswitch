@@ -10,6 +10,7 @@ import (
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	ver "github.com/aksisonline/gitswitch/internal/version"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -78,7 +79,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = fmt.Sprintf("editor: %v", ed.err)
 			m.statusIsErr = true
 		}
-		return m, nil
+		return m, tea.EnableMouseCellMotion
 	}
 	if sd, ok := msg.(shellDoneMsg); ok {
 		if sd.err != nil {
@@ -103,6 +104,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if m.state == StateShellConfirm {
 		return m.updateShellConfirm(msg)
+	}
+	if m.aliasEditing {
+		if km, ok := msg.(tea.KeyMsg); ok {
+			switch km.String() {
+			case "enter":
+				val := strings.TrimSpace(m.aliasInput.Value())
+				if val != "" {
+					m.shellAlias = val
+					_ = m.savePrefs()
+					m.statusMsg = "alias updated — reinstall shell integration to apply"
+					m.statusIsErr = false
+				}
+				m.aliasEditing = false
+				return m, nil
+			case "esc", "ctrl+c":
+				m.aliasEditing = false
+				return m, nil
+			default:
+				var cmd tea.Cmd
+				m.aliasInput, cmd = m.aliasInput.Update(msg)
+				return m, cmd
+			}
+		}
+		return m, nil
 	}
 	if mm, ok := msg.(tea.MouseMsg); ok {
 		return m.handleMouse(mm)
@@ -167,6 +192,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.settingsFocus > 0 {
 					m.settingsFocus--
 				}
+				m.aliasEditing = false
 			}
 		case "down", "j":
 			m.statusMsg = ""
@@ -178,9 +204,10 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case 1:
 				// only one active item — navigation disabled until more ship
 			case 2:
-				if m.settingsFocus < 1 {
+				if m.settingsFocus < 2 {
 					m.settingsFocus++
 				}
+				m.aliasEditing = false
 			}
 		case "enter":
 			switch m.tabIndex {
@@ -203,6 +230,12 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case 2: // Settings
 				if m.settingsFocus == 0 {
 					return m, m.openConfigEditor()
+				}
+				if m.settingsFocus == 2 {
+					m.aliasInput.SetValue(m.shellAlias)
+					m.aliasInput.Focus()
+					m.aliasEditing = true
+					return m, textinput.Blink
 				}
 			}
 		case "a":
@@ -792,8 +825,9 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				itemOffset := relY - 5
 				itemIdx := itemOffset / 5
 				withinItem := itemOffset % 5
-				if withinItem > 0 && withinItem < 5 && itemIdx >= 0 && itemIdx <= 1 {
+				if withinItem > 0 && withinItem < 5 && itemIdx >= 0 && itemIdx <= 2 {
 					m.settingsFocus = itemIdx
+					m.aliasEditing = false
 					if itemIdx == 0 { // config location — open in editor
 						return m, m.openConfigEditor()
 					}
@@ -804,6 +838,12 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 							m.colorTheme = (m.colorTheme + 11) % 12
 						}
 						_ = m.savePrefs()
+					}
+					if itemIdx == 2 { // alias box — enter edit mode
+						m.aliasInput.SetValue(m.shellAlias)
+						m.aliasInput.Focus()
+						m.aliasEditing = true
+						return m, textinput.Blink
 					}
 					return m, nil
 				}

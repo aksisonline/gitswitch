@@ -9,6 +9,7 @@ import (
 // Settings sections (indices match settingsFocus and mouse grid):
 //   0 = Config Location  (display + edit button)
 //   1 = Theme            (cycle with ← →)
+//   2 = Shell Alias      (editable shortcut name, default "gs")
 
 func (m Model) viewSettingsTab(pw int) string {
 	var top string
@@ -51,13 +52,38 @@ func (m Model) viewSettingsTab(pw int) string {
 	themeLine2 = padTo(themeLine2, iw)
 	themeBox := renderItemBox(pw, m.settingsFocus == 1, false, themeLine1, themeLine2)
 
-	sep := "\n\n"
-	footer := sep + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
-		{"↑/↓", "move"},
-		{"← →", "cycle theme"},
-		{"1/2/3", "tabs"},
-		{"q", "quit"},
-	})
+	// Shell alias box
+	aliasTitle := "Shell Alias"
+	if m.arcadeMode {
+		aliasTitle = "COMMAND ALIAS"
+	}
+	aliasEditChip := lipgloss.NewStyle().Foreground(colorPurple).Render("[✎ edit]")
+	aliasLine1 := titleWithRight(styleItemDim.Render(aliasTitle), aliasEditChip, iw)
+	var aliasLine2 string
+	if m.aliasEditing && m.settingsFocus == 2 {
+		aliasLine2 = lipgloss.NewStyle().Foreground(colorGreen).Render(m.aliasInput.View())
+	} else {
+		hint := styleBrand.Render("  also callable as: ") + styleCurrentVal.Render(m.shellAlias)
+		aliasLine2 = padTo(hint, iw)
+	}
+	aliasBox := renderItemBox(pw, m.settingsFocus == 2, false, aliasLine1, aliasLine2)
 
-	return top + stylePanelBorder(pw).Render(header+configBox+themeBox+footer)
+	sep := "\n\n"
+	var footerHints [][2]string
+	if m.aliasEditing {
+		footerHints = [][2]string{
+			{"enter", "save"},
+			{"esc", "cancel"},
+		}
+	} else {
+		footerHints = [][2]string{
+			{"↑/↓", "move"},
+			{"← →", "cycle theme"},
+			{"1/2/3", "tabs"},
+			{"q", "quit"},
+		}
+	}
+	footer := sep + divider(pw) + "\n" + m.footerKeys(pw, footerHints)
+
+	return top + stylePanelBorder(pw).Render(header+configBox+themeBox+aliasBox+footer)
 }
