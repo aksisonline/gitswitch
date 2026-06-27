@@ -19,7 +19,8 @@ const (
 	cacheTTL         = 24 * time.Hour
 )
 
-var semverRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+$`)
+// semverRe matches stable (v0.1.22) and pre-release (v0.2.0-beta.1, v0.2.0-canary.3) tags.
+var semverRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+(-[a-zA-Z][a-zA-Z0-9]*(\.\d+)?)?$`)
 
 type cache struct {
 	LatestVersion string    `json:"latest_version"`
