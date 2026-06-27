@@ -9,7 +9,9 @@ import (
 	"time"
 )
 
-const githubReleasesURL = "https://api.github.com/repos/aksisonline/gitswitch/releases"
+// per_page=100 is the GitHub API maximum; avoids missing a canary that sits
+// below many stable releases in the list without needing full pagination.
+const githubReleasesURL = "https://api.github.com/repos/aksisonline/gitswitch/releases?per_page=100"
 
 // IsCanaryBuild reports whether the given version string is a canary / pre-release build.
 func IsCanaryBuild(v string) bool {
