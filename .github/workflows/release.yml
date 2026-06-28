@@ -84,12 +84,13 @@ jobs:
           MINOR=$(echo "$VERSION" | cut -d. -f2)
           PATCH=$(echo "$VERSION" | cut -d. -f3)
 
-          # Always patch bump. Use [minor] or [major] in a commit message
-          # to explicitly cut a minor or major release.
+          # Always patch bump.
+          # Add [minor] or [major] at the END of a commit subject to bump intentionally.
+          # e.g. "feat: add OAuth support [minor]"
           COMMITS=$(git log "$LATEST"..HEAD --format="%s" 2>/dev/null || true)
-          if echo "$COMMITS" | grep -q '\[major\]'; then
+          if echo "$COMMITS" | grep -qE '\[major\]$'; then
             NEW_TAG="v$((MAJOR + 1)).0.0"
-          elif echo "$COMMITS" | grep -q '\[minor\]'; then
+          elif echo "$COMMITS" | grep -qE '\[minor\]$'; then
             NEW_TAG="v${MAJOR}.$((MINOR + 1)).0"
           else
             NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
@@ -117,6 +118,10 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag "${{ needs.version.outputs.new_tag }}"
           git push origin "${{ needs.version.outputs.new_tag }}"
+
+      - name: Stamp CHANGELOG with release version
+        run: |
+          sed -i "s/^## v[0-9].*/## ${{ needs.version.outputs.new_tag }}/" CHANGELOG.md
 
       - name: Package skill file
         run: |

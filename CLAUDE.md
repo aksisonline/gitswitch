@@ -39,6 +39,8 @@ CI always bumps **PATCH** by default. To cut a minor or major release, include a
 
 Example: `feat: add OAuth support [minor]`
 
+**The marker MUST be at the very end of the commit subject line.** The CI uses `grep -E '\[minor\]$'` — it will not match if `[minor]` or `[major]` appears anywhere else in the text (e.g. in the body or mid-sentence). This prevents accidental bumps when those words appear in descriptions.
+
 Use `feat:` / `fix:` / `chore:` prefixes for readability — they don't affect the version bump, only the `[minor]`/`[major]` markers do.
 
 ### What's New splash trigger
