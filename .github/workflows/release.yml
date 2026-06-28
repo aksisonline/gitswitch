@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force a release even if no code changed'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -33,10 +38,16 @@ jobs:
             exit 0
           fi
 
-          CHANGED=$(git diff "$LATEST_TAG"..HEAD --name-only -- internal/ cmd/ || true)
+          if [ "${{ github.event.inputs.force_release }}" = "true" ]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "Force release requested"
+            exit 0
+          fi
+
+          CHANGED=$(git diff "$LATEST_TAG"..HEAD --name-only -- internal/ cmd/ .goreleaser.yaml || true)
           if [ -z "$CHANGED" ]; then
             echo "should_release=false" >> "$GITHUB_OUTPUT"
-            echo "No changes in internal/ or cmd/ since $LATEST_TAG"
+            echo "No relevant changes since $LATEST_TAG"
           else
             echo "should_release=true" >> "$GITHUB_OUTPUT"
           fi
