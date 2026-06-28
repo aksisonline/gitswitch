@@ -18,6 +18,7 @@ const (
 	githubReleaseTagURL = "https://api.github.com/repos/aksisonline/gitswitch/releases/tags/%s"
 	installScriptURL    = "https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh"
 	cacheTTL            = 24 * time.Hour
+	seenVersionFile     = "version-seen.txt"
 )
 
 // semverRe matches stable (v0.1.22) and pre-release (v0.2.0-beta.1, v0.2.0-canary.3) tags.
@@ -187,4 +188,69 @@ func RunUpgrade(targetVersion string) error {
 		return err
 	}
 	return cmd.Run()
+}
+
+// ShouldShowWhatsNew returns (show, releaseNotes, error).
+// Shows the splash when current version has a higher major or minor than the last seen version.
+// On any error, returns false so the splash is silently skipped.
+func ShouldShowWhatsNew(configDir, currentVersion string) (bool, string) {
+	if !semverRe.MatchString(currentVersion) {
+		return false, ""
+	}
+	path := filepath.Join(configDir, seenVersionFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// First run or no record — mark seen and skip splash.
+		_ = os.WriteFile(path, []byte(currentVersion), 0600)
+		return false, ""
+	}
+	lastSeen := strings.TrimSpace(string(data))
+	if !semverRe.MatchString(lastSeen) {
+		_ = os.WriteFile(path, []byte(currentVersion), 0600)
+		return false, ""
+	}
+	cur := parseSemver(currentVersion)
+	seen := parseSemver(lastSeen)
+	// Only show for major or minor bumps, not patch releases.
+	if cur[0] <= seen[0] && cur[1] <= seen[1] {
+		return false, ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	notes, err := fetchReleaseNotes(ctx, currentVersion)
+	if err != nil || notes == "" {
+		return false, ""
+	}
+	return true, notes
+}
+
+// MarkVersionSeen writes the current version as "seen" so the splash won't show again.
+func MarkVersionSeen(configDir, version string) {
+	_ = os.WriteFile(filepath.Join(configDir, seenVersionFile), []byte(version), 0600)
+}
+
+func fetchReleaseNotes(ctx context.Context, version string) (string, error) {
+	url := fmt.Sprintf(githubReleaseTagURL, version)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "gitswitch-updater")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("github API returned %d", resp.StatusCode)
+	}
+	var result struct {
+		Body string `json:"body"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	return result.Body, nil
 }

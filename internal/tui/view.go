@@ -38,6 +38,8 @@ func (m Model) View() string {
 		body = m.viewDeleteConfirm(pw)
 	case StateTips:
 		body = m.viewTips(pw)
+	case StateWhatsNew:
+		body = m.viewWhatsNew(pw)
 	default:
 		body = m.viewList(pw)
 	}
@@ -791,6 +793,63 @@ func (m Model) footerKeys(pw int, pairs [][2]string) string {
 		lines = append(lines, currentLine)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m Model) viewWhatsNew(pw int) string {
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorPurple)
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(colorGreen)
+	bulletStyle := lipgloss.NewStyle().Foreground(colorDim)
+	dimStyle := lipgloss.NewStyle().Foreground(colorDim)
+
+	header := titleStyle.Render("  What's New in " + m.currentVersion)
+
+	// Minimal markdown cleanup: strip **, convert ## headings, * bullets.
+	raw := strings.ReplaceAll(m.whatsNewBody, "\r\n", "\n")
+	raw = strings.ReplaceAll(raw, "**", "")
+	var noteLines []string
+	for _, line := range strings.Split(raw, "\n") {
+		switch {
+		case strings.HasPrefix(line, "## "):
+			noteLines = append(noteLines, "\n  "+headerStyle.Render(strings.TrimPrefix(line, "## ")))
+		case strings.HasPrefix(line, "* "):
+			noteLines = append(noteLines, "  "+bulletStyle.Render("•")+" "+strings.TrimPrefix(line, "* "))
+		case strings.TrimSpace(line) == "":
+			noteLines = append(noteLines, "")
+		default:
+			noteLines = append(noteLines, "  "+dimStyle.Render(line))
+		}
+	}
+
+	// Compute visible window.
+	visibleH := m.height - 10
+	if visibleH < 4 {
+		visibleH = 4
+	}
+	total := len(noteLines)
+	offset := m.whatsNewScroll
+	if offset > total-visibleH {
+		offset = total - visibleH
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	end := offset + visibleH
+	if end > total {
+		end = total
+	}
+	visible := noteLines[offset:end]
+
+	scrollHint := ""
+	if total > visibleH {
+		scrollHint = dimStyle.Render(fmt.Sprintf("  (%d/%d lines — ↑/↓ scroll)", offset+visibleH, total))
+	}
+
+	body := "\n" + header + "\n\n" + strings.Join(visible, "\n") + "\n"
+	if scrollHint != "" {
+		body += "\n" + scrollHint
+	}
+	footer := "\n" + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{{"↑/↓", "scroll"}, {"any key", "continue"}})
+	return stylePanelBorder(pw).Render(body + footer)
 }
 
 // Ensure Model satisfies tea.Model at compile time.

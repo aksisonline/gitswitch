@@ -1,0 +1,50 @@
+version: 2
+
+builds:
+  - id: gitswitch
+    main: ./cmd/gitswitch
+    binary: gitswitch
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Tag }}
+    flags:
+      - -trimpath
+
+archives:
+  - id: gitswitch
+    name_template: "gitswitch-{{ .Os }}-{{ .Arch }}"
+    # Binary-only archives — no tarballs, so install script keeps working
+    format: binary
+    builds:
+      - gitswitch
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: aksisonline
+    name: gitswitch
+  name_template: "{{ .Tag }}"
+
+brews:
+  - name: gitswitch
+    repository:
+      owner: aksisonline
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_PAT }}"
+    directory: Formula
+    homepage: https://github.com/aksisonline/gitswitch
+    description: Manage multiple git profiles locally
+    license: MIT
+    test: |
+      system "#{bin}/gitswitch", "current"
+    install: |
+      bin.install "gitswitch"

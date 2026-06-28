@@ -49,6 +49,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch m.state {
+	case StateWhatsNew:
+		if km, ok := msg.(tea.KeyMsg); ok {
+			switch km.String() {
+			case "ctrl+c", "q":
+				return m, tea.Quit
+			case "up", "k":
+				if m.whatsNewScroll > 0 {
+					m.whatsNewScroll--
+				}
+			case "down", "j", " ":
+				m.whatsNewScroll++
+			default:
+				// any other key dismisses
+				ver.MarkVersionSeen(m.store.ConfigDir(), m.currentVersion)
+				m.state = StateList
+			}
+		}
+		return m, nil
 	case StateIntro:
 		if km, ok := msg.(tea.KeyMsg); ok {
 			switch km.String() {

@@ -20,6 +20,7 @@ const (
 	StateSelectFlash
 	StateTransition
 	StateExitAnim
+	StateWhatsNew
 )
 
 type Model struct {
@@ -62,6 +63,9 @@ type Model struct {
 	// pacman score state — purely cosmetic
 	score   int
 	hiScore int
+
+	whatsNewBody   string
+	whatsNewScroll int
 }
 
 var formLabels = [6]string{
@@ -90,6 +94,13 @@ func WithArcadeMode() Option {
 		m.state = StateIntro
 		m.introMouthOpen = true
 		m.hiScore = 99990
+	}
+}
+
+func WithWhatsNew(body string) Option {
+	return func(m *Model) {
+		m.whatsNewBody = body
+		m.state = StateWhatsNew
 	}
 }
 

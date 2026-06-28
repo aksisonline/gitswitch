@@ -51,7 +51,11 @@ var rootCmd = &cobra.Command{
 		if len(args) == 1 {
 			return quickSwitch(args[0])
 		}
-		m, err := tui.New(store, version)
+		var tuiOpts []tui.Option
+		if show, notes := ver.ShouldShowWhatsNew(store.ConfigDir(), version); show {
+			tuiOpts = append(tuiOpts, tui.WithWhatsNew(notes))
+		}
+		m, err := tui.New(store, version, tuiOpts...)
 		if err != nil {
 			return err
 		}
