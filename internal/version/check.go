@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	githubReleaseURL = "https://api.github.com/repos/aksisonline/gitswitch/releases/latest"
-	installScriptURL = "https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh"
-	cacheTTL         = 24 * time.Hour
+	githubReleaseURL    = "https://api.github.com/repos/aksisonline/gitswitch/releases/latest"
+	githubReleaseTagURL = "https://api.github.com/repos/aksisonline/gitswitch/releases/tags/%s"
+	installScriptURL    = "https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh"
+	cacheTTL            = 24 * time.Hour
 )
 
 // semverRe matches stable (v0.1.22) and pre-release (v0.2.0-beta.1, v0.2.0-canary.3) tags.
@@ -35,7 +36,14 @@ func CachedLatestVersion(configDir string) string {
 	if data, err := os.ReadFile(cachePath); err == nil {
 		var c cache
 		if json.Unmarshal(data, &c) == nil && time.Since(c.CheckedAt) < cacheTTL {
-			return c.LatestVersion
+			// Validate the cached tag still exists — guards against deleted/yanked releases.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if tagExists(ctx, c.LatestVersion) {
+				return c.LatestVersion
+			}
+			// Tag gone: bust cache and fall through to re-fetch.
+			_ = os.Remove(cachePath)
 		}
 	}
 
@@ -49,6 +57,25 @@ func CachedLatestVersion(configDir string) string {
 
 	_ = saveCache(cachePath, latest)
 	return latest
+}
+
+// tagExists returns true if the given version tag has a release on GitHub.
+// Returns true on network error to avoid false-positive cache busts.
+func tagExists(ctx context.Context, version string) bool {
+	url := fmt.Sprintf(githubReleaseTagURL, version)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return true
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "gitswitch-updater")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return true
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 // FetchLatestVersionFresh always fetches from GitHub API, bypassing the cache.
