@@ -190,38 +190,45 @@ func RunUpgrade(targetVersion string) error {
 	return cmd.Run()
 }
 
-// ShouldShowWhatsNew returns (show, releaseNotes, error).
-// Shows the splash when current version has a higher major or minor than the last seen version.
-// On any error, returns false so the splash is silently skipped.
+// ShouldShowWhatsNew returns (show, releaseNotes).
+// Shows the splash on first install, or when the current version has a higher
+// major or minor than the last seen version. Silently skips on any error.
+// Does NOT mark the version as seen — call MarkVersionSeen after the user dismisses.
 func ShouldShowWhatsNew(configDir, currentVersion string) (bool, string) {
 	if !semverRe.MatchString(currentVersion) {
 		return false, ""
 	}
 	path := filepath.Join(configDir, seenVersionFile)
 	data, err := os.ReadFile(path)
-	if err != nil {
-		// First run or no record — mark seen and skip splash.
+
+	firstTime := err != nil
+	if !firstTime {
+		lastSeen := strings.TrimSpace(string(data))
+		if semverRe.MatchString(lastSeen) {
+			cur := parseSemver(currentVersion)
+			seen := parseSemver(lastSeen)
+			// Recurring update: only show for minor/major bumps.
+			if cur[0] <= seen[0] && cur[1] <= seen[1] {
+				return false, ""
+			}
+		}
+		// Invalid lastSeen falls through — treat as first time.
+	}
+
+	notes, fetchErr := FetchReleaseNotes(currentVersion)
+	if fetchErr != nil || notes == "" {
+		// Can't fetch notes — mark seen silently so we don't retry every launch.
 		_ = os.WriteFile(path, []byte(currentVersion), 0600)
-		return false, ""
-	}
-	lastSeen := strings.TrimSpace(string(data))
-	if !semverRe.MatchString(lastSeen) {
-		_ = os.WriteFile(path, []byte(currentVersion), 0600)
-		return false, ""
-	}
-	cur := parseSemver(currentVersion)
-	seen := parseSemver(lastSeen)
-	// Only show for major or minor bumps, not patch releases.
-	if cur[0] <= seen[0] && cur[1] <= seen[1] {
-		return false, ""
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	notes, err := fetchReleaseNotes(ctx, currentVersion)
-	if err != nil || notes == "" {
 		return false, ""
 	}
 	return true, notes
+}
+
+// FetchReleaseNotes fetches the release body for the given version tag from GitHub.
+func FetchReleaseNotes(version string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return fetchReleaseNotes(ctx, version)
 }
 
 // MarkVersionSeen writes the current version as "seen" so the splash won't show again.

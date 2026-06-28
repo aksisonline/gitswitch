@@ -797,30 +797,11 @@ func (m Model) footerKeys(pw int, pairs [][2]string) string {
 
 func (m Model) viewWhatsNew(pw int) string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorPurple)
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(colorGreen)
-	bulletStyle := lipgloss.NewStyle().Foreground(colorDim)
 	dimStyle := lipgloss.NewStyle().Foreground(colorDim)
 
 	header := titleStyle.Render("  What's New in " + m.currentVersion)
+	noteLines := renderNotes(m.whatsNewBody, pw)
 
-	// Minimal markdown cleanup: strip **, convert ## headings, * bullets.
-	raw := strings.ReplaceAll(m.whatsNewBody, "\r\n", "\n")
-	raw = strings.ReplaceAll(raw, "**", "")
-	var noteLines []string
-	for _, line := range strings.Split(raw, "\n") {
-		switch {
-		case strings.HasPrefix(line, "## "):
-			noteLines = append(noteLines, "\n  "+headerStyle.Render(strings.TrimPrefix(line, "## ")))
-		case strings.HasPrefix(line, "* "):
-			noteLines = append(noteLines, "  "+bulletStyle.Render("•")+" "+strings.TrimPrefix(line, "* "))
-		case strings.TrimSpace(line) == "":
-			noteLines = append(noteLines, "")
-		default:
-			noteLines = append(noteLines, "  "+dimStyle.Render(line))
-		}
-	}
-
-	// Compute visible window.
 	visibleH := m.height - 10
 	if visibleH < 4 {
 		visibleH = 4
@@ -837,14 +818,13 @@ func (m Model) viewWhatsNew(pw int) string {
 	if end > total {
 		end = total
 	}
-	visible := noteLines[offset:end]
 
 	scrollHint := ""
 	if total > visibleH {
 		scrollHint = dimStyle.Render(fmt.Sprintf("  (%d/%d lines — ↑/↓ scroll)", offset+visibleH, total))
 	}
 
-	body := "\n" + header + "\n\n" + strings.Join(visible, "\n") + "\n"
+	body := "\n" + header + "\n\n" + strings.Join(noteLines[offset:end], "\n") + "\n"
 	if scrollHint != "" {
 		body += "\n" + scrollHint
 	}

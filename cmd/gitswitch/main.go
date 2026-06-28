@@ -297,54 +297,21 @@ func isBrewInstall() bool {
 
 var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
-	Short: "Upgrade gitswitch to the latest version",
+	Short: "Check for updates and upgrade gitswitch",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if isBrewInstall() {
-			fmt.Println("gitswitch was installed via Homebrew.")
-			fmt.Println("Run: brew upgrade gitswitch")
-			return nil
-		}
-		fmt.Println("Checking for updates...")
-		latest, err := ver.FetchLatestVersionFresh()
-		if err != nil {
-			return fmt.Errorf("could not fetch latest version: %w", err)
-		}
-		yanked := !ver.CurrentVersionExists(version)
-		if !yanked && !ver.IsUpdateAvailable(version, latest) {
-			fmt.Printf("Already on latest version (%s).\n", version)
-			return nil
-		}
-		if yanked {
-			fmt.Printf("Current version %s was removed from releases. Upgrading to %s...\n", version, latest)
-		} else {
-			fmt.Printf("Upgrading %s → %s...\n", version, latest)
-		}
-		if err := ver.RunUpgrade(latest); err != nil {
-			return fmt.Errorf("upgrade failed: %w", err)
-		}
-		_ = ver.ClearVersionCache(store.ConfigDir())
-		fmt.Println("✓ Upgrade complete.")
-		fmt.Println()
-
-		// If shell is installed but credential helper is not, run the wizard
-		// immediately so the user can activate new features without a separate step.
-		sh := shell.DetectShell()
-		if shell.IsInstalled(shell.RCFile(sh)) && !git.IsCredentialHelperInstalled() {
-			fmt.Println("New features available in this version.")
-			fmt.Println("Launching setup to activate them...")
-			fmt.Println()
-			opts, err := wizard.Run(wizard.Config{HTTPSDefault: true}, os.Stdout)
-			if err == nil && opts.InstallHTTPS {
-				if herr := git.InstallCredentialHelper(); herr != nil {
-					fmt.Printf("  warning: could not register HTTPS credential helper: %v\n", herr)
-				} else {
-					wizard.PrintSummary(os.Stdout, "", false, true, nil)
-				}
+		// Yanked version: bypass TUI and force upgrade immediately.
+		if !ver.CurrentVersionExists(version) {
+			fmt.Printf("Current version %s was removed from releases. Forcing upgrade...\n", version)
+			latest, err := ver.FetchLatestVersionFresh()
+			if err != nil {
+				return fmt.Errorf("could not fetch latest version: %w", err)
 			}
-		} else {
-			fmt.Println("Restart your shell to use the new version.")
+			return ver.RunUpgrade(latest)
 		}
-		return nil
+
+		m := tui.NewUpgradeModel(version, isBrewInstall(), store.ConfigDir())
+		_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+		return err
 	},
 }
 
