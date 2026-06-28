@@ -26,8 +26,17 @@ case "$OS" in
     ;;
 esac
 
-# Use version from arg or latest
-VERSION="${1:-v0.1.25}"
+# Use version from arg, or resolve latest from GitHub API
+VERSION="${1:-}"
+if [ -z "$VERSION" ]; then
+  VERSION=$(curl -fsSL "https://api.github.com/repos/aksisonline/gitswitch/releases/latest" \
+    -H "Accept: application/vnd.github+json" \
+    | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+  if [ -z "$VERSION" ]; then
+    echo "Could not determine latest version. Pass a version explicitly: install.sh v0.2.1"
+    exit 1
+  fi
+fi
 
 # Download URL
 RELEASE_URL="https://github.com/aksisonline/gitswitch/releases/download/$VERSION/$BINARY"

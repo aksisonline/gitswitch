@@ -119,12 +119,10 @@ jobs:
           git tag "${{ needs.version.outputs.new_tag }}"
           git push origin "${{ needs.version.outputs.new_tag }}"
 
-      - name: Stamp CHANGELOG with release version
+      - name: Prepare release notes
         run: |
-          sed -i "s/^## v[0-9].*/## ${{ needs.version.outputs.new_tag }}/" CHANGELOG.md
-
-      - name: Package skill file
-        run: |
+          # Copy to temp so we don't dirty the working tree (goreleaser requires clean state).
+          sed "s/^## v[0-9].*/## ${{ needs.version.outputs.new_tag }}/" CHANGELOG.md > /tmp/release-notes.md
           mkdir -p /tmp/gs-skill
           cp cmd/gitswitch/skill/SKILL.md /tmp/gs-skill/
           zip -j /tmp/gitswitch.skill /tmp/gs-skill/SKILL.md
@@ -134,7 +132,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --release-notes CHANGELOG.md
+          args: release --clean --release-notes /tmp/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_PAT: ${{ secrets.HOMEBREW_PAT }}
