@@ -305,14 +305,20 @@ var upgradeCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("could not fetch latest version: %w", err)
 		}
-		if !ver.IsUpdateAvailable(version, latest) {
+		yanked := !ver.CurrentVersionExists(version)
+		if !yanked && !ver.IsUpdateAvailable(version, latest) {
 			fmt.Printf("Already on latest version (%s).\n", version)
 			return nil
 		}
-		fmt.Printf("Upgrading %s → %s...\n", version, latest)
+		if yanked {
+			fmt.Printf("Current version %s was removed from releases. Upgrading to %s...\n", version, latest)
+		} else {
+			fmt.Printf("Upgrading %s → %s...\n", version, latest)
+		}
 		if err := ver.RunUpgrade(latest); err != nil {
 			return fmt.Errorf("upgrade failed: %w", err)
 		}
+		_ = ver.ClearVersionCache(store.ConfigDir())
 		fmt.Println("✓ Upgrade complete.")
 		fmt.Println()
 

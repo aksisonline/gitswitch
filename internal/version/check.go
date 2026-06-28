@@ -78,6 +78,19 @@ func tagExists(ctx context.Context, version string) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
+// ClearVersionCache removes the on-disk version cache so the next check always hits GitHub.
+func ClearVersionCache(configDir string) error {
+	return os.Remove(filepath.Join(configDir, "version-check.json"))
+}
+
+// CurrentVersionExists checks whether the given version has a published release on GitHub.
+// Returns true on network error to avoid spurious forced upgrades.
+func CurrentVersionExists(v string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return tagExists(ctx, v)
+}
+
 // FetchLatestVersionFresh always fetches from GitHub API, bypassing the cache.
 // Used by the upgrade command so it always targets the true latest release.
 func FetchLatestVersionFresh() (string, error) {
