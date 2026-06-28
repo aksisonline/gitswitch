@@ -84,9 +84,9 @@ jobs:
           MINOR=$(echo "$BASE" | cut -d. -f2)
           PATCH=$(echo "$BASE" | cut -d. -f3)
 
-          # Compute the target release version (next patch from stable)
-          TARGET_MINOR=$((MINOR + 1))
-          TARGET="v${MAJOR}.${TARGET_MINOR}.0"
+          # Target = next patch from stable (tracks same MAJOR.MINOR as main)
+          # e.g. stable v0.2.1 → canary targets v0.2.2-beta.N
+          TARGET="v${MAJOR}.${MINOR}.$((PATCH + 1))"
 
           # Find highest existing beta for this target
           LATEST_BETA=$(git tag --list "${TARGET}-beta.*" --sort=-version:refname | head -n1)
@@ -100,7 +100,7 @@ jobs:
           NEW_TAG="${TARGET}-beta.${BETA_N}"
           echo "New beta tag: $NEW_TAG"
           echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
-          echo "version=${MAJOR}.${TARGET_MINOR}.0-beta.${BETA_N}" >> "$GITHUB_OUTPUT"
+          echo "version=${MAJOR}.${MINOR}.$((PATCH + 1))-beta.${BETA_N}" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build binaries
