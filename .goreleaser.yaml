@@ -46,5 +46,3 @@ brews:
     license: MIT
     test: |
       system "#{bin}/gitswitch", "current"
-    install: |
-      bin.install "gitswitch"
