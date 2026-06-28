@@ -29,6 +29,8 @@ jobs:
 
       - name: Check if internal/ or cmd/ changed
         id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -v -- '-' | head -n1)
           echo "latest_tag=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
@@ -41,6 +43,14 @@ jobs:
           if [ "${{ github.event.inputs.force_release }}" = "true" ]; then
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "Force release requested"
+            exit 0
+          fi
+
+          # Contingency: if the latest tag has no GitHub release (GoReleaser
+          # previously failed after the tag was pushed), always rebuild.
+          if ! gh release view "$LATEST_TAG" --repo aksisonline/gitswitch > /dev/null 2>&1; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "Tag $LATEST_TAG exists but has no release — rebuilding"
             exit 0
           fi
 
@@ -113,6 +123,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Create and push git tag
+        id: tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -121,13 +132,13 @@ jobs:
 
       - name: Prepare release notes
         run: |
-          # Copy to temp so we don't dirty the working tree (goreleaser requires clean state).
           sed "s/^## v[0-9].*/## ${{ needs.version.outputs.new_tag }}/" CHANGELOG.md > /tmp/release-notes.md
           mkdir -p /tmp/gs-skill
           cp cmd/gitswitch/skill/SKILL.md /tmp/gs-skill/
           zip -j /tmp/gitswitch.skill /tmp/gs-skill/SKILL.md
 
       - name: Run GoReleaser
+        id: goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
@@ -137,6 +148,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_PAT: ${{ secrets.HOMEBREW_PAT }}
           GORELEASER_CURRENT_TAG: ${{ needs.version.outputs.new_tag }}
+
+      - name: Delete tag on GoReleaser failure
+        if: failure() && steps.goreleaser.outcome == 'failure'
+        run: |
+          git push origin --delete "${{ needs.version.outputs.new_tag }}" || true
+          git tag -d "${{ needs.version.outputs.new_tag }}" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload skill artifact to release
         run: |
