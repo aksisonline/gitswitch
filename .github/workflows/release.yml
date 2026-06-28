@@ -84,9 +84,12 @@ jobs:
           MINOR=$(echo "$VERSION" | cut -d. -f2)
           PATCH=$(echo "$VERSION" | cut -d. -f3)
 
-          # Bump minor on feat: commits, patch otherwise (semver convention).
-          HAS_FEAT=$(git log "$LATEST"..HEAD --oneline -- internal/ cmd/ | grep -c '^[a-f0-9]* feat' || true)
-          if [ "$HAS_FEAT" -gt 0 ]; then
+          # Always patch bump. Use [minor] or [major] in a commit message
+          # to explicitly cut a minor or major release.
+          COMMITS=$(git log "$LATEST"..HEAD --format="%s" 2>/dev/null || true)
+          if echo "$COMMITS" | grep -q '\[major\]'; then
+            NEW_TAG="v$((MAJOR + 1)).0.0"
+          elif echo "$COMMITS" | grep -q '\[minor\]'; then
             NEW_TAG="v${MAJOR}.$((MINOR + 1)).0"
           else
             NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"

@@ -27,16 +27,19 @@ gitswitch users range from students running their first git command to senior en
 - **Beta / canary callouts get their own block** — clear opt-in command, what's in it, nothing speculative.
 - **No internal jargon** — no PR numbers, no internal ticket refs, no "as discussed".
 
-### Commit convention (affects auto version bump)
+### Commit convention and version bumping
 
-| Prefix | Bump |
-|--------|------|
-| `feat:` | MINOR (0.X.0) — triggers What's New splash |
-| `fix:` | PATCH |
-| `chore:` / `docs:` / `refactor:` | PATCH |
-| `feat!:` or `BREAKING CHANGE:` | MAJOR |
+CI always bumps **PATCH** by default. To cut a minor or major release, include a marker in any commit message in the push:
 
-The CI reads `feat:` commits since the last tag to decide MINOR vs PATCH. If your change ships something users will notice — new command, new UI, new flow — use `feat:`. If it fixes something broken, use `fix:`.
+| Marker in commit message | Bump | When to use |
+|--------------------------|------|-------------|
+| `[minor]` | MINOR (0.X.0) — triggers What's New splash | New commands, new UI, new user-facing flow |
+| `[major]` | MAJOR (X.0.0) | Breaking changes |
+| _(nothing)_ | PATCH | Bug fixes, internal changes, anything users won't notice |
+
+Example: `feat: add OAuth support [minor]`
+
+Use `feat:` / `fix:` / `chore:` prefixes for readability — they don't affect the version bump, only the `[minor]`/`[major]` markers do.
 
 ### What's New splash trigger
 
