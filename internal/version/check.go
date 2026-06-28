@@ -19,6 +19,7 @@ const (
 	installScriptURL    = "https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh"
 	cacheTTL            = 24 * time.Hour
 	seenVersionFile     = "version-seen.txt"
+	pendingWhatsNewFile = "whats-new-pending.txt"
 )
 
 // semverRe matches stable (v0.1.22) and pre-release (v0.2.0-beta.1, v0.2.0-canary.3) tags.
@@ -190,35 +191,68 @@ func RunUpgrade(targetVersion string) error {
 	return cmd.Run()
 }
 
+// ScheduleWhatsNew writes a pending marker so the next launch always shows
+// the What's New splash for newVersion, regardless of bump type.
+// Call this before running the upgrade — not after.
+func ScheduleWhatsNew(configDir, newVersion string) {
+	_ = os.WriteFile(filepath.Join(configDir, pendingWhatsNewFile), []byte(newVersion), 0600)
+}
+
+// MarkVersionSeen writes the current version as "seen" so the splash won't show again.
+func MarkVersionSeen(configDir, version string) {
+	_ = os.WriteFile(filepath.Join(configDir, seenVersionFile), []byte(version), 0600)
+}
+
 // ShouldShowWhatsNew returns (show, releaseNotes).
-// Shows the splash on first install, or when the current version has a higher
-// major or minor than the last seen version. Silently skips on any error.
-// Does NOT mark the version as seen — call MarkVersionSeen after the user dismisses.
+//
+// Two paths:
+//  1. Explicit upgrade: upgrade TUI writes a pending file before running the
+//     install script. On next launch the pending file is detected → always show,
+//     any version bump type.
+//  2. Auto-detection: first install (no seen file) or minor/major bump detected
+//     by comparing version-seen.txt to currentVersion.
+//
+// Does NOT mark the version as seen — call MarkVersionSeen after user dismisses.
 func ShouldShowWhatsNew(configDir, currentVersion string) (bool, string) {
 	if !semverRe.MatchString(currentVersion) {
 		return false, ""
 	}
-	path := filepath.Join(configDir, seenVersionFile)
-	data, err := os.ReadFile(path)
+	seenPath := filepath.Join(configDir, seenVersionFile)
 
-	firstTime := err != nil
-	if !firstTime {
+	// Path 1: pending file left by the upgrade TUI.
+	pendingPath := filepath.Join(configDir, pendingWhatsNewFile)
+	if data, err := os.ReadFile(pendingPath); err == nil {
+		_ = os.Remove(pendingPath)
+		pending := strings.TrimSpace(string(data))
+		if pending == currentVersion && semverRe.MatchString(pending) {
+			notes, err := FetchReleaseNotes(currentVersion)
+			if err == nil && notes != "" {
+				return true, notes
+			}
+		}
+		// Pending was stale or fetch failed — mark seen silently.
+		_ = os.WriteFile(seenPath, []byte(currentVersion), 0600)
+		return false, ""
+	}
+
+	// Path 2: auto-detection.
+	data, err := os.ReadFile(seenPath)
+	if err == nil {
 		lastSeen := strings.TrimSpace(string(data))
 		if semverRe.MatchString(lastSeen) {
 			cur := parseSemver(currentVersion)
 			seen := parseSemver(lastSeen)
-			// Recurring update: only show for minor/major bumps.
+			// Only show for minor/major bumps on auto-detection.
 			if cur[0] <= seen[0] && cur[1] <= seen[1] {
 				return false, ""
 			}
 		}
-		// Invalid lastSeen falls through — treat as first time.
+		// Invalid lastSeen → fall through as first time.
 	}
 
 	notes, fetchErr := FetchReleaseNotes(currentVersion)
 	if fetchErr != nil || notes == "" {
-		// Can't fetch notes — mark seen silently so we don't retry every launch.
-		_ = os.WriteFile(path, []byte(currentVersion), 0600)
+		_ = os.WriteFile(seenPath, []byte(currentVersion), 0600)
 		return false, ""
 	}
 	return true, notes
@@ -229,11 +263,6 @@ func FetchReleaseNotes(version string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return fetchReleaseNotes(ctx, version)
-}
-
-// MarkVersionSeen writes the current version as "seen" so the splash won't show again.
-func MarkVersionSeen(configDir, version string) {
-	_ = os.WriteFile(filepath.Join(configDir, seenVersionFile), []byte(version), 0600)
 }
 
 func fetchReleaseNotes(ctx context.Context, version string) (string, error) {

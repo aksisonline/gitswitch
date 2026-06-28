@@ -117,8 +117,8 @@ func (m UpgradeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "ctrl+c", "n", "N", "q", "esc":
 				return m, tea.Quit
 			case "y", "Y", "enter":
-				// Mark current version so next launch shows What's New for new version.
-				ver.MarkVersionSeen(m.configDir, m.currentVersion)
+				// Schedule What's New for the new version on next launch.
+				ver.ScheduleWhatsNew(m.configDir, m.latestVersion)
 				m.state = upgradeRunning
 				cmd, err := ver.UpgradeCommand(m.latestVersion)
 				if err != nil {
