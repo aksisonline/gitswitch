@@ -60,7 +60,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		result, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
+		result, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseAllMotion()).Run()
 		if err != nil {
 			return err
 		}
@@ -330,7 +330,7 @@ var pacmanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
+		_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseAllMotion()).Run()
 		return err
 	},
 }

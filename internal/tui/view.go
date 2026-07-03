@@ -19,57 +19,60 @@ func (m Model) View() string {
 		applyTheme(normalThemes[theme], false)
 	}
 
-	pw := m.panelWidth()
-	var body string
-	switch m.state {
-	case StateIntro:
-		body = m.viewIntro(pw)
-	case StateSelectFlash:
-		body = m.viewSelectFlash(pw)
-	case StateTransition:
-		body = m.viewTransition(pw)
-	case StateExitAnim:
-		body = m.viewExitAnim(pw)
-	case StateAdd:
-		body = m.viewForm("Add Profile", pw)
-	case StateEdit:
-		body = m.viewForm(fmt.Sprintf("Edit  %s", m.editingNick), pw)
-	case StateDeleteConfirm:
-		body = m.viewDeleteConfirm(pw)
-	case StateTips:
-		body = m.viewTips(pw)
-	case StateNoProfiles:
-		return m.viewNoProfiles()
-	case StateUpdatePrompt:
-		body = m.viewUpdatePrompt(pw)
-	case StateWhatsNew:
-		body = m.viewWhatsNew(pw)
-	case StateWizardWelcome:
-		body = m.viewWizardWelcome(pw)
-	case StateWizardDetect:
-		body = m.viewWizardDetect(pw)
-	case StateWizardImport:
-		body = m.viewWizardImport(pw)
-	case StateWizardAddMore:
-		body = m.viewWizardAddMore(pw)
-	case StateWizardDone:
-		body = m.viewWizardDone(pw)
-	case StateShellConfirm:
-		body = m.viewShellConfirm(pw)
-	default:
-		switch m.tabIndex {
-		case 1:
-			body = m.viewUtilitiesTab(pw)
-		case 2:
-			body = m.viewSettingsTab(pw)
-		default:
-			body = m.viewAccountsTab(pw)
-		}
-	}
+	body := m.bodyView(m.panelWidth())
 	if m.width > 0 && m.height > 0 {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, body)
 	}
 	return body
+}
+
+// bodyView renders the full screen body for the current state — everything
+// View() centers with lipgloss.Place. Also used by panelTopY and the mouse
+// handler so hit-testing always measures exactly what is on screen.
+func (m Model) bodyView(pw int) string {
+	switch m.state {
+	case StateIntro:
+		return m.viewIntro(pw)
+	case StateSelectFlash:
+		return m.viewSelectFlash(pw)
+	case StateTransition:
+		return m.viewTransition(pw)
+	case StateExitAnim:
+		return m.viewExitAnim(pw)
+	case StateAdd:
+		return m.viewForm("Add Profile", pw)
+	case StateEdit:
+		return m.viewForm(fmt.Sprintf("Edit  %s", m.editingNick), pw)
+	case StateDeleteConfirm:
+		return m.viewDeleteConfirm(pw)
+	case StateTips:
+		return m.viewTips(pw)
+	case StateUpdatePrompt:
+		return m.viewUpdatePrompt(pw)
+	case StateWhatsNew:
+		return m.viewWhatsNew(pw)
+	case StateWizardWelcome:
+		return m.viewWizardWelcome(pw)
+	case StateWizardDetect:
+		return m.viewWizardDetect(pw)
+	case StateWizardImport:
+		return m.viewWizardImport(pw)
+	case StateWizardAddMore:
+		return m.viewWizardAddMore(pw)
+	case StateWizardDone:
+		return m.viewWizardDone(pw)
+	case StateShellConfirm:
+		return m.viewShellConfirm(pw)
+	default:
+		switch m.tabIndex {
+		case 1:
+			return m.viewUtilitiesTab(pw)
+		case 2:
+			return m.viewSettingsTab(pw)
+		default:
+			return m.viewAccountsTab(pw)
+		}
+	}
 }
 
 // viewScoreLine — arcade-only: top-right score panel like classic arcades.
@@ -122,68 +125,6 @@ func (m Model) viewArcadeHeader(subtitle string) string {
 		heading = fmt.Sprintf("  %s  %s %s", icon, title, pellets)
 	}
 	return heading
-}
-
-func (m Model) viewList(pw int) string {
-	// Full list height = 10 + len(profiles) lines; switch to compact 2 lines early.
-	compact := m.height > 0 && m.height < 12+len(m.profiles)
-
-	var top string
-	if m.arcadeMode {
-		top = m.viewScoreLine(pw) + "\n"
-	}
-	header := m.viewHeader("")
-	currentLine := m.viewCurrentLine(compact)
-
-	nickColW := m.nickColumnWidth()
-	items := m.viewProfileItems(pw, nickColW)
-	statusLine := m.viewStatusLine(compact)
-
-	var updateBanner string
-	if m.updateAvailable {
-		bannerSep := "\n\n"
-		if compact {
-			bannerSep = "\n"
-		}
-		if m.arcadeMode {
-			chip := lipgloss.NewStyle().
-				Background(colorBgChip).
-				Foreground(colorYellow).
-				Bold(true).
-				Padding(0, 1).
-				Render("★ BONUS STAGE")
-			updateBanner = bannerSep + "  " + chip + "  " +
-				styleScore.Render(m.latestVersion) +
-				styleBrand.Render("  available")
-		} else {
-			chip := styleChipBox().Render("UPDATE")
-			updateBanner = bannerSep + "  " + chip + "  " +
-				styleCurrentVal.Render(m.latestVersion) +
-				styleBrand.Render("  ·  press [u] to upgrade")
-		}
-	}
-
-	footerPairs := [][2]string{
-		{"↑/↓", "navigate"},
-		{"enter", "switch"},
-		{"a", "add"},
-		{"e", "edit"},
-		{"?", "cli tips"},
-		{"q", "quit"},
-	}
-	if !m.arcadeMode {
-		footerPairs = append(footerPairs, [2]string{"c", "theme"})
-	}
-	if m.updateAvailable {
-		footerPairs = append(footerPairs, [2]string{"u", "upgrade"})
-	}
-
-	footerSep := "\n\n"
-	if compact {
-		footerSep = "\n"
-	}
-	footer := footerSep + divider(pw) + "\n" + m.footerKeys(pw, footerPairs)
-	return top + stylePanelBorder(pw).Render(header+currentLine+items+updateBanner+statusLine+footer)
 }
 
 func (m Model) viewCurrentLine(compact bool) string {
@@ -614,30 +555,38 @@ func (m Model) viewSelectFlash(pw int) string {
 	currentLine := m.viewCurrentLine(m.height > 0 && m.height < 12+len(m.profiles))
 	nickColW := m.nickColumnWidth()
 
+	iw := pw - 2 // usable inner width — matches viewProfileItems
+	secW := iw - nickColW - 6
+	if secW < 6 {
+		secW = 6
+	}
+
 	items := "\n"
 	for i, p := range m.profiles {
+		nick := truncate(p.Nickname, nickColW)
+		nick += strings.Repeat(" ", max(0, nickColW-lipgloss.Width(nick)))
+		sec := truncate(m.profileSecondary(p.Email, p.GHUser), secW)
 		if i == m.selFlashProfile {
-			nick := p.Nickname + strings.Repeat(" ", max(0, nickColW-lipgloss.Width(p.Nickname)))
-			line := fmt.Sprintf("  ᗧ ★ %s  %s", nick, p.Email)
+			line := fmt.Sprintf("ᗧ ★ %s  %s", nick, sec)
 			var flashStyle lipgloss.Style
 			switch m.selFlashFrame % 3 {
 			case 0:
-				flashStyle = lipgloss.NewStyle().Background(colorYellow).Foreground(lipgloss.Color("0")).Width(pw).Bold(true)
+				flashStyle = lipgloss.NewStyle().Background(colorYellow).Foreground(lipgloss.Color("0")).Width(iw).Bold(true)
 			case 1:
-				flashStyle = lipgloss.NewStyle().Background(arcadeGhostCyan).Foreground(lipgloss.Color("0")).Width(pw).Bold(true)
+				flashStyle = lipgloss.NewStyle().Background(arcadeGhostCyan).Foreground(lipgloss.Color("0")).Width(iw).Bold(true)
 			default:
-				flashStyle = lipgloss.NewStyle().Background(lipgloss.Color("255")).Foreground(lipgloss.Color("0")).Width(pw).Bold(true)
+				flashStyle = lipgloss.NewStyle().Background(lipgloss.Color("255")).Foreground(lipgloss.Color("0")).Width(iw).Bold(true)
 			}
 			items += "\n" + flashStyle.Render(line)
 		} else {
 			isActive := m.active != nil && p.Nickname == m.active.Nickname
-			check := styleItemDim.Render(" · ")
+			check := styleItemDim.Render("·")
 			if isActive {
-				check = styleCheckmark.Render(" ★ ")
+				check = styleCheckmark.Render("★")
 			}
-			nick := p.Nickname + strings.Repeat(" ", max(0, nickColW-lipgloss.Width(p.Nickname)))
-			line := fmt.Sprintf("   %s%s  %s", check, nick, p.Email)
-			items += "\n  " + styleItemInactive.Render(line)
+			items += "\n" + "  " + check + " " +
+				styleItemInactive.Render(nick) + "  " +
+				styleItemDim.Render(sec)
 		}
 	}
 
@@ -778,33 +727,6 @@ func (m Model) footerKeys(pw int, pairs [][2]string) string {
 		lines = append(lines, currentLine)
 	}
 	return strings.Join(lines, "\n")
-}
-
-func (m Model) viewNoProfiles() string {
-	w := m.width
-	h := m.height
-	if w == 0 {
-		w = 80
-	}
-	if h == 0 {
-		h = 24
-	}
-
-	title := styleTitle.Render("gitswitch")
-	sub := styleBrand.Render("No accounts set up yet.")
-
-	optLogin := fmt.Sprintf("  %s  Log in with GitHub", styleFooterKey.Render("[L]"))
-	optAdd := fmt.Sprintf("  %s  Add profile manually", styleFooterKey.Render("[A]"))
-	optQuit := fmt.Sprintf("  %s  Quit", styleFooterKey.Render("[Q]"))
-
-	content := title + "\n\n" + sub + "\n\n" + optLogin + "\n" + optAdd + "\n" + optQuit
-
-	pw := m.panelWidth()
-	if pw > w-4 && w-4 > 40 {
-		pw = w - 4
-	}
-	box := stylePanelBorder(pw).Render(content)
-	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 }
 
 // Ensure Model satisfies tea.Model at compile time.

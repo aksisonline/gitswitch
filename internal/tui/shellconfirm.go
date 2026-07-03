@@ -84,8 +84,8 @@ func (m Model) updateShellConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	}
-	// Mouse is intentionally not wired to confirm here — this is a confirmation
-	// dialog, so we require an explicit y/n keypress to avoid accidental installs.
+	// Mouse clicks are handled in handleMouse and require a precise hit on a
+	// button — same spirit as the explicit y/n keys, no accidental installs.
 	return m, nil
 }
 

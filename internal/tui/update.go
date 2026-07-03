@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type switchDoneMsg struct {
@@ -81,7 +82,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = fmt.Sprintf("editor: %v", ed.err)
 			m.statusIsErr = true
 		}
-		return m, tea.EnableMouseCellMotion
+		return m, tea.EnableMouseAllMotion
 	}
 	if sd, ok := msg.(shellDoneMsg); ok {
 		if sd.err != nil {
@@ -103,6 +104,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = StateList
 		m.tabIndex = m.shellReturnTab
 		return m, nil
+	}
+	if mm, ok := msg.(tea.MouseMsg); ok {
+		return m.handleMouse(mm)
 	}
 	if m.state == StateShellConfirm {
 		return m.updateShellConfirm(msg)
@@ -134,9 +138,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if mm, ok := msg.(tea.MouseMsg); ok {
-		return m.handleMouse(mm)
-	}
 	switch m.state {
 	case StateIntro:
 		if km, ok := msg.(tea.KeyMsg); ok {
@@ -158,8 +159,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateDelete(msg)
 	case StateTips:
 		return m.updateTips(msg)
-	case StateNoProfiles:
-		return m.updateNoProfiles(msg)
 	case StateWhatsNew:
 		return m.updateWhatsNew(msg)
 	case StateWizardWelcome, StateWizardDetect, StateWizardImport, StateWizardAddMore, StateWizardDone:
@@ -293,8 +292,9 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = StateEdit
 				m.editingNick = p.Nickname
 				m.statusMsg = ""
-				seed := [6]string{p.Nickname, p.UserName, p.Email, p.SignKey, p.SSHKey, p.GHUser}
-				return m, m.openProfileForm(true, seed)
+				// keep the seed so a delete-confirm "n" can rebuild the form
+				m.formFields = [6]string{p.Nickname, p.UserName, p.Email, p.SignKey, p.SSHKey, p.GHUser}
+				return m, m.openProfileForm(true, m.formFields)
 			}
 		case "?":
 			if m.arcadeMode {
@@ -341,20 +341,14 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusIsErr = false
 			}
 		case "1", "2", "3":
-			if !m.arcadeMode {
-				m.tabIndex = int(msg.String()[0] - '1')
-				m.statusMsg = ""
-			}
+			m.tabIndex = int(msg.String()[0] - '1')
+			m.statusMsg = ""
 		case "tab":
-			if !m.arcadeMode {
-				m.tabIndex = (m.tabIndex + 1) % 3
-				m.statusMsg = ""
-			}
+			m.tabIndex = (m.tabIndex + 1) % 3
+			m.statusMsg = ""
 		case "shift+tab":
-			if !m.arcadeMode {
-				m.tabIndex = (m.tabIndex + 2) % 3
-				m.statusMsg = ""
-			}
+			m.tabIndex = (m.tabIndex + 2) % 3
+			m.statusMsg = ""
 		case "u":
 			if m.updateAvailable {
 				cmd, err := ver.UpgradeCommand(m.latestVersion)
@@ -498,6 +492,9 @@ func (m *Model) submitForm() tea.Cmd {
 			m.statusIsErr = false
 			m.profiles = profiles
 			m.active = git.DetectActive(profiles)
+			if m.arcadeMode {
+				m.addScore(500)
+			}
 		}
 	}
 	if m.arcadeMode {
@@ -590,11 +587,20 @@ func (m Model) switchProfileCmd(p storage.Profile) tea.Cmd {
 	}
 }
 
+// addScore bumps the arcade score and persists a beaten high score.
+func (m *Model) addScore(points int) {
+	m.score += points
+	if m.score > m.hiScore {
+		m.hiScore = m.score
+		_ = m.savePrefs()
+	}
+}
+
 func (m Model) tickSelectFlash() (tea.Model, tea.Cmd) {
 	m.selFlashFrame++
 	if m.selFlashFrame >= 6 {
 		m.state = StateList
-		m.score += 200
+		m.addScore(200)
 		if len(m.profiles) > 0 && m.selFlashProfile < len(m.profiles) {
 			return m, m.switchProfileCmd(m.profiles[m.selFlashProfile])
 		}
@@ -668,252 +674,332 @@ func (m Model) tickIntro() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// panelTopY returns the absolute screen Y of the panel's top border.
-// Renders the actual panel body and measures it with lipgloss.Height so
-// the value always matches what lipgloss.Place produces in View().
-func (m Model) panelTopY() int {
-	if m.height == 0 {
-		return 0
+// profileRowStart returns the relY of the first profile row on the Accounts
+// tab, mirroring the layout built in viewAccountsTab.
+func (m Model) profileRowStart(arcadeOff int) int {
+	compact := m.height > 0 && m.height < 12+len(m.profiles)
+	if compact {
+		return 6 + arcadeOff
 	}
-	pw := m.panelWidth()
-	var body string
-	switch m.state {
-	case StateIntro:
-		body = m.viewIntro(pw)
-	case StateSelectFlash:
-		body = m.viewSelectFlash(pw)
-	case StateTransition:
-		body = m.viewTransition(pw)
-	case StateExitAnim:
-		body = m.viewExitAnim(pw)
-	case StateAdd:
-		body = m.viewForm("Add Profile", pw)
-	case StateEdit:
-		body = m.viewForm(fmt.Sprintf("Edit  %s", m.editingNick), pw)
-	case StateDeleteConfirm:
-		body = m.viewDeleteConfirm(pw)
-	case StateTips:
-		body = m.viewTips(pw)
-	case StateNoProfiles:
-		return 0
-	case StateUpdatePrompt:
-		body = m.viewUpdatePrompt(pw)
-	case StateWhatsNew:
-		body = m.viewWhatsNew(pw)
-	case StateWizardWelcome:
-		body = m.viewWizardWelcome(pw)
-	case StateWizardDetect:
-		body = m.viewWizardDetect(pw)
-	case StateWizardImport:
-		body = m.viewWizardImport(pw)
-	case StateWizardAddMore:
-		body = m.viewWizardAddMore(pw)
-	case StateWizardDone:
-		body = m.viewWizardDone(pw)
-	case StateShellConfirm:
-		body = m.viewShellConfirm(pw)
-	default:
-		switch m.tabIndex {
-		case 1:
-			body = m.viewUtilitiesTab(pw)
-		case 2:
-			body = m.viewSettingsTab(pw)
-		default:
-			body = m.viewAccountsTab(pw)
-		}
-	}
-	actualH := lipgloss.Height(body)
-	top := (m.height - actualH) / 2
-	if top < 0 {
-		top = 0
-	}
-	return top
+	return 7 + arcadeOff
 }
 
+// itemBoxAt maps a relY to a Utilities/Settings item-box index. Each
+// renderItemBox occupies exactly 4 rows, the first box starting right
+// under the tab strip.
+func itemBoxAt(relY, arcadeOff int) (int, bool) {
+	start := 4 + arcadeOff
+	if relY < start {
+		return 0, false
+	}
+	idx := (relY - start) / 4
+	if idx > 2 {
+		return 0, false
+	}
+	return idx, true
+}
+
+// handleMouse hit-tests against the rendered body (bodyView) instead of
+// hardcoded row offsets, so clicks stay correct across compact layouts,
+// arcade mode's score line, and variable-height screens. Hover (motion)
+// moves the cursor/focus; a left press activates.
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	if msg.Action != tea.MouseActionPress {
+	hover := msg.Action == tea.MouseActionMotion
+	if !hover && msg.Action != tea.MouseActionPress {
 		return m, nil
 	}
 
 	pw := m.panelWidth()
-	panelLeft := (m.width - pw) / 2
-	panelTop := m.panelTopY()
-	// relY: Y relative to panel top border (0 = border, 1 = first content line)
-	relY := msg.Y - panelTop
-	// contentX: X within panel content (after left border char)
-	contentX := msg.X - panelLeft - 1
+	body := m.bodyView(pw)
+	bodyTop := (m.height - lipgloss.Height(body)) / 2
+	if bodyTop < 0 {
+		bodyTop = 0
+	}
+	bodyLeft := (m.width - lipgloss.Width(body)) / 2
+	if bodyLeft < 0 {
+		bodyLeft = 0
+	}
+	relY := msg.Y - bodyTop
+	lineX := msg.X - bodyLeft
 
-	switch msg.Button {
-	case tea.MouseButtonWheelUp:
-		if m.state == StateList && m.cursor > 0 {
-			m.cursor--
-			m.statusMsg = ""
+	var ln string // ANSI-stripped text of the row under the pointer
+	if lines := strings.Split(body, "\n"); relY >= 0 && relY < len(lines) {
+		ln = ansi.Strip(lines[relY])
+	}
+	// hitLabel: pointer is on this exact label. onRow: label anywhere on the row.
+	hitLabel := func(label string) bool {
+		i := strings.Index(ln, label)
+		return i >= 0 && lineX >= i-1 && lineX <= i+lipgloss.Width(label)
+	}
+	onRow := func(labels ...string) bool {
+		for _, l := range labels {
+			if strings.Contains(ln, l) {
+				return true
+			}
 		}
-		if m.state == StateWizardAddMore && m.wizardStep > 0 {
-			m.wizardStep--
+		return false
+	}
+
+	arcadeOff := 0
+	if m.arcadeMode {
+		arcadeOff = 1 // score line sits above the panel border
+	}
+
+	// Wheel scrolling
+	if !hover && (msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown) {
+		up := msg.Button == tea.MouseButtonWheelUp
+		switch m.state {
+		case StateList:
+			switch m.tabIndex {
+			case 0:
+				if up && m.cursor > 0 {
+					m.cursor--
+				} else if !up && m.cursor < len(m.profiles)-1 {
+					m.cursor++
+				}
+				m.statusMsg = ""
+			case 2:
+				if up && m.settingsFocus > 0 {
+					m.settingsFocus--
+				} else if !up && m.settingsFocus < 2 {
+					m.settingsFocus++
+				}
+			}
+		case StateWizardAddMore:
+			if up && m.wizardStep > 0 {
+				m.wizardStep--
+			} else if !up && m.wizardStep < 2 {
+				m.wizardStep++
+			}
+		case StateWizardImport:
+			if up && m.wizardStep > 0 {
+				m.wizardStep--
+			} else if !up && m.wizardStep < len(m.detectedProfiles)-1 {
+				m.wizardStep++
+			}
 		}
-	case tea.MouseButtonWheelDown:
-		if m.state == StateList && m.cursor < len(m.profiles)-1 {
-			m.cursor++
-			m.statusMsg = ""
-		}
-		if m.state == StateWizardAddMore && m.wizardStep < 2 {
-			m.wizardStep++
-		}
-	case tea.MouseButtonLeft:
-		// What's new: any click dismisses
-		if m.state == StateWhatsNew {
-			m.state = StateList
-			m.splashSeen020 = true
-			_ = m.savePrefs()
+		return m, nil
+	}
+
+	// Hover only moves focus — never triggers actions.
+	if hover {
+		if m.state != StateList {
 			return m, nil
 		}
+		switch m.tabIndex {
+		case 0:
+			if idx := relY - m.profileRowStart(arcadeOff); idx >= 0 && idx < len(m.profiles) {
+				m.cursor = idx
+			}
+		case 1:
+			if idx, ok := itemBoxAt(relY, arcadeOff); ok && idx == 0 {
+				m.utilityFocus = 0
+			}
+		case 2:
+			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
+				m.settingsFocus = idx
+			}
+		}
+		return m, nil
+	}
 
-		// Wizard welcome: click the CTA button area (relY 10-14)
-		if m.state == StateWizardWelcome && relY >= 10 && relY <= 14 {
+	if msg.Button != tea.MouseButtonLeft {
+		return m, nil
+	}
+
+	// A click anywhere ends alias editing (settings click below may re-enter).
+	m.aliasEditing = false
+
+	switch m.state {
+	case StateIntro:
+		m.state = StateList
+		return m, nil
+
+	case StateWhatsNew:
+		m.state = StateList
+		m.splashSeen020 = true
+		_ = m.savePrefs()
+		return m, nil
+
+	case StateTips:
+		if m.arcadeMode {
+			return m, m.startBackTransition()
+		}
+		m.state = StateList
+		return m, nil
+
+	case StateUpdatePrompt:
+		if hitLabel("Yes, update now") || hitLabel("INSERT COIN") {
+			cmd, err := ver.UpgradeCommand(m.latestVersion)
+			if err != nil {
+				m.statusMsg = fmt.Sprintf("upgrade error: %v", err)
+				m.statusIsErr = true
+				m.state = StateList
+				return m, nil
+			}
+			return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+				return upgradeDoneMsg{err: err}
+			})
+		}
+		if hitLabel("Skip") || hitLabel("CONTINUE") {
+			m.state = StateList
+		}
+		return m, nil
+
+	case StateShellConfirm:
+		// Precise click on a button only — same spirit as the y/n-only keys.
+		if hitLabel("Yes, install it") || hitLabel("Yes, remove it") {
+			return m, m.runShellAction(m.pendingShellInstall)
+		}
+		if hitLabel("Cancel") {
+			m.state = StateList
+			m.tabIndex = m.shellReturnTab
+		}
+		return m, nil
+
+	case StateWizardWelcome:
+		if onRow("Start Setup", "INSERT COIN") {
 			m.state = StateWizardDetect
 			return m, m.detectExistingConfigsCmd()
 		}
+		if onRow("Skip for now", "SKIP SETUP") {
+			m.state = StateList
+			m.tabIndex = 0
+		}
+		return m, nil
 
-		// Wizard add-more: click buttons
-		// Layout: header(1) + blank+status(2) + blank+divider(2) + blank+question(2) + blank+oauth(3) + blank+manual(3) + blank+done(3)
-		// relY: 0=border, 1=header, 2=blank, 3=status, 4=blank, 5=divider, 6=blank, 7=question
-		//       8=blank, 9=oauth-top, 10=oauth-mid, 11=oauth-bot
-		//       12=blank, 13=manual-top, 14=manual-mid, 15=manual-bot
-		//       16=blank, 17=done-top, 18=done-mid, 19=done-bot
-		if m.state == StateWizardAddMore {
-			switch {
-			case relY >= 9 && relY <= 11: // OAuth button
-				m.wizardStep = 0
-				m.LaunchOAuth = true
-				return m, tea.Quit
-			case relY >= 13 && relY <= 15: // Manual button
-				m.wizardStep = 1
-				m.state = StateAdd
-				m.statusMsg = ""
-				return m, m.openProfileForm(false, [6]string{})
-			case relY >= 17 && relY <= 19: // Done button
-				m.wizardStep = 2
-				m.state = StateList
-				m.tabIndex = 0
+	case StateWizardDetect:
+		// click continues, mirroring enter
+		m.importSelected = make([]bool, len(m.detectedProfiles))
+		for i := range m.importSelected {
+			m.importSelected[i] = true
+		}
+		if len(m.detectedProfiles) > 0 {
+			m.state = StateWizardImport
+		} else {
+			m.wizardStep = 0
+			m.state = StateWizardAddMore
+		}
+		return m, nil
+
+	case StateWizardImport:
+		if hitLabel("Import selected") {
+			m.importSelectedProfiles()
+			return m, nil
+		}
+		if hitLabel("Skip") {
+			m.wizardStep = 0
+			m.state = StateWizardAddMore
+			return m, nil
+		}
+		for i, p := range m.detectedProfiles {
+			if strings.Contains(ln, p.Nickname) {
+				m.wizardStep = i
+				if i < len(m.importSelected) {
+					m.importSelected[i] = !m.importSelected[i]
+				}
+				break
+			}
+		}
+		return m, nil
+
+	case StateWizardAddMore:
+		switch {
+		case onRow("Log in with GitHub", "LOG IN WITH GITHUB"):
+			m.wizardStep = 0
+			m.LaunchOAuth = true
+			return m, tea.Quit
+		case onRow("Add manually", "ADD MANUALLY"):
+			m.wizardStep = 1
+			m.state = StateAdd
+			m.statusMsg = ""
+			m.formFields = [6]string{}
+			return m, m.openProfileForm(false, [6]string{})
+		case onRow("Done, open", "DONE, OPEN"):
+			m.wizardStep = 2
+			m.state = StateList
+			m.tabIndex = 0
+		}
+		return m, nil
+
+	case StateWizardDone:
+		m.state = StateList
+		m.tabIndex = 0
+		return m, nil
+
+	case StateList:
+		// Tab strip — the only row containing both later tab names.
+		names := m.tabNames()
+		if onRow(names[1]) && onRow(names[2]) {
+			for i := 2; i >= 0; i-- {
+				if pos := strings.Index(ln, names[i]); pos >= 0 && lineX >= pos-2 {
+					m.tabIndex = i
+					m.statusMsg = ""
+					break
+				}
 			}
 			return m, nil
 		}
 
-		if m.state == StateList && !m.arcadeMode {
-			// Tab header click — relY==3 is the tab header line
-			// Content: "  [ Accounts ]   Utilities   Settings"
-			//            0123456789012345678901234567890123456
-			// Accounts ends ~15, Utilities ends ~25, Settings rest
-			if relY == 3 {
-				switch {
-				case contentX <= 15:
-					m.tabIndex = 0
-				case contentX <= 26:
-					m.tabIndex = 1
-				default:
-					m.tabIndex = 2
-				}
-				m.statusMsg = ""
-				return m, nil
-			}
-		}
-
-		// Utilities tab item clicks
-		// Item boxes start at relY=5, each item = 5 relY rows (4 lines + 1 blank prefix)
-		if m.state == StateList && m.tabIndex == 1 {
-			if relY >= 5 {
-				itemOffset := relY - 5
-				itemIdx := itemOffset / 5
-				withinItem := itemOffset % 5
-				// withinItem 0=blank prefix of item, 1=top border, 2=line1, 3=line2, 4=bottom border
-				if withinItem > 0 && withinItem < 5 && itemIdx >= 0 && itemIdx <= 2 {
-					m.utilityFocus = itemIdx
-					if itemIdx == 0 {
-						// clicking the shell integration toggle — open confirm dialog
-						m.openShellConfirm(!m.shellEnabled)
-					}
-					return m, nil
-				}
-			}
-		}
-
-		// Settings tab item clicks
-		if m.state == StateList && m.tabIndex == 2 {
-			if relY >= 5 {
-				itemOffset := relY - 5
-				itemIdx := itemOffset / 5
-				withinItem := itemOffset % 5
-				if withinItem > 0 && withinItem < 5 && itemIdx >= 0 && itemIdx <= 2 {
-					m.settingsFocus = itemIdx
-					m.aliasEditing = false
-					if itemIdx == 0 { // config location — open in editor
-						return m, m.openConfigEditor()
-					}
-					if itemIdx == 1 { // theme box — cycle
-						if contentX > pw/2 {
-							m.colorTheme = (m.colorTheme + 1) % 12
-						} else {
-							m.colorTheme = (m.colorTheme + 11) % 12
-						}
-						_ = m.savePrefs()
-					}
-					if itemIdx == 2 { // alias box: right side = rename, left = toggle
-						if contentX > pw*3/4 {
-							m.aliasInput.SetValue(m.shellAlias)
-							m.aliasInput.Focus()
-							m.aliasEditing = true
-							return m, textinput.Blink
-						}
-						m.shellAliasDisabled = !m.shellAliasDisabled
-						_ = m.savePrefs()
-						if m.shellEnabled {
-							return m, m.reinstallShellCmd()
-						}
-						if !m.shellAliasDisabled {
-							m.statusMsg = "alias enabled — install shell integration to apply"
-						} else {
-							m.statusMsg = "alias disabled"
-						}
-						m.statusIsErr = false
-					}
-					return m, nil
-				}
-			}
-		}
-
-		// Profile rows (accounts tab, relY 7+)
-		// Layout: 0=border, 1=header, 2=blank, 3=tab-header, 4=blank, 5=current, 6=blank, 7+=items
-		if m.state == StateList && m.tabIndex == 0 && len(m.profiles) > 0 {
-			idx := relY - 7
-			if idx >= 0 && idx < len(m.profiles) {
+		switch m.tabIndex {
+		case 0:
+			if idx := relY - m.profileRowStart(arcadeOff); idx >= 0 && idx < len(m.profiles) {
 				m.cursor = idx
-				p := m.profiles[m.cursor]
 				if m.arcadeMode {
 					m.selFlashFrame = 0
 					m.selFlashProfile = m.cursor
 					m.state = StateSelectFlash
 					return m, arcadeTickCmd()
 				}
-				return m, m.switchProfileCmd(p)
+				return m, m.switchProfileCmd(m.profiles[idx])
+			}
+		case 1:
+			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
+				m.utilityFocus = idx
+				if idx == 0 {
+					m.openShellConfirm(!m.shellEnabled)
+				}
+			}
+		case 2:
+			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
+				m.settingsFocus = idx
+				switch idx {
+				case 0: // config location — only the edit chip launches $EDITOR
+					if hitLabel("[✎ edit]") {
+						return m, m.openConfigEditor()
+					}
+				case 1: // theme box — left half prev, right half next
+					if !m.arcadeMode {
+						if lineX > pw/2 {
+							m.colorTheme = (m.colorTheme + 1) % 12
+						} else {
+							m.colorTheme = (m.colorTheme + 11) % 12
+						}
+						_ = m.savePrefs()
+					}
+				case 2: // alias box — rename chip edits, body toggles
+					if hitLabel("[✎ rename]") {
+						m.aliasInput.SetValue(m.shellAlias)
+						m.aliasInput.Focus()
+						m.aliasEditing = true
+						return m, textinput.Blink
+					}
+					m.shellAliasDisabled = !m.shellAliasDisabled
+					_ = m.savePrefs()
+					if m.shellEnabled {
+						return m, m.reinstallShellCmd()
+					}
+					if !m.shellAliasDisabled {
+						m.statusMsg = "alias enabled — install shell integration to apply"
+					} else {
+						m.statusMsg = "alias disabled"
+					}
+					m.statusIsErr = false
+				}
 			}
 		}
-
-		// Legacy StateNoProfiles handler
-		if m.state == StateNoProfiles {
-			switch relY - 8 {
-			case 0:
-				m.LaunchOAuth = true
-				return m, tea.Quit
-			case 1:
-				m.state = StateWizardAddMore
-				m.wizardStep = 0
-				m.formFields = [6]string{}
-				m.statusMsg = ""
-			}
-		}
+		return m, nil
 	}
-	_ = contentX
 	return m, nil
 }
 
@@ -929,12 +1015,21 @@ func (m Model) updateWhatsNew(msg tea.Msg) (tea.Model, tea.Cmd) {
 			_ = m.savePrefs()
 		}
 	}
-	if mm, ok := msg.(tea.MouseMsg); ok && mm.Action == tea.MouseActionPress && mm.Button == tea.MouseButtonLeft {
-		m.state = StateList
-		m.splashSeen020 = true
-		_ = m.savePrefs()
-	}
 	return m, nil
+}
+
+// importSelectedProfiles adds the checked detected profiles and advances the
+// wizard to the add-more step. Shared by the enter key and mouse click.
+func (m *Model) importSelectedProfiles() {
+	for i, p := range m.detectedProfiles {
+		if i < len(m.importSelected) && m.importSelected[i] {
+			_ = m.store.Add(p.Nickname, p.UserName, p.Email, p.SignKey, p.SSHKey, p.GHUser)
+		}
+	}
+	profiles, _ := m.store.Load()
+	m.profiles = profiles
+	m.wizardStep = 0
+	m.state = StateWizardAddMore
 }
 
 func (m Model) updateWizard(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -975,15 +1070,7 @@ func (m Model) updateWizard(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = StateWizardAddMore
 				}
 			case StateWizardImport:
-				for i, p := range m.detectedProfiles {
-					if i < len(m.importSelected) && m.importSelected[i] {
-						_ = m.store.Add(p.Nickname, p.UserName, p.Email, p.SignKey, p.SSHKey, p.GHUser)
-					}
-				}
-				profiles, _ := m.store.Load()
-				m.profiles = profiles
-				m.wizardStep = 0
-				m.state = StateWizardAddMore
+				m.importSelectedProfiles()
 			case StateWizardAddMore:
 				switch m.wizardStep {
 				case 0: // OAuth
@@ -1070,25 +1157,6 @@ func deriveNickname(email string) string {
 		return email[:at]
 	}
 	return email
-}
-
-func (m Model) updateNoProfiles(msg tea.Msg) (tea.Model, tea.Cmd) {
-	km, ok := msg.(tea.KeyMsg)
-	if !ok {
-		return m, nil
-	}
-	switch strings.ToLower(km.String()) {
-	case "q", "ctrl+c":
-		return m, tea.Quit
-	case "a":
-		m.state = StateAdd
-		m.statusMsg = ""
-		return m, m.openProfileForm(false, [6]string{})
-	case "l", "enter":
-		m.LaunchOAuth = true
-		return m, tea.Quit
-	}
-	return m, nil
 }
 
 func (m Model) openConfigEditor() tea.Cmd {

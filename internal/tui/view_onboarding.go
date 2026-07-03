@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -98,9 +97,9 @@ func (m Model) viewWizardWelcome(pw int) string {
 
 	var secondary string
 	if m.arcadeMode {
-		secondary = "\n\n  " + styleBrand.Render("[ LOAD SAVE FILE ]   [ SKIP SETUP ]")
+		secondary = "\n\n  " + styleBrand.Render("[ SKIP SETUP ]")
 	} else {
-		secondary = "\n\n  " + styleBrand.Render("[ Import config file ]   [ Skip for now ]")
+		secondary = "\n\n  " + styleBrand.Render("[ Skip for now ]")
 	}
 
 	body := header + greeting + prereqs + cta + secondary
@@ -336,6 +335,3 @@ func (m Model) viewWizardDone(pw int) string {
 	return stylePanelBorder(pw).Render(body)
 }
 
-// ensure strings and fmt used
-var _ = strings.Join
-var _ = fmt.Sprintf

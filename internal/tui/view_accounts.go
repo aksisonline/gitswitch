@@ -1,30 +1,45 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
 
+// tabNames returns the three tab labels for the current mode. The mouse
+// handler hit-tests against these same strings, so view and clicks never drift.
+func (m Model) tabNames() [3]string {
+	if m.arcadeMode {
+		return [3]string{"ACCOUNTS", "UTILITIES", "SETTINGS"}
+	}
+	return [3]string{"Accounts", "Utilities", "Settings"}
+}
+
 // viewTabHeader renders the 3-tab navigation strip (Accounts / Utilities / Settings).
 // Called at the top of every tab view, after the main brand header.
 func (m Model) viewTabHeader() string {
-	var tabs [3]string
+	tabs := m.tabNames()
+	activeStyle := lipgloss.NewStyle().
+		Background(colorBgChip).
+		Foreground(colorPurple).
+		Bold(true).
+		Padding(0, 1)
 	if m.arcadeMode {
-		tabs = [3]string{"ACCOUNTS", "UTILITIES", "SETTINGS"}
-	} else {
-		tabs = [3]string{"Accounts", "Utilities", "Settings"}
+		activeStyle = activeStyle.Foreground(colorYellow)
+	}
+	sep := "   "
+	if m.arcadeMode {
+		sep = " · "
 	}
 	var parts []string
 	for i, t := range tabs {
 		if i == m.tabIndex {
-			parts = append(parts, styleTitle.Render("[ "+t+" ]"))
+			parts = append(parts, activeStyle.Render(t))
 		} else {
 			parts = append(parts, styleItemDim.Render(t))
 		}
 	}
-	return "\n\n  " + strings.Join(parts, styleItemDim.Render("   "))
+	return "\n\n  " + strings.Join(parts, styleItemDim.Render(sep))
 }
 
 // viewAccountsTab is the main account-switching screen (tab 0).
@@ -77,9 +92,7 @@ func (m Model) viewAccountsTab(pw int) string {
 		{"?", "cli tips"},
 		{"q", "quit"},
 	}
-	if !m.arcadeMode {
-		footerPairs = append(footerPairs, [2]string{"1/2/3", "tabs"})
-	}
+	footerPairs = append(footerPairs, [2]string{"1/2/3", "tabs"})
 	if m.updateAvailable {
 		footerPairs = append(footerPairs, [2]string{"u", "upgrade"})
 	}
@@ -99,6 +112,3 @@ func secondaryToggleLabel(showUsername bool) string {
 	}
 	return "usernames"
 }
-
-// ensure fmt is used (for Sprintf in callers that might need it)
-var _ = fmt.Sprintf

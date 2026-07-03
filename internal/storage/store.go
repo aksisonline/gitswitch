@@ -64,6 +64,9 @@ func New() (*Store, error) {
 	return &Store{path: path}, nil
 }
 
+// NewAt returns a Store rooted at the given directory. Used by tests.
+func NewAt(path string) *Store { return &Store{path: path} }
+
 func (s *Store) yamlPath() string {
 	return filepath.Join(s.path, "config.yaml")
 }
@@ -85,6 +88,7 @@ type Prefs struct {
 	ShowUsername bool   `json:"show_username"`
 	ShellAlias         string `json:"shell_alias"`
 	ShellAliasDisabled bool   `json:"shell_alias_disabled"` // zero value = enabled (default on)
+	ArcadeHiScore      int    `json:"arcade_hi_score,omitempty"`
 }
 
 func (s *Store) prefsPath() string {

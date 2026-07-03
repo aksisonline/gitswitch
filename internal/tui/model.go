@@ -38,7 +38,6 @@ const (
 	StateSelectFlash
 	StateTransition
 	StateExitAnim
-	StateNoProfiles
 	StateWhatsNew      // one-time upgrade splash for v0.1.x users
 	StateUpdatePrompt  // shown when a newer version is found on launch
 	StateWizardWelcome // new-user onboarding step 0
@@ -155,7 +154,10 @@ func WithArcadeMode() Option {
 		m.arcadeMode = true
 		m.state = StateIntro
 		m.introMouthOpen = true
-		m.hiScore = 99990
+		// Beatable factory high score — real high scores persist via prefs.
+		if m.hiScore < 5000 {
+			m.hiScore = 5000
+		}
 	}
 }
 
@@ -189,6 +191,7 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		shellEnabled:   shell.IsInstalled(shell.RCFile(shell.DetectShell())),
 		showUsername:   prefs.ShowUsername,
 		splashSeen020:  prefs.SplashSeen020,
+		hiScore:        prefs.ArcadeHiScore,
 		shellAlias:         shellAlias,
 		shellAliasDisabled: prefs.ShellAliasDisabled,
 		aliasInput:         aliasInput,
@@ -236,6 +239,7 @@ func (m *Model) savePrefs() error {
 		ShowUsername:  m.showUsername,
 		ShellAlias:         m.shellAlias,
 		ShellAliasDisabled: m.shellAliasDisabled,
+		ArcadeHiScore:      m.hiScore,
 	})
 }
 
