@@ -78,7 +78,7 @@ func CachedLatestRelease(configDir, currentVersion string) Release {
 	var rel Release
 	var err error
 	if IsBeta(currentVersion) {
-		rel, err = fetchLatestReleaseForBeta(ctx, currentVersion)
+		rel, err = fetchLatestReleaseForBeta(ctx)
 	} else {
 		rel, err = fetchLatestReleaseStable(ctx)
 	}
@@ -104,7 +104,7 @@ func FetchLatestVersionFreshFor(currentVersion string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if IsBeta(currentVersion) {
-		return fetchLatestForBeta(ctx, currentVersion)
+		return fetchLatestForBeta(ctx)
 	}
 	return fetchLatestStable(ctx)
 }
@@ -142,15 +142,13 @@ func fetchLatestReleaseStable(ctx context.Context) (Release, error) {
 	return Release{Version: result.TagName, Notes: result.Body}, nil
 }
 
-// fetchLatestForBeta returns the best available version for a beta user:
-// the highest beta of the same target release, or the stable release if it
-// has shipped (stable always wins over any beta of the same base).
-func fetchLatestForBeta(ctx context.Context, currentVersion string) (string, error) {
-	r, err := fetchLatestReleaseForBeta(ctx, currentVersion)
+// fetchLatestForBeta returns the newest canary (beta) release for a beta user.
+func fetchLatestForBeta(ctx context.Context) (string, error) {
+	r, err := fetchLatestReleaseForBeta(ctx)
 	return r.Version, err
 }
 
-func fetchLatestReleaseForBeta(ctx context.Context, currentVersion string) (Release, error) {
+func fetchLatestReleaseForBeta(ctx context.Context) (Release, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubReleasesURL, nil)
 	if err != nil {
 		return Release{}, err
@@ -178,35 +176,23 @@ func fetchLatestReleaseForBeta(ctx context.Context, currentVersion string) (Rele
 		return Release{}, err
 	}
 
-	// Base version we're targeting (e.g. v0.2.0 from v0.2.0-beta.1)
-	base := strings.SplitN(currentVersion, "-", 2)[0]
-
-	var bestBeta, bestStable Release
+	// Channels are strictly separate: canary builds only ever see beta tags
+	// (any base, so canary users keep getting updates after a stable ships),
+	// and stable builds never reach this function. Moving between channels is
+	// explicit via `gitswitch stable` / `gitswitch beta`.
+	var best Release
 	for _, r := range releases {
-		if r.Draft || !semverRe.MatchString(r.TagName) {
+		if r.Draft || !r.Prerelease || !semverRe.MatchString(r.TagName) || !IsBeta(r.TagName) {
 			continue
 		}
-		if !r.Prerelease {
-			if strings.HasPrefix(r.TagName, base) || compareVersions(r.TagName, base) >= 0 {
-				if bestStable.Version == "" || compareVersions(r.TagName, bestStable.Version) > 0 {
-					bestStable = Release{Version: r.TagName, Notes: r.Body}
-				}
-			}
-		} else if strings.HasPrefix(r.TagName, base+"-beta.") {
-			if bestBeta.Version == "" || compareVersions(r.TagName, bestBeta.Version) > 0 {
-				bestBeta = Release{Version: r.TagName, Notes: r.Body}
-			}
+		if best.Version == "" || compareVersions(r.TagName, best.Version) > 0 {
+			best = Release{Version: r.TagName, Notes: r.Body}
 		}
 	}
-
-	// Stable beats beta — if the stable is out, recommend it
-	if bestStable.Version != "" {
-		return bestStable, nil
+	if best.Version == "" {
+		return Release{}, nil
 	}
-	if bestBeta.Version != "" {
-		return bestBeta, nil
-	}
-	return Release{Version: currentVersion}, nil
+	return best, nil
 }
 
 func saveCache(cachePath, version string) error {
