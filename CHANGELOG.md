@@ -15,6 +15,7 @@ Format: `[version] — date — summary`
 - **Onboarding welcome** — removed the decorative "Import config file" button (feature doesn't exist); "Skip for now" is now clickable and actually skips.
 
 ### Added
+- **`gitswitch reauthor`** — rewrites author/committer identity on already-made commits to a stored profile in one command (`gitswitch reauthor <base> --to <nickname> [--from <old-email>] [--push]`), instead of hand-scripting `git rebase`/`git commit --amend`. `--from` scopes the rewrite to commits currently authored by a given email; `--push` force-pushes (`--force-with-lease`) after. Built so Claude/agents can fix pre-switch attribution in one call instead of a multi-step git dance.
 - **Tabs in arcade mode** — `1/2/3`, `tab`, and mouse clicks now switch tabs in arcade mode too, unlocking the arcade skins of the Utilities and Settings tabs (SHELL HOOK, SAVE FILE LOCATION, …) that were previously unreachable.
 - **Hover focus** — moving the mouse over profile rows and Utilities/Settings boxes moves the cursor/focus, like a real menu. Scroll wheel also moves focus on the Settings tab and in wizard lists.
 - **Persistent arcade high score** — HIGH SCORE survives restarts (`arcade_hi_score` in config.json); switching identities scores 200, adding/editing a profile 500. Factory high score is a beatable 5000.

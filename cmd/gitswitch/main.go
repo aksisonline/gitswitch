@@ -407,6 +407,77 @@ var upgradeCmd = &cobra.Command{
 	},
 }
 
+var reauthorCmd = &cobra.Command{
+	Use:   "reauthor <base>",
+	Short: "Rewrite author/committer identity on already-made commits",
+	Long: `Rewrites the author and committer of every commit between <base> and HEAD
+to a stored profile's identity. <base> is a commit-ish (e.g. HEAD~3, a SHA) or
+a bare number N meaning "the last N commits".
+
+Use --from to only touch commits currently authored by a given email
+(the pre-switch account), leaving other commits in range untouched.
+
+This rewrites history. If the branch is already pushed, pass --push to
+force-push (--force-with-lease) afterward, or do it yourself once you've
+checked the result.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		to, _ := cmd.Flags().GetString("to")
+		from, _ := cmd.Flags().GetString("from")
+		push, _ := cmd.Flags().GetBool("push")
+		yes, _ := cmd.Flags().GetBool("yes")
+		if to == "" {
+			return fmt.Errorf("--to <nickname> is required")
+		}
+		p, err := store.Get(to)
+		if err != nil {
+			return err
+		}
+		if !git.IsWorkingTreeClean() {
+			return fmt.Errorf("working tree not clean — commit or stash changes before reauthoring")
+		}
+		base := git.ResolveReauthorBase(args[0])
+
+		fmt.Printf("This rewrites commit history from %s to HEAD, setting author to %s <%s>", base, p.UserName, p.Email)
+		if from != "" {
+			fmt.Printf(" (commits currently authored by %s only)", from)
+		}
+		fmt.Println(".")
+		if !yes && !confirm("Proceed?") {
+			fmt.Println("Aborted.")
+			return nil
+		}
+
+		if err := git.Reauthor(base, from, p.UserName, p.Email); err != nil {
+			return err
+		}
+		fmt.Println("✓ History rewritten.")
+
+		if push {
+			if !yes && !confirm("Force-push (--force-with-lease) now?") {
+				fmt.Println("Skipped push — history rewritten locally only. Push manually when ready.")
+				return nil
+			}
+			if err := git.PushForceWithLease(); err != nil {
+				return fmt.Errorf("push failed: %w", err)
+			}
+			fmt.Println("✓ Pushed.")
+		} else {
+			fmt.Println("Local only — pass --push to force-push, or push manually.")
+		}
+		return nil
+	},
+}
+
+// confirm prompts the user with a y/N question on stdin.
+func confirm(question string) bool {
+	fmt.Printf("%s [y/N] ", question)
+	var resp string
+	fmt.Scanln(&resp)
+	resp = strings.ToLower(strings.TrimSpace(resp))
+	return resp == "y" || resp == "yes"
+}
+
 var pinCmd = &cobra.Command{
 	Use:   "pin <nickname>",
 	Short: "Pin an identity to this repo — always recommended regardless of usage history",
@@ -840,7 +911,7 @@ var setupCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, doctorCmd, setupCmd, loginCmd, betaCmd, stableCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, doctorCmd, setupCmd, loginCmd, betaCmd, stableCmd, reauthorCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
@@ -858,6 +929,10 @@ func main() {
 	loginCmd.Flags().String("host", "", "GitHub host (default: github.com)")
 	loginCmd.Flags().String("client-id", "", "OAuth app client ID (overrides built-in)")
 	loginCmd.Flags().String("profile", "", "Profile nickname to create (default: GitHub username)")
+	reauthorCmd.Flags().String("to", "", "Profile nickname to attribute commits to (required)")
+	reauthorCmd.Flags().String("from", "", "Only rewrite commits currently authored by this email")
+	reauthorCmd.Flags().Bool("push", false, "Force-push (--force-with-lease) after rewriting")
+	reauthorCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompts (for scripts and agents)")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
