@@ -430,6 +430,39 @@ func (m Model) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// focusFormField moves the huh form's focus to the field with the given key
+// by stepping NextField/PrevField exactly as far as needed — never past the
+// target, since overshooting the last field submits the form.
+func (m Model) focusFormField(key string) (tea.Model, tea.Cmd) {
+	cur := m.form.GetFocusedField()
+	if cur == nil {
+		return m, nil
+	}
+	curIdx, tgtIdx := -1, -1
+	for i, f := range profileFormFieldTitles {
+		if f.key == cur.GetKey() {
+			curIdx = i
+		}
+		if f.key == key {
+			tgtIdx = i
+		}
+	}
+	if curIdx < 0 || tgtIdx < 0 || curIdx == tgtIdx {
+		return m, nil
+	}
+	var cmds []tea.Cmd
+	if tgtIdx > curIdx {
+		for i := curIdx; i < tgtIdx; i++ {
+			cmds = append(cmds, m.form.NextField())
+		}
+	} else {
+		for i := curIdx; i > tgtIdx; i-- {
+			cmds = append(cmds, m.form.PrevField())
+		}
+	}
+	return m, tea.Batch(cmds...)
+}
+
 // closeForm tears down the form and returns to the list (or arcade transition).
 func (m Model) closeForm() (tea.Model, tea.Cmd) {
 	m.form = nil
@@ -509,38 +542,45 @@ func (m Model) updateDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "y", "Y":
-			if len(m.profiles) > 0 {
-				nick := m.profiles[m.cursor].Nickname
-				if err := m.store.Remove(nick); err != nil {
-					m.statusMsg = fmt.Sprintf("error: %v", err)
-					m.statusIsErr = true
-				} else {
-					profiles, loadErr := m.store.Load()
-					if loadErr != nil {
-						m.statusMsg = fmt.Sprintf("error: %v", loadErr)
-						m.statusIsErr = true
-					} else {
-						m.profiles = profiles
-						m.active = git.DetectActive(profiles)
-						if m.cursor >= len(m.profiles) && m.cursor > 0 {
-							m.cursor--
-						}
-						m.statusMsg = fmt.Sprintf("deleted '%s'", nick)
-						m.statusIsErr = false
-					}
-				}
-			}
-			if m.arcadeMode {
-				m.transTarget = StateList
-				m.transFrame = 0
-				m.state = StateTransition
-				return m, arcadeTickCmd()
-			}
-			m.state = StateList
+			return m.confirmDelete()
 		case "n", "N", "esc":
 			m.state = StateEdit
 		}
 	}
+	return m, nil
+}
+
+// confirmDelete removes the profile under the cursor. Shared by the "y" key
+// and the delete-confirm dialog's mouse button.
+func (m Model) confirmDelete() (tea.Model, tea.Cmd) {
+	if len(m.profiles) > 0 {
+		nick := m.profiles[m.cursor].Nickname
+		if err := m.store.Remove(nick); err != nil {
+			m.statusMsg = fmt.Sprintf("error: %v", err)
+			m.statusIsErr = true
+		} else {
+			profiles, loadErr := m.store.Load()
+			if loadErr != nil {
+				m.statusMsg = fmt.Sprintf("error: %v", loadErr)
+				m.statusIsErr = true
+			} else {
+				m.profiles = profiles
+				m.active = git.DetectActive(profiles)
+				if m.cursor >= len(m.profiles) && m.cursor > 0 {
+					m.cursor--
+				}
+				m.statusMsg = fmt.Sprintf("deleted '%s'", nick)
+				m.statusIsErr = false
+			}
+		}
+	}
+	if m.arcadeMode {
+		m.transTarget = StateList
+		m.transFrame = 0
+		m.state = StateTransition
+		return m, arcadeTickCmd()
+	}
+	m.state = StateList
 	return m, nil
 }
 
@@ -674,6 +714,34 @@ func (m Model) tickIntro() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// profileFormFieldTitles maps huh field keys to their rendered Title text, in
+// the exact order newProfileForm builds them. Used to hit-test clicks on the
+// add/edit form, since huh itself has no mouse support.
+var profileFormFieldTitles = [6]struct{ key, title string }{
+	{"nickname", "Nickname"},
+	{"userName", "Name"},
+	{"email", "Email"},
+	{"ghUser", "GitHub username"},
+	{"sshKey", "SSH key path"},
+	{"signKey", "GPG signing key"},
+}
+
+// formFieldAt returns the key of the field block under relY: the last field
+// title seen at or above that row. A field's block (title, description,
+// input, spacing) all belong to the nearest title above them.
+func formFieldAt(bodyLines []string, relY int) (string, bool) {
+	key, found := "", false
+	for i := 0; i <= relY && i < len(bodyLines); i++ {
+		clean := ansi.Strip(bodyLines[i])
+		for _, f := range profileFormFieldTitles {
+			if strings.Contains(clean, f.title) {
+				key, found = f.key, true
+			}
+		}
+	}
+	return key, found
+}
+
 // profileRowStart returns the relY of the first profile row on the Accounts
 // tab, mirroring the layout built in viewAccountsTab.
 func (m Model) profileRowStart(arcadeOff int) int {
@@ -722,9 +790,10 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	relY := msg.Y - bodyTop
 	lineX := msg.X - bodyLeft
 
+	bodyLines := strings.Split(body, "\n")
 	var ln string // ANSI-stripped text of the row under the pointer
-	if lines := strings.Split(body, "\n"); relY >= 0 && relY < len(lines) {
-		ln = ansi.Strip(lines[relY])
+	if relY >= 0 && relY < len(bodyLines) {
+		ln = ansi.Strip(bodyLines[relY])
 	}
 	// hitLabel: pointer is on this exact label. onRow: label anywhere on the row.
 	hitLabel := func(label string) bool {
@@ -926,6 +995,25 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		m.state = StateList
 		m.tabIndex = 0
 		return m, nil
+
+	case StateDeleteConfirm:
+		if onRow("confirm delete") {
+			return m.confirmDelete()
+		}
+		if onRow("cancel") {
+			m.state = StateEdit
+		}
+		return m, nil
+
+	case StateAdd, StateEdit:
+		if m.form == nil {
+			return m, nil
+		}
+		key, ok := formFieldAt(bodyLines, relY)
+		if !ok {
+			return m, nil
+		}
+		return m.focusFormField(key)
 
 	case StateList:
 		// Tab strip — the only row containing both later tab names.

@@ -56,7 +56,7 @@ func (m Model) viewWhatsNew(pw int) string {
 			"\n  " + lipgloss.NewStyle().Bold(true).Foreground(colorPurple).Render("╚══════════════════════════════════════╝")
 	}
 
-	hint := "\n\n  " + styleBrand.Render("press ") + styleFooterKey.Render("any key") + styleBrand.Render(" to skip")
+	hint := "\n\n  " + styleBrand.Render("press ") + styleFooterKey.Render("any key") + styleBrand.Render(" or click to skip")
 
 	body := header + title + list + note + cta + hint
 	return stylePanelBorder(pw).Render(body)
@@ -126,7 +126,7 @@ func (m Model) viewWizardDetect(pw int) string {
 		"\n  " + spin + "  " + styleCurrentVal.Render("gh CLI accounts") + "       " + styleBrand.Render("checking...") +
 		"\n  " + spin + "  " + styleCurrentVal.Render("SSH keys in ~/.ssh/") + "   " + styleBrand.Render("checking...")
 
-	hint := "\n\n  " + styleBrand.Render("press ") + styleFooterKey.Render("enter") + styleBrand.Render(" to continue")
+	hint := "\n\n  " + styleBrand.Render("press ") + styleFooterKey.Render("enter") + styleBrand.Render(" or click to continue")
 
 	body := header + title + checks + hint
 	return stylePanelBorder(pw).Render(body)

@@ -13,13 +13,14 @@ Format: `[version] — date — summary`
 - **Arcade select flash no longer wraps** — the flash row was rendered 2 columns wider than the panel and broke the layout mid-animation; it now matches the list rows (including the email/username toggle).
 - **Edit form survives delete-cancel** — pressing `n` on the delete confirmation rebuilds the edit form with the profile's values instead of a stale/blank seed.
 - **Onboarding welcome** — removed the decorative "Import config file" button (feature doesn't exist); "Skip for now" is now clickable and actually skips.
+- **Mouse now works on Add/Edit Profile and Delete confirm** — huh (the form library) has no mouse support of its own; clicking a field's title, description, or input now focuses it, matching the rest of the app. Delete confirm's "confirm delete" / "cancel" labels are now clickable too.
 
 ### Added
 - **`gitswitch reauthor`** — rewrites author/committer identity on already-made commits to a stored profile in one command (`gitswitch reauthor <base> --to <nickname> [--from <old-email>] [--push]`), instead of hand-scripting `git rebase`/`git commit --amend`. `--from` scopes the rewrite to commits currently authored by a given email; `--push` force-pushes (`--force-with-lease`) after. Built so Claude/agents can fix pre-switch attribution in one call instead of a multi-step git dance.
 - **Tabs in arcade mode** — `1/2/3`, `tab`, and mouse clicks now switch tabs in arcade mode too, unlocking the arcade skins of the Utilities and Settings tabs (SHELL HOOK, SAVE FILE LOCATION, …) that were previously unreachable.
 - **Hover focus** — moving the mouse over profile rows and Utilities/Settings boxes moves the cursor/focus, like a real menu. Scroll wheel also moves focus on the Settings tab and in wizard lists.
 - **Persistent arcade high score** — HIGH SCORE survives restarts (`arcade_hi_score` in config.json); switching identities scores 200, adding/editing a profile 500. Factory high score is a beatable 5000.
-- **Wizard mouse support** — import list rows toggle on click, Import/Skip buttons work, detect screen advances on click.
+- **Wizard mouse support** — import list rows toggle on click, Import/Skip buttons work, detect screen advances on click. Detect and what's-new hints now say "or click" so the affordance isn't hidden.
 
 ### Changed
 - Active tab is now rendered as a highlighted chip; arcade tab strip uses pellet separators.
