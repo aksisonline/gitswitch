@@ -76,6 +76,8 @@ git commit --amend --reset-author --no-edit
 
 > **Tip:** Once pushed, commit attribution is permanent. Use [shell integration](/docs/features/shell) to get nudged when entering repos that usually use a different identity.
 
+For more than one wrong commit — the common case when an AI coding agent has been committing under the wrong identity — use `gitswitch reauthor` instead of amending one commit at a time. See [AI Coding Agents](/docs/features/ai-agents).
+
 ## Remove a local override
 
 If commits in a repo are using a per-repo identity you set manually:
@@ -92,3 +94,4 @@ After this, the global config (managed by gitswitch) takes effect.
 - [SSH Keys](/docs/features/ssh-keys)
 - [GPG Signing](/docs/features/gpg)
 - [Identity Awareness](/docs/features/identity-awareness)
+- [AI Coding Agents](/docs/features/ai-agents)

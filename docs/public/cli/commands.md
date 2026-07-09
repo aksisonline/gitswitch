@@ -291,6 +291,27 @@ After installing, reload Claude Code or open a new session.
 
 ---
 
+## `gitswitch reauthor` — fix commits an agent already made
+
+```bash
+gitswitch reauthor <base> --to <nickname> [--from <old-email>] [--push] [--yes]
+```
+
+Rewrites the author and committer on every commit between `<base>` and `HEAD` to a stored profile's identity, in one call. `<base>` is a commit-ish (`HEAD~3`, a SHA) or a bare number `N` meaning "the last N commits".
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--to <nickname>` | Profile to attribute commits to (required) |
+| `--from <old-email>` | Only rewrite commits currently authored by this email |
+| `--push` | Force-push (`--force-with-lease`) after rewriting |
+| `--yes` / `-y` | Skip confirmation prompts — for scripts and agents |
+
+This rewrites history — see [AI Coding Agents](/docs/features/ai-agents) for the full workflow.
+
+---
+
 ## `gitswitch version` — show version info
 
 ```bash

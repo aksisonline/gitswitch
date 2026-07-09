@@ -48,6 +48,7 @@ When you switch to a profile, gitswitch runs in this order:
 - **GitHub CLI sync** — optionally calls `gh auth switch` on every profile switch
 - **Identity awareness** — learns which identity you use per-repo and nudges you when something looks wrong
 - **Shell integration** — prompt segments, automatic nudges on `cd`, tab completion
+- **AI coding agent setup** — installs a Claude Code skill (`gitswitch claude`) and fixes commits an agent already made under the wrong identity (`gitswitch reauthor`)
 - **12 color themes** — Default, Ocean, Sunset, Forest, Mono, Rose, Arctic, Gold, Violet, Ember, Matrix, Steel
 
 ## Storage
@@ -62,4 +63,5 @@ When you switch to a profile, gitswitch runs in this order:
 
 - [Install gitswitch](/docs/installation)
 - [Quick Start](/docs/quick-start)
+- [AI Coding Agents](/docs/features/ai-agents)
 - [CLI Reference](/docs/cli/commands)

@@ -13,7 +13,8 @@
         "features/gpg",
         "features/github-sync",
         "features/identity-awareness",
-        "features/shell"
+        "features/shell",
+        "features/ai-agents"
       ]
     },
     {
