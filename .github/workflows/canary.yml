@@ -1,0 +1,228 @@
+name: Canary Release (Beta)
+
+on:
+  push:
+    branches:
+      - canary
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: Check for code changes
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if internal/ or cmd/ changed since last beta tag
+        id: check
+        run: |
+          LATEST_BETA=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*-beta.[0-9]*' --sort=-version:refname | head -n1)
+          if [ -z "$LATEST_BETA" ]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "No beta tags yet, will release"
+            exit 0
+          fi
+
+          CHANGED=$(git diff $LATEST_BETA..HEAD --name-only -- internal/ cmd/ || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "No changes since $LATEST_BETA, skipping canary release"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected since $LATEST_BETA:"
+            echo "$CHANGED"
+          fi
+
+  skip:
+    name: No code changes detected
+    needs: check
+    if: needs.check.outputs.should_release == 'false'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Skip notification
+        run: echo "✓ No code changes since last beta. Skipping canary release."
+
+  version:
+    name: Compute next beta version
+    needs: check
+    if: needs.check.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.next_version.outputs.new_tag }}
+      version: ${{ steps.next_version.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next beta version
+        id: next_version
+        run: |
+          # Base: highest stable semver tag (the version we're beta-ing toward)
+          LATEST_STABLE=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' \
+            --sort=-version:refname | grep -v '\-' | head -n1)
+          if [ -z "$LATEST_STABLE" ]; then
+            LATEST_STABLE="v0.1.0"
+          fi
+          echo "Latest stable tag: $LATEST_STABLE"
+
+          BASE="${LATEST_STABLE#v}"
+          MAJOR=$(echo "$BASE" | cut -d. -f1)
+          MINOR=$(echo "$BASE" | cut -d. -f2)
+          PATCH=$(echo "$BASE" | cut -d. -f3)
+
+          # Target = next patch from stable (tracks same MAJOR.MINOR as main)
+          # e.g. stable v0.2.1 → canary targets v0.2.2-beta.N
+          TARGET="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+
+          # Find highest existing beta for this target
+          LATEST_BETA=$(git tag --list "${TARGET}-beta.*" --sort=-version:refname | head -n1)
+          if [ -z "$LATEST_BETA" ]; then
+            BETA_N=1
+          else
+            BETA_N=$(echo "$LATEST_BETA" | sed 's/.*-beta\.//')
+            BETA_N=$((BETA_N + 1))
+          fi
+
+          NEW_TAG="${TARGET}-beta.${BETA_N}"
+          echo "New beta tag: $NEW_TAG"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${MAJOR}.${MINOR}.$((PATCH + 1))-beta.${BETA_N}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build binaries
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+            ext: ""
+          - goos: darwin
+            goarch: arm64
+            ext: ""
+          - goos: linux
+            goarch: amd64
+            ext: ""
+          - goos: linux
+            goarch: arm64
+            ext: ""
+          - goos: windows
+            goarch: amd64
+            ext: ".exe"
+          - goos: windows
+            goarch: arm64
+            ext: ".exe"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          BASE="gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}"
+          OUTPUT="${BASE}${{ matrix.ext }}"
+          go build -trimpath -ldflags="-s -w -X main.version=${{ needs.version.outputs.new_tag }}" \
+            -o "$OUTPUT" ./cmd/gitswitch
+          sha256sum "$OUTPUT" > "${BASE}.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+            gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+
+  publish:
+    name: Create prerelease and tag
+    needs: [version, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "gitswitch-*" -o -name "*.sha256" \) -exec mv {} release/ \;
+          cd release
+          cat gitswitch-*.sha256 > checksums.txt 2>/dev/null || echo "No checksums"
+          ls -la
+
+      - name: Package skill file
+        run: |
+          mkdir -p gitswitch-skill
+          cp cmd/gitswitch/skill/SKILL.md gitswitch-skill/SKILL.md
+          zip -j release/gitswitch.skill gitswitch-skill/SKILL.md
+
+      - name: Include install scripts
+        run: |
+          cp .github/install.ps1 release/install.ps1
+          cp .github/install.cmd release/install.cmd
+
+      - name: Create git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ needs.version.outputs.new_tag }}"
+          git push origin "${{ needs.version.outputs.new_tag }}"
+
+      - name: Create GitHub prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.new_tag }}
+          name: "${{ needs.version.outputs.new_tag }} (beta)"
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            > **⚠ This is a canary/beta release** — not for production use.
+            > Test it and report issues before the stable v0.2.0 drops.
+
+            ### Install this beta
+
+            **macOS / Linux**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh | bash -s -- ${{ needs.version.outputs.new_tag }}
+            ```
+
+            **Windows — PowerShell**
+            ```powershell
+            $env:GS_VERSION="${{ needs.version.outputs.new_tag }}"; irm https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.ps1 | iex
+            ```
+
+            **Windows — Command Prompt**
+            ```cmd
+            curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.cmd -o install.cmd && install.cmd ${{ needs.version.outputs.new_tag }}
+            ```
+          files: release/*
+          token: ${{ secrets.GITHUB_TOKEN }}

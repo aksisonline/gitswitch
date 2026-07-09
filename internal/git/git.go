@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -253,6 +254,62 @@ func isUnsetNothingErr(err error) bool {
 		return ee.ExitCode() == 5
 	}
 	return false
+}
+
+// IsWorkingTreeClean reports whether there are no staged or unstaged changes.
+// Reauthor requires this since it rebases.
+func IsWorkingTreeClean() bool {
+	out, err := exec.Command("git", "status", "--porcelain").Output()
+	return err == nil && strings.TrimSpace(string(out)) == ""
+}
+
+// ResolveReauthorBase turns a rev-range argument into a rebase base.
+// A bare integer N means "the last N commits" (HEAD~N); anything else
+// (a ref, SHA, or HEAD~N already) is passed through untouched.
+func ResolveReauthorBase(arg string) string {
+	if n, err := strconv.Atoi(arg); err == nil && n > 0 {
+		return fmt.Sprintf("HEAD~%d", n)
+	}
+	return arg
+}
+
+// Reauthor rewrites author (and committer) identity to name/email on every
+// commit in (base, HEAD] whose current author email matches fromEmail. If
+// fromEmail is empty, every commit in range is rewritten. Requires a clean
+// working tree since it runs a non-interactive rebase.
+func Reauthor(base, fromEmail, name, email string) error {
+	amend := fmt.Sprintf("GIT_COMMITTER_NAME=%s GIT_COMMITTER_EMAIL=%s git commit --amend --author=%s --no-edit --no-verify",
+		shellQuote(name), shellQuote(email), shellQuote(fmt.Sprintf("%s <%s>", name, email)))
+
+	var script string
+	if fromEmail != "" {
+		script = fmt.Sprintf(`if [ "$(git log -1 --format=%%ae)" = %s ]; then %s; fi`, shellQuote(fromEmail), amend)
+	} else {
+		script = amend
+	}
+
+	cmd := exec.Command("git", "rebase", "--exec", script, base)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("rebase failed (repo left mid-rebase — run 'git rebase --abort' to undo): %w", err)
+	}
+	return nil
+}
+
+// PushForceWithLease force-pushes the current branch, refusing if the
+// remote has moved since the local rebase started.
+func PushForceWithLease() error {
+	cmd := exec.Command("git", "push", "--force-with-lease")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// shellQuote wraps s in single quotes for safe use inside a sh -c script,
+// escaping any embedded single quotes.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // ExpandPath expands a leading ~/ to the user's home directory.

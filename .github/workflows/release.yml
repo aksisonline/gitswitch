@@ -86,32 +86,62 @@ jobs:
       - name: Compute next version
         id: next_version
         run: |
-          LATEST=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -v -- '-' | head -n1)
-          if [ -z "$LATEST" ]; then LATEST="v0.0.0"; fi
+          # Latest stable tag (no pre-release suffix)
+          LATEST=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' \
+            --sort=-version:refname | grep -v '\-' | head -n1)
+          if [ -z "$LATEST" ]; then
+            LATEST="v0.0.0"
+          fi
+          echo "Latest stable tag: $LATEST"
 
           VERSION="${LATEST#v}"
           MAJOR=$(echo "$VERSION" | cut -d. -f1)
           MINOR=$(echo "$VERSION" | cut -d. -f2)
           PATCH=$(echo "$VERSION" | cut -d. -f3)
 
-          # Always patch bump.
-          # Add [minor] or [major] at the END of a commit subject to bump intentionally.
-          # e.g. "feat: add OAuth support [minor]"
-          COMMITS=$(git log "$LATEST"..HEAD --format="%s" 2>/dev/null || true)
-          if echo "$COMMITS" | grep -qE '\[major\]$'; then
-            NEW_TAG="v$((MAJOR + 1)).0.0"
-          elif echo "$COMMITS" | grep -qE '\[minor\]$'; then
-            NEW_TAG="v${MAJOR}.$((MINOR + 1)).0"
+          # Check if canary beta tags exist for the next minor version.
+          # If so, promote that version to stable instead of incrementing patch.
+          NEXT_MINOR=$((MINOR + 1))
+          BETA_TARGET="v${MAJOR}.${NEXT_MINOR}.0"
+          EXISTING_BETA=$(git tag --list "${BETA_TARGET}-beta.*" --sort=-version:refname | head -n1)
+
+          if [ -n "$EXISTING_BETA" ]; then
+            NEW_TAG="$BETA_TARGET"
+            echo "Beta tags found for $BETA_TARGET — promoting to stable: $NEW_TAG"
           else
-            NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+            NEXT_PATCH=$((PATCH + 1))
+            NEW_TAG="v${MAJOR}.${MINOR}.${NEXT_PATCH}"
+            echo "No beta tags found — normal patch increment: $NEW_TAG"
           fi
+
           echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
-          echo "New tag: $NEW_TAG"
+          echo "version=${NEW_TAG#v}" >> "$GITHUB_OUTPUT"
 
   release:
     name: Build and release
     needs: version
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+            ext: ""
+          - goos: darwin
+            goarch: arm64
+            ext: ""
+          - goos: linux
+            goarch: amd64
+            ext: ""
+          - goos: linux
+            goarch: arm64
+            ext: ""
+          - goos: windows
+            goarch: amd64
+            ext: ".exe"
+          - goos: windows
+            goarch: arm64
+            ext: ".exe"
 
     steps:
       - uses: actions/checkout@v4
@@ -122,8 +152,64 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Create and push git tag
-        id: tag
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          BASE="gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}"
+          OUTPUT="${BASE}${{ matrix.ext }}"
+          go build -trimpath -ldflags="-s -w -X main.version=${{ needs.version.outputs.new_tag }}" -o "$OUTPUT" ./cmd/gitswitch
+          sha256sum "$OUTPUT" > "${BASE}.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+            gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+
+  publish:
+    name: Create release and tag
+    needs: [version, release]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "gitswitch-*" -o -name "*.sha256" \) -exec mv {} release/ \;
+          cd release
+          cat gitswitch-*.sha256 > checksums.txt 2>/dev/null || echo "No checksums"
+          ls -la
+
+      - name: Package skill file
+        run: |
+          mkdir -p gitswitch-skill
+          cp cmd/gitswitch/skill/SKILL.md gitswitch-skill/SKILL.md
+          zip -j release/gitswitch.skill gitswitch-skill/SKILL.md
+          echo "Packaged skill: $(ls -lh release/gitswitch.skill)"
+
+      - name: Include install scripts
+        run: |
+          cp .github/install.ps1 release/install.ps1
+          cp .github/install.cmd release/install.cmd
+
+      - name: Update install script with version
+        run: |
+          sed -i 's|VERSION="${1:-v[^"]*}"|VERSION="${1:-${{ needs.version.outputs.new_tag }}}"|' .github/install.sh
+
+      - name: Create git tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

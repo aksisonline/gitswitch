@@ -17,11 +17,11 @@ func fishClearPattern() string { return "set -e __GITSWITCH_LAST_REPO" }
 
 func TestPromptSnippetsUsePromptFlag(t *testing.T) {
 	cases := []struct{ name, snippet string }{
-		{"zsh", nudgeSnippetZsh()},
-		{"bash", nudgeSnippetBash()},
-		{"fish", nudgeSnippetFish()},
+		{"zsh", nudgeSnippetZsh("gs")},
+		{"bash", nudgeSnippetBash("gs")},
+		{"fish", nudgeSnippetFish("gs")},
 		{"omz", omzPluginContent()},
-		{"p10k", p10kSnippet()},
+		{"p10k", p10kSnippet("gs")},
 	}
 	for _, c := range cases {
 		if strings.Contains(c.snippet, "git config user.email") {
@@ -50,11 +50,11 @@ func TestStarshipSnippetUsesShortFlag(t *testing.T) {
 
 func TestZshSnippetPromptHasGitCheck(t *testing.T) {
 	for _, s := range []struct{ name, snippet string }{
-		{"zsh", nudgeSnippetZsh()},
-		{"bash", nudgeSnippetBash()},
-		{"fish", nudgeSnippetFish()},
+		{"zsh", nudgeSnippetZsh("gs")},
+		{"bash", nudgeSnippetBash("gs")},
+		{"fish", nudgeSnippetFish("gs")},
 		{"omz", omzPluginContent()},
-		{"p10k", p10kSnippet()},
+		{"p10k", p10kSnippet("gs")},
 	} {
 		if !strings.Contains(s.snippet, "git rev-parse --git-dir") {
 			t.Errorf("%s prompt function missing git-repo guard", s.name)
@@ -65,14 +65,14 @@ func TestZshSnippetPromptHasGitCheck(t *testing.T) {
 // ── Prompt placement ─────────────────────────────────────────────────────────
 
 func TestZshSnippetUsesLeftPROMPT(t *testing.T) {
-	s := nudgeSnippetZsh()
+	s := nudgeSnippetZsh("gs")
 	if !strings.Contains(s, "PROMPT='$(__gitswitch_prompt)'") {
 		t.Error("zsh snippet should prepend gitswitch_prompt to left PROMPT")
 	}
 }
 
 func TestBashSnippetHasDynamicColor(t *testing.T) {
-	s := nudgeSnippetBash()
+	s := nudgeSnippetBash("gs")
 	if !strings.Contains(s, `\e[38;5;`) {
 		t.Error("bash prompt missing 256-color ANSI format")
 	}
@@ -82,14 +82,14 @@ func TestBashSnippetHasDynamicColor(t *testing.T) {
 }
 
 func TestFishSnippetHasDynamicColor(t *testing.T) {
-	s := nudgeSnippetFish()
+	s := nudgeSnippetFish("gs")
 	if !strings.Contains(s, `\e[38;5;`) {
 		t.Error("fish prompt missing 256-color ANSI format")
 	}
 }
 
 func TestZshSnippetHasDynamicColor(t *testing.T) {
-	s := nudgeSnippetZsh()
+	s := nudgeSnippetZsh("gs")
 	if !strings.Contains(s, `%F{$color}`) {
 		t.Error("zsh prompt missing dynamic color variable")
 	}
@@ -99,21 +99,21 @@ func TestZshSnippetHasDynamicColor(t *testing.T) {
 }
 
 func TestZshSnippetClearsLastRepo(t *testing.T) {
-	s := nudgeSnippetZsh()
+	s := nudgeSnippetZsh("gs")
 	if !strings.Contains(s, zshClearPattern()) {
 		t.Errorf("zsh snippet missing LAST_REPO clear: want %q", zshClearPattern())
 	}
 }
 
 func TestBashSnippetClearsLastRepo(t *testing.T) {
-	s := nudgeSnippetBash()
+	s := nudgeSnippetBash("gs")
 	if !strings.Contains(s, zshClearPattern()) {
 		t.Errorf("bash snippet missing LAST_REPO clear: want %q", zshClearPattern())
 	}
 }
 
 func TestFishSnippetClearsLastRepo(t *testing.T) {
-	s := nudgeSnippetFish()
+	s := nudgeSnippetFish("gs")
 	if !strings.Contains(s, fishClearPattern()) {
 		t.Errorf("fish snippet missing LAST_REPO clear: want %q", fishClearPattern())
 	}
@@ -127,7 +127,7 @@ func TestOMZSnippetClearsLastRepo(t *testing.T) {
 }
 
 func TestP10kSnippetClearsLastRepo(t *testing.T) {
-	s := p10kSnippet()
+	s := p10kSnippet("gs")
 	if !strings.Contains(s, zshClearPattern()) {
 		t.Errorf("P10k snippet missing LAST_REPO clear: want %q", zshClearPattern())
 	}
@@ -137,21 +137,21 @@ func TestP10kSnippetClearsLastRepo(t *testing.T) {
 // this repo" short-circuit.
 
 func TestZshSnippetHasDedupGuard(t *testing.T) {
-	s := nudgeSnippetZsh()
+	s := nudgeSnippetZsh("gs")
 	if !strings.Contains(s, `[[ "$root" == "$__GITSWITCH_LAST_REPO" ]] && return`) {
 		t.Error("zsh snippet missing dedup guard")
 	}
 }
 
 func TestBashSnippetHasDedupGuard(t *testing.T) {
-	s := nudgeSnippetBash()
+	s := nudgeSnippetBash("gs")
 	if !strings.Contains(s, `[[ "$root" == "$__GITSWITCH_LAST_REPO" ]] && return`) {
 		t.Error("bash snippet missing dedup guard")
 	}
 }
 
 func TestFishSnippetHasDedupGuard(t *testing.T) {
-	s := nudgeSnippetFish()
+	s := nudgeSnippetFish("gs")
 	if !strings.Contains(s, `if test "$root" = "$__GITSWITCH_LAST_REPO"`) {
 		t.Error("fish snippet missing dedup guard")
 	}
@@ -161,28 +161,28 @@ func TestFishSnippetHasDedupGuard(t *testing.T) {
 // markers so IsInstalled can detect it.
 
 func TestZshSnippetHasMarkers(t *testing.T) {
-	s := nudgeSnippetZsh()
+	s := nudgeSnippetZsh("gs")
 	if !strings.Contains(s, marker+" begin") || !strings.Contains(s, marker+" end") {
 		t.Error("zsh snippet missing begin/end markers")
 	}
 }
 
 func TestBashSnippetHasMarkers(t *testing.T) {
-	s := nudgeSnippetBash()
+	s := nudgeSnippetBash("gs")
 	if !strings.Contains(s, marker+" begin") || !strings.Contains(s, marker+" end") {
 		t.Error("bash snippet missing begin/end markers")
 	}
 }
 
 func TestFishSnippetHasMarkers(t *testing.T) {
-	s := nudgeSnippetFish()
+	s := nudgeSnippetFish("gs")
 	if !strings.Contains(s, marker+" begin") || !strings.Contains(s, marker+" end") {
 		t.Error("fish snippet missing begin/end markers")
 	}
 }
 
 func TestP10kSnippetHasMarkers(t *testing.T) {
-	s := p10kSnippet()
+	s := p10kSnippet("gs")
 	if !strings.Contains(s, marker+" begin") || !strings.Contains(s, marker+" end") {
 		t.Error("p10k snippet missing begin/end markers")
 	}
@@ -192,7 +192,7 @@ func TestP10kSnippetHasMarkers(t *testing.T) {
 // on every prompt draw (PROMPT_COMMAND fires every prompt, not just on cd).
 
 func TestBashSnippetHasPWDGuard(t *testing.T) {
-	s := nudgeSnippetBash()
+	s := nudgeSnippetBash("gs")
 	if !strings.Contains(s, "__GITSWITCH_LAST_PWD") {
 		t.Error("bash snippet missing __GITSWITCH_LAST_PWD dedup guard")
 	}
@@ -266,7 +266,7 @@ func TestInstallRaw_Idempotent(t *testing.T) {
 	tmp := t.TempDir()
 	rc := tmp + "/.zshrc"
 
-	snippet := nudgeSnippetZsh()
+	snippet := nudgeSnippetZsh("gs")
 	if err := os.WriteFile(rc, []byte(snippet), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +283,7 @@ func TestInstallRaw_Idempotent(t *testing.T) {
 func TestRemoveMarkerBlock_RemovesBlock(t *testing.T) {
 	tmp := t.TempDir()
 	rc := tmp + "/rc.sh"
-	content := "before\n" + nudgeSnippetZsh() + "\nafter\n"
+	content := "before\n" + nudgeSnippetZsh("gs") + "\nafter\n"
 	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestRemoveMarkerBlock_RemovesBlock(t *testing.T) {
 func TestRemoveMarkerBlock_Idempotent(t *testing.T) {
 	tmp := t.TempDir()
 	rc := tmp + "/rc.sh"
-	content := "before\n" + nudgeSnippetZsh() + "\nafter\n"
+	content := "before\n" + nudgeSnippetZsh("gs") + "\nafter\n"
 	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +318,7 @@ func TestRemoveMarkerBlock_Idempotent(t *testing.T) {
 func TestRemoveMarkerBlock_PreservesMode(t *testing.T) {
 	tmp := t.TempDir()
 	rc := tmp + "/rc.sh"
-	content := nudgeSnippetZsh()
+	content := nudgeSnippetZsh("gs")
 	if err := os.WriteFile(rc, []byte(content), 0755); err != nil {
 		t.Fatal(err)
 	}

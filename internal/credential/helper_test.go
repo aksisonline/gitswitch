@@ -7,12 +7,12 @@ import (
 
 func TestParseRequest(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		wantHost string
-		wantProt string
-		wantPath string
-		wantUser string
+		name       string
+		input      string
+		wantHost   string
+		wantProt   string
+		wantPath   string
+		wantUser   string
 		wantNoPort string
 	}{
 		{
@@ -46,9 +46,9 @@ func TestParseRequest(t *testing.T) {
 			wantNoPort: "github.com",
 		},
 		{
-			name:     "value containing equals sign",
-			input:    "password=ab=cd\nhost=github.com\n\n",
-			wantHost: "github.com",
+			name:       "value containing equals sign",
+			input:      "password=ab=cd\nhost=github.com\n\n",
+			wantHost:   "github.com",
 			wantNoPort: "github.com",
 		},
 	}

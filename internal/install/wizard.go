@@ -25,13 +25,13 @@ import (
 // ── palette — mirrors main TUI normal/default theme ──────────────────────────
 
 var (
-	cPrimary  = lipgloss.Color("141") // purple  — borders, labels, keys
-	cAccent   = lipgloss.Color("84")  // green   — checkmarks, YES, success
+	cPrimary   = lipgloss.Color("141") // purple  — borders, labels, keys
+	cAccent    = lipgloss.Color("84")  // green   — checkmarks, YES, success
 	cHighlight = lipgloss.Color("226") // yellow  — selected option
-	cDim      = lipgloss.Color("241") // muted   — secondary text
-	cWhite    = lipgloss.Color("255") // bright  — body text
-	cRed      = lipgloss.Color("196") // error / NO
-	cBgHover  = lipgloss.Color("237") // selected option background
+	cDim       = lipgloss.Color("241") // muted   — secondary text
+	cWhite     = lipgloss.Color("255") // bright  — body text
+	cRed       = lipgloss.Color("196") // error / NO
+	cBgHover   = lipgloss.Color("237") // selected option background
 )
 
 // ── Options / Config ─────────────────────────────────────────────────────────
@@ -84,9 +84,9 @@ func Run(cfg Config, _ io.Writer) (Options, error) {
 // PrintSummary prints the post-install result (plain text, outside TUI).
 func PrintSummary(w io.Writer, shellResult string, shellDone, httpsDone bool, httpsErr error) {
 	check := lipgloss.NewStyle().Foreground(cAccent).Render("✓")
-	skip  := lipgloss.NewStyle().Foreground(cDim).Render("–")
-	warn  := lipgloss.NewStyle().Foreground(cHighlight).Render("⚠")
-	dim   := func(s string) string { return lipgloss.NewStyle().Foreground(cDim).Render(s) }
+	skip := lipgloss.NewStyle().Foreground(cDim).Render("–")
+	warn := lipgloss.NewStyle().Foreground(cHighlight).Render("⚠")
+	dim := func(s string) string { return lipgloss.NewStyle().Foreground(cDim).Render(s) }
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, lipgloss.NewStyle().Bold(true).Foreground(cWhite).Render("  Setup complete"))
@@ -314,7 +314,7 @@ func (m model) viewShell(pw int) string {
 	fwName := frameworkName(m.fw)
 	detectedVal := lipgloss.NewStyle().Foreground(cWhite).Bold(true).Render(shName)
 	if fwName != "" {
-		detectedVal += lipgloss.NewStyle().Foreground(cDim).Render("  ·  "+fwName)
+		detectedVal += lipgloss.NewStyle().Foreground(cDim).Render("  ·  " + fwName)
 	}
 	detected := lipgloss.NewStyle().Foreground(cDim).Render("Detected  ") + detectedVal
 
@@ -449,7 +449,7 @@ func (m model) beforeAfter(w int, before, after, note string) string {
 	return lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(cDim).
-		Width(w-2).
+		Width(w - 2).
 		PaddingLeft(1).PaddingRight(1).
 		Render(lines)
 }
