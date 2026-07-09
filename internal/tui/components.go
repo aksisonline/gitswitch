@@ -4,18 +4,22 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
-// truncate shortens s to maxRunes visible runes, adding "…" if trimmed.
-func truncate(s string, maxRunes int) string {
-	r := []rune(s)
-	if len(r) <= maxRunes {
+// truncate shortens s to maxWidth visible cells, adding "…" if trimmed.
+// ANSI-aware so styled (Render()'d) titles don't get cut mid-escape-sequence.
+func truncate(s string, maxWidth int) string {
+	if lipgloss.Width(s) <= maxWidth {
 		return s
 	}
-	if maxRunes <= 1 {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if maxWidth == 1 {
 		return "…"
 	}
-	return string(r[:maxRunes-1]) + "…"
+	return ansi.Truncate(s, maxWidth, "…")
 }
 
 // renderToggle renders a GUI-style toggle switch as a single inline string.

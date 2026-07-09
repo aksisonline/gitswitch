@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -21,7 +22,7 @@ func (m Model) viewSettingsTab(pw int) string {
 	iw := itemInnerW(pw)
 
 	// Config location box
-	configPath := truncate(m.store.ConfigDir()+"/config.yaml", iw-6)
+	configPath := truncate(filepath.Join(m.store.ConfigDir(), "config.yaml"), iw-6)
 	editChip := lipgloss.NewStyle().Foreground(colorPurple).Render("[✎ edit]")
 	configTitle := "Config Location"
 	if m.arcadeMode {

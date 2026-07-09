@@ -404,12 +404,10 @@ var upgradeCmd = &cobra.Command{
 					wizard.PrintSummary(os.Stdout, "", false, true, nil)
 				}
 			}
-			return ver.RunUpgrade(latest)
+		} else {
+			fmt.Println("Restart your shell to use the new version.")
 		}
-
-		m := tui.NewUpgradeModel(version, isBrewInstall(), store.ConfigDir())
-		_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
-		return err
+		return nil
 	},
 }
 

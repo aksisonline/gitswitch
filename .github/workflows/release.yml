@@ -173,7 +173,7 @@ jobs:
 
   publish:
     name: Create release and tag
-    needs: [version, build]
+    needs: [version, release]
     runs-on: ubuntu-latest
 
     steps:

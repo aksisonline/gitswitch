@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -417,10 +418,18 @@ source <(gitswitch completion zsh)
 `
 }
 
+// aliasNameRe matches safe shell identifiers — the alias is written verbatim
+// into shell RC files (`alias <alias>=...`), so anything else risks injecting
+// shell code into the user's startup files.
+var aliasNameRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
 // Install writes the appropriate integration for the detected framework.
 // alias is the short command alias to add (e.g. "gs"); pass "" to skip the alias line.
 // Returns a human-readable description of what was done.
 func Install(sh Shell, fw Framework, alias string) (string, error) {
+	if alias != "" && !aliasNameRe.MatchString(alias) {
+		return "", fmt.Errorf("invalid alias %q: must match %s", alias, aliasNameRe.String())
+	}
 	home, _ := os.UserHomeDir()
 
 	switch fw {

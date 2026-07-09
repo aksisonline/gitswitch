@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// IsCanaryBuild reports whether the given version is a pre-release (beta/canary/rc) build.
+// IsCanaryBuild reports whether the given version is a pre-release (-beta.N) build.
 func IsCanaryBuild(v string) bool {
 	return IsBeta(v)
 }

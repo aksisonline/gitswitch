@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/aksisonline/gitswitch/internal/git"
@@ -816,7 +817,11 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// hitLabel: pointer is on this exact label. onRow: label anywhere on the row.
 	hitLabel := func(label string) bool {
 		i := strings.Index(ln, label)
-		return i >= 0 && lineX >= i-1 && lineX <= i+lipgloss.Width(label)
+		if i < 0 {
+			return false
+		}
+		cellX := lipgloss.Width(ln[:i])
+		return lineX >= cellX-1 && lineX <= cellX+lipgloss.Width(label)
 	}
 	onRow := func(labels ...string) bool {
 		for _, l := range labels {
@@ -1258,7 +1263,7 @@ func (m Model) openConfigEditor() tea.Cmd {
 	if editor == "" {
 		editor = "vi"
 	}
-	configPath := m.store.ConfigDir() + "/config.yaml"
+	configPath := filepath.Join(m.store.ConfigDir(), "config.yaml")
 	cmd := exec.Command(editor, configPath)
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return editorDoneMsg{err: err}

@@ -47,8 +47,8 @@ func IsBeta(version string) bool {
 }
 
 // CachedLatestVersion returns the best available update for the given current
-// version using a 24-hour disk cache. Beta builds check for newer betas AND
-// stable releases; stable builds check stable releases only.
+// version using a 24-hour disk cache. Beta builds only see newer -beta.N tags
+// (channel-locked); stable builds check stable releases only.
 func CachedLatestVersion(configDir, currentVersion string) string {
 	r := CachedLatestRelease(configDir, currentVersion)
 	return r.Version
@@ -70,7 +70,15 @@ func CachedLatestRelease(configDir, currentVersion string) Release {
 			// upgraded and the cache is from the previous install (e.g. 0.1.x left
 			// version-check.json with v0.1.22; we're now running v0.2.0).
 			if compareVersions(c.LatestVersion, currentVersion) >= 0 {
-				return Release{Version: c.LatestVersion, Notes: c.ReleaseNotes}
+				// Validate the cached tag still exists — guards against a
+				// deleted/yanked release keeping a stale update prompt alive.
+				validateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				exists := tagExists(validateCtx, c.LatestVersion)
+				cancel()
+				if exists {
+					return Release{Version: c.LatestVersion, Notes: c.ReleaseNotes}
+				}
+				_ = os.Remove(cachePath)
 			}
 		}
 	}
