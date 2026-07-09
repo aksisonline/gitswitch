@@ -5,23 +5,26 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Profile struct {
-	Nickname string `json:"nickname"`
-	UserName string `json:"user_name"`
-	Email    string `json:"email"`
-	SignKey  string `json:"sign_key,omitempty"`
-	SSHKey   string `json:"ssh_key,omitempty"`  // path to SSH private key, e.g. ~/.ssh/id_work
-	GHUser   string `json:"gh_user,omitempty"`  // GitHub CLI username for gh auth switch
-	Active   bool   `json:"active"`
+	Nickname string `json:"nickname"  yaml:"nickname"`
+	UserName string `json:"user_name"  yaml:"user_name"`
+	Email    string `json:"email"      yaml:"email"`
+	SignKey  string `json:"sign_key,omitempty"  yaml:"sign_key,omitempty"`
+	SSHKey   string `json:"ssh_key,omitempty"   yaml:"ssh_key,omitempty"`
+	GHUser   string `json:"gh_user,omitempty"   yaml:"gh_user,omitempty"`
+	TokenRef string `json:"token_ref,omitempty" yaml:"token_ref,omitempty"`
+	Active   bool   `json:"active"     yaml:"active"`
 }
 
-// legacyProfile handles migration from old formats.
+// legacyProfile handles migration from older JSON formats.
 type legacyProfile struct {
 	Nickname string `json:"nickname"`
 	UserName string `json:"user_name"`
-	Name     string `json:"name"` // v1 format: was both label and git user.name
+	Name     string `json:"name"` // v1: was both label and git user.name
 	Email    string `json:"email"`
 	SignKey  string `json:"sign_key,omitempty"`
 	SSHKey   string `json:"ssh_key,omitempty"`
@@ -29,9 +32,25 @@ type legacyProfile struct {
 	Active   bool   `json:"active"`
 }
 
-type Store struct {
-	path string
+// configFile is the on-disk YAML schema (v2+).
+type configFile struct {
+	Version  int       `yaml:"version"`
+	Profiles []Profile `yaml:"profiles"`
 }
+
+type Store struct {
+	path        string
+	wasMigrated bool
+	bakCreated  bool
+}
+
+// WasMigrated reports whether Load() performed a first-run migration from
+// profiles.json to config.yaml during this session.
+func (s *Store) WasMigrated() bool { return s.wasMigrated }
+
+// BakCreated reports whether the .v1.bak backup file was successfully created
+// during migration. False means profiles.json may still be present.
+func (s *Store) BakCreated() bool { return s.bakCreated }
 
 func New() (*Store, error) {
 	home, err := os.UserHomeDir()
@@ -45,7 +64,14 @@ func New() (*Store, error) {
 	return &Store{path: path}, nil
 }
 
-func (s *Store) filePath() string {
+// NewAt returns a Store rooted at the given directory. Used by tests.
+func NewAt(path string) *Store { return &Store{path: path} }
+
+func (s *Store) yamlPath() string {
+	return filepath.Join(s.path, "config.yaml")
+}
+
+func (s *Store) legacyJSONPath() string {
 	return filepath.Join(s.path, "profiles.json")
 }
 
@@ -54,7 +80,15 @@ func (s *Store) ConfigDir() string {
 }
 
 type Prefs struct {
-	ColorTheme int `json:"color_theme"`
+	ColorTheme    int  `json:"color_theme"`
+	SplashSeen020 bool `json:"splash_seen_020"`
+	ShellEnabled  bool `json:"shell_enabled"`
+	// ShowUsername toggles the Accounts secondary column between email
+	// (zero value / default) and the GitHub username.
+	ShowUsername       bool   `json:"show_username"`
+	ShellAlias         string `json:"shell_alias"`
+	ShellAliasDisabled bool   `json:"shell_alias_disabled"` // zero value = enabled (default on)
+	ArcadeHiScore      int    `json:"arcade_hi_score,omitempty"`
 }
 
 func (s *Store) prefsPath() string {
@@ -76,6 +110,9 @@ func (s *Store) LoadPrefs() (Prefs, error) {
 	if p.ColorTheme < 0 || p.ColorTheme >= 12 {
 		p.ColorTheme = 0
 	}
+	if p.ShellAlias == "" {
+		p.ShellAlias = "gs"
+	}
 	return p, nil
 }
 
@@ -88,21 +125,49 @@ func (s *Store) SavePrefs(p Prefs) error {
 }
 
 func (s *Store) Load() ([]Profile, error) {
-	data, err := os.ReadFile(s.filePath())
+	// Primary: config.yaml
+	if data, err := os.ReadFile(s.yamlPath()); err == nil {
+		var cf configFile
+		if err := yaml.Unmarshal(data, &cf); err != nil {
+			// config.yaml corrupt — try backups before giving up
+			if bakData, bakErr := os.ReadFile(s.legacyJSONPath() + ".v1.bak"); bakErr == nil {
+				return s.migrateFromJSON(bakData)
+			}
+			// Also try original profiles.json in case .v1.bak rename failed
+			if jsonData, jsonErr := os.ReadFile(s.legacyJSONPath()); jsonErr == nil {
+				return s.migrateFromJSON(jsonData)
+			}
+			return nil, fmt.Errorf("parse config.yaml: %w (no backup found)", err)
+		}
+		return cf.Profiles, nil
+	}
+
+	// Migration path: profiles.json exists, config.yaml does not
+	data, err := os.ReadFile(s.legacyJSONPath())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []Profile{}, nil
 		}
 		return nil, err
 	}
+	profiles, err := s.migrateFromJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	// Write config.yaml atomically and rename old file
+	if saveErr := s.Save(profiles); saveErr == nil {
+		s.wasMigrated = true
+		s.bakCreated = os.Rename(s.legacyJSONPath(), s.legacyJSONPath()+".v1.bak") == nil
+	}
+	return profiles, nil
+}
 
+func (s *Store) migrateFromJSON(data []byte) ([]Profile, error) {
 	var raw []legacyProfile
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
-
 	profiles := make([]Profile, len(raw))
-	needsMigration := false
 	for i, r := range raw {
 		p := Profile{
 			Nickname: r.Nickname,
@@ -115,28 +180,32 @@ func (s *Store) Load() ([]Profile, error) {
 		}
 		if p.UserName == "" && r.Name != "" {
 			p.UserName = r.Name
-			needsMigration = true
 		}
 		if p.Nickname == "" && p.UserName != "" {
 			p.Nickname = p.UserName
-			needsMigration = true
 		}
 		profiles[i] = p
 	}
-
-	if needsMigration {
-		_ = s.Save(profiles)
-	}
-
 	return profiles, nil
 }
 
 func (s *Store) Save(profiles []Profile) error {
-	data, err := json.MarshalIndent(profiles, "", "  ")
+	cf := configFile{Version: 2, Profiles: profiles}
+	data, err := yaml.Marshal(cf)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.filePath(), data, 0600)
+	tmp := s.yamlPath() + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, s.yamlPath()); err != nil {
+		// On Windows, Rename fails when the destination already exists.
+		// Remove dest and retry once.
+		_ = os.Remove(s.yamlPath())
+		return os.Rename(tmp, s.yamlPath())
+	}
+	return nil
 }
 
 func (s *Store) Add(nickname, userName, email, signKey, sshKey, ghUser string) error {

@@ -83,7 +83,30 @@ gitswitch current     # confirm the new identity is active
 git config --global user.email   # double-check git sees it
 ```
 
-If the user had already made commits with the wrong identity on a branch, let them know that `gitswitch` fixes *future* commits — amending history is a separate step (and usually unnecessary unless they haven't pushed yet).
+If the user already made commits with the wrong identity, don't hand-run `git rebase`/`git commit --amend` yourself — use `gitswitch reauthor` (below). It's one command instead of a multi-step git dance, and it's the tool the user expects to own this.
+
+---
+
+## Fixing already-made commits — `gitswitch reauthor`
+
+When commits were authored under the wrong profile (before the user switched, or before a profile existed), rewrite them in one step instead of scripting `git rebase`/`git commit --amend` yourself:
+
+```bash
+gitswitch reauthor <base> --to <nickname> [--from <old-email>] [--push] [--yes]
+```
+
+- `<base>` — a commit-ish (`HEAD~3`, a SHA) or a bare number N meaning "the last N commits". Range rewritten is `(base, HEAD]`.
+- `--to <nickname>` — required; the profile whose name/email gets applied.
+- `--from <old-email>` — optional filter; only commits currently authored by this email are rewritten, others in range are left alone. Use this when the range mixes commits from multiple identities.
+- `--push` — force-pushes (`--force-with-lease`) after rewriting. Without it, the rewrite is local only.
+- `--yes` — skips the interactive y/N prompts. **Ask the user before passing `--yes`, especially with `--push`** — rewriting pushed history is destructive to anyone else who has pulled the branch. Confirm scope (which commits, which identity) in plain language first, then run it.
+
+Example — the two most recent commits were made as the old identity before switching to `work`:
+```bash
+gitswitch reauthor 2 --to work --push
+```
+
+Requires a clean working tree (it rebases). If a merge conflict interrupts the rebase, gitswitch leaves the repo mid-rebase and tells you to run `git rebase --abort` to bail out — do that and report back to the user rather than trying to resolve conflicts on their behalf.
 
 ---
 

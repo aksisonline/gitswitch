@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,9 @@ import (
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/history"
 	wizard "github.com/aksisonline/gitswitch/internal/install"
+	gsoauth "github.com/aksisonline/gitswitch/internal/oauth"
+	"github.com/aksisonline/gitswitch/internal/prereqs"
+	secretsStore "github.com/aksisonline/gitswitch/internal/secrets"
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	"github.com/aksisonline/gitswitch/internal/tui"
@@ -41,7 +45,8 @@ func init() {
 
 var rootCmd = &cobra.Command{
 	Use:   "gitswitch [nickname]",
-	Short: "Manage git profiles — run without args for interactive UI",
+	Short: "Switch between GitHub accounts on one machine",
+	Long:  `Run without arguments to open the profile picker.`,
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := ensureInitialized(); err != nil {
@@ -59,8 +64,75 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
-		return err
+		result, err := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseAllMotion()).Run()
+		if err != nil {
+			return err
+		}
+		if final, ok := result.(tui.Model); ok {
+			if final.PendingReloadCmd != "" {
+				fmt.Println()
+				fmt.Println("  Shell integration installed. Reload your shell:")
+				fmt.Println()
+				fmt.Printf("    %s\n", final.PendingReloadCmd)
+				fmt.Println()
+			}
+			if final.LaunchLogin {
+				fmt.Println()
+				fmt.Println("  Run  gs login  to connect your first GitHub account.")
+				fmt.Println()
+			}
+			if final.LaunchOAuth {
+				fmt.Println()
+				fmt.Println("  ┌──────────────────────────────────────────┐")
+				fmt.Println("  │  gitswitch · Log in with GitHub          │")
+				fmt.Println("  └──────────────────────────────────────────┘")
+				token, user, err := gsoauth.Login("", "")
+				if err != nil {
+					fmt.Printf("\n  ✗  %v\n\n", err)
+					return nil
+				}
+				nickname := user.Login
+				ref := fmt.Sprintf("gitswitch:%s:github.com", nickname)
+				secrets := secretsStore.Default()
+				if secrets.Available() {
+					if err := secrets.Set(ref, token); err != nil {
+						fmt.Printf("  ⚠  Could not store token in keychain: %v\n", err)
+					}
+				}
+				name := user.Name
+				if name == "" {
+					name = user.Login
+				}
+				if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
+					_ = store.Update(nickname, storage.Profile{
+						Nickname: nickname,
+						UserName: name,
+						Email:    user.Email,
+						GHUser:   user.Login,
+						TokenRef: ref,
+					})
+				} else {
+					_ = store.Update(nickname, storage.Profile{
+						Nickname: nickname,
+						UserName: name,
+						Email:    user.Email,
+						GHUser:   user.Login,
+						TokenRef: ref,
+					})
+				}
+				profiles, _ := store.Load()
+				if len(profiles) == 1 {
+					_ = store.SetActive(nickname)
+				}
+				fmt.Printf("\n  ✓  Logged in as %s (github.com)\n", user.Login)
+				fmt.Printf("  ✓  Profile %q created\n", nickname)
+				if secrets.Available() {
+					fmt.Println("  ✓  Token stored in keychain")
+				}
+				fmt.Printf("\n  Next: run  gs switch %s  to activate\n\n", nickname)
+			}
+		}
+		return nil
 	},
 }
 
@@ -95,13 +167,9 @@ func ensureInitialized() error {
 		return err
 	}
 	if len(profiles) == 0 {
-		fmt.Println("First startup: importing existing git config...")
-		if err := store.ImportCurrent(); err != nil {
-			fmt.Printf("Could not auto-import: %v\n", err)
-			fmt.Println("Tip: gitswitch add <nickname> <user-name> <email>")
-			return nil
-		}
-		fmt.Println("✓ Imported as 'default' profile")
+		// Try to import current git config silently as a convenience.
+		// If it fails, the TUI will show the welcome screen instead.
+		_ = store.ImportCurrent()
 	}
 	return nil
 }
@@ -238,14 +306,15 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show current version and check for updates",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Printf("gitswitch %s\n", version)
-		latest := ver.CachedLatestVersion(store.ConfigDir())
+		bin := filepath.Base(os.Args[0])
+		fmt.Printf("%s %s\n", bin, version)
+		latest := ver.CachedLatestVersion(store.ConfigDir(), version)
 		if latest != "" && ver.IsUpdateAvailable(version, latest) {
 			fmt.Printf("New version available: %s\n", latest)
 			if isBrewInstall() {
-				fmt.Println("Run: brew upgrade gitswitch")
+				fmt.Printf("Run: brew upgrade gitswitch\n")
 			} else {
-				fmt.Println("Run: gitswitch upgrade")
+				fmt.Printf("Run: %s upgrade\n", bin)
 			}
 		} else if latest != "" {
 			fmt.Println("Already on latest version.")
@@ -265,7 +334,7 @@ var pacmanCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
+		_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseAllMotion()).Run()
 		return err
 	},
 }
@@ -299,20 +368,120 @@ var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Check for updates and upgrade gitswitch",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Yanked version: bypass TUI and force upgrade immediately.
-		if !ver.CurrentVersionExists(version) {
-			fmt.Printf("Current version %s was removed from releases. Forcing upgrade...\n", version)
-			latest, err := ver.FetchLatestVersionFresh()
-			if err != nil {
-				return fmt.Errorf("could not fetch latest version: %w", err)
+		if isBrewInstall() {
+			fmt.Println("gitswitch was installed via Homebrew.")
+			fmt.Println("Run: brew upgrade gitswitch")
+			return nil
+		}
+		fmt.Println("Checking for updates...")
+		latest, err := ver.FetchLatestVersionFreshFor(version)
+		if err != nil {
+			return fmt.Errorf("could not fetch latest version: %w", err)
+		}
+		if !ver.IsUpdateAvailable(version, latest) {
+			fmt.Printf("Already on latest version (%s).\n", version)
+			return nil
+		}
+		fmt.Printf("Upgrading %s → %s...\n", version, latest)
+		if err := ver.RunUpgrade(latest); err != nil {
+			return fmt.Errorf("upgrade failed: %w", err)
+		}
+		fmt.Println("✓ Upgrade complete.")
+		fmt.Println()
+
+		// If shell is installed but credential helper is not, run the wizard
+		// immediately so the user can activate new features without a separate step.
+		sh := shell.DetectShell()
+		if shell.IsInstalled(shell.RCFile(sh)) && !git.IsCredentialHelperInstalled() {
+			fmt.Println("New features available in this version.")
+			fmt.Println("Launching setup to activate them...")
+			fmt.Println()
+			opts, err := wizard.Run(wizard.Config{HTTPSDefault: true}, os.Stdout)
+			if err == nil && opts.InstallHTTPS {
+				if herr := git.InstallCredentialHelper(); herr != nil {
+					fmt.Printf("  warning: could not register HTTPS credential helper: %v\n", herr)
+				} else {
+					wizard.PrintSummary(os.Stdout, "", false, true, nil)
+				}
 			}
 			return ver.RunUpgrade(latest)
 		}
 
 		m := tui.NewUpgradeModel(version, isBrewInstall(), store.ConfigDir())
-		_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
+		_, err = tea.NewProgram(m, tea.WithAltScreen()).Run()
 		return err
 	},
+}
+
+var reauthorCmd = &cobra.Command{
+	Use:   "reauthor <base>",
+	Short: "Rewrite author/committer identity on already-made commits",
+	Long: `Rewrites the author and committer of every commit between <base> and HEAD
+to a stored profile's identity. <base> is a commit-ish (e.g. HEAD~3, a SHA) or
+a bare number N meaning "the last N commits".
+
+Use --from to only touch commits currently authored by a given email
+(the pre-switch account), leaving other commits in range untouched.
+
+This rewrites history. If the branch is already pushed, pass --push to
+force-push (--force-with-lease) afterward, or do it yourself once you've
+checked the result.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		to, _ := cmd.Flags().GetString("to")
+		from, _ := cmd.Flags().GetString("from")
+		push, _ := cmd.Flags().GetBool("push")
+		yes, _ := cmd.Flags().GetBool("yes")
+		if to == "" {
+			return fmt.Errorf("--to <nickname> is required")
+		}
+		p, err := store.Get(to)
+		if err != nil {
+			return err
+		}
+		if !git.IsWorkingTreeClean() {
+			return fmt.Errorf("working tree not clean — commit or stash changes before reauthoring")
+		}
+		base := git.ResolveReauthorBase(args[0])
+
+		fmt.Printf("This rewrites commit history from %s to HEAD, setting author to %s <%s>", base, p.UserName, p.Email)
+		if from != "" {
+			fmt.Printf(" (commits currently authored by %s only)", from)
+		}
+		fmt.Println(".")
+		if !yes && !confirm("Proceed?") {
+			fmt.Println("Aborted.")
+			return nil
+		}
+
+		if err := git.Reauthor(base, from, p.UserName, p.Email); err != nil {
+			return err
+		}
+		fmt.Println("✓ History rewritten.")
+
+		if push {
+			if !yes && !confirm("Force-push (--force-with-lease) now?") {
+				fmt.Println("Skipped push — history rewritten locally only. Push manually when ready.")
+				return nil
+			}
+			if err := git.PushForceWithLease(); err != nil {
+				return fmt.Errorf("push failed: %w", err)
+			}
+			fmt.Println("✓ Pushed.")
+		} else {
+			fmt.Println("Local only — pass --push to force-push, or push manually.")
+		}
+		return nil
+	},
+}
+
+// confirm prompts the user with a y/N question on stdin.
+func confirm(question string) bool {
+	fmt.Printf("%s [y/N] ", question)
+	var resp string
+	fmt.Scanln(&resp)
+	resp = strings.ToLower(strings.TrimSpace(resp))
+	return resp == "y" || resp == "yes"
 }
 
 var pinCmd = &cobra.Command{
@@ -380,8 +549,8 @@ var recordCmd = &cobra.Command{
 var errNoRecommendation = fmt.Errorf("")
 
 var recommendCmd = &cobra.Command{
-	Use:          "recommend",
-	Short:        "Print recommended profile for current repo (used by shell hooks)",
+	Use:           "recommend",
+	Short:         "Print recommended profile for current repo (used by shell hooks)",
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -474,7 +643,7 @@ prompts (for scripts and CI).`,
 
 		var shellResult string
 		if opts.InstallShell {
-			shellResult, err = shell.Install(opts.Shell, opts.Framework)
+			shellResult, err = shell.Install(opts.Shell, opts.Framework, "gs")
 			if err != nil {
 				return fmt.Errorf("shell install failed: %w", err)
 			}
@@ -543,6 +712,91 @@ var credentialCmd = &cobra.Command{
 	},
 }
 
+var loginCmd = &cobra.Command{
+	Use:   "login",
+	Short: "Connect a GitHub account",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		host, _ := cmd.Flags().GetString("host")
+		clientID, _ := cmd.Flags().GetString("client-id")
+		profileName, _ := cmd.Flags().GetString("profile")
+
+		fmt.Println()
+		fmt.Println("  ┌──────────────────────────────────────────┐")
+		fmt.Println("  │  gitswitch · Log in with GitHub          │")
+		fmt.Println("  └──────────────────────────────────────────┘")
+
+		token, user, err := gsoauth.Login(host, clientID)
+		if err != nil {
+			fmt.Println()
+			fmt.Printf("  ✗  %v\n\n", err)
+			return nil
+		}
+
+		nickname := profileName
+		if nickname == "" {
+			nickname = user.Login
+		}
+
+		// Store token in OS keychain
+		ref := fmt.Sprintf("gitswitch:%s:%s", nickname, host)
+		if host == "" {
+			ref = fmt.Sprintf("gitswitch:%s:github.com", nickname)
+		}
+		secrets := secretsStore.Default()
+		if secrets.Available() {
+			if err := secrets.Set(ref, token); err != nil {
+				fmt.Printf("  ⚠  Could not store token in keychain: %v\n", err)
+			}
+		}
+
+		// Create profile
+		name := user.Name
+		if name == "" {
+			name = user.Login
+		}
+		if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
+			// Profile exists — update TokenRef only
+			_ = store.Update(nickname, storage.Profile{
+				Nickname: nickname,
+				UserName: name,
+				Email:    user.Email,
+				GHUser:   user.Login,
+				TokenRef: ref,
+			})
+		} else {
+			// Set TokenRef on the newly created profile
+			_ = store.Update(nickname, storage.Profile{
+				Nickname: nickname,
+				UserName: name,
+				Email:    user.Email,
+				GHUser:   user.Login,
+				TokenRef: ref,
+			})
+		}
+
+		// Make first profile active
+		profiles, _ := store.Load()
+		if len(profiles) == 1 {
+			_ = store.SetActive(nickname)
+		}
+
+		fmt.Println()
+		fmt.Printf("  ✓  Logged in as %s (%s)\n", user.Login, func() string {
+			if host == "" {
+				return "github.com"
+			}
+			return host
+		}())
+		fmt.Printf("  ✓  Profile %q created\n", nickname)
+		if secrets.Available() {
+			fmt.Println("  ✓  Token stored in keychain")
+		}
+		fmt.Println()
+		fmt.Printf("  Next: run  gs switch %s  to activate\n\n", nickname)
+		return nil
+	},
+}
+
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall",
 	Short: "Remove shell integration written by 'gitswitch install'",
@@ -582,8 +836,88 @@ var uninstallCmd = &cobra.Command{
 	},
 }
 
+var doctorCmd = &cobra.Command{
+	Use:   "doctor",
+	Short: "Check that git and gh are installed and up to date",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		r := prereqs.Check()
+		if jsonOut {
+			fmt.Printf("%s\n", r.JSON())
+			return nil
+		}
+		fmt.Println()
+		if r.Git.Installed {
+			fmt.Printf("  ✓  git %s\n", r.Git.Version)
+		} else {
+			fmt.Println("  ✗  git  not found")
+		}
+		if r.GH.Installed {
+			fmt.Printf("  ✓  gh  %s\n", r.GH.Version)
+		} else {
+			fmt.Println("  ⚠  gh   not found (optional)")
+		}
+		fmt.Println()
+		prereqs.PrintWarnings(r)
+		return nil
+	},
+}
+
+var setupCmd = &cobra.Command{
+	Use:   "setup",
+	Short: "Check requirements and show next steps",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		agentMode, _ := cmd.Flags().GetBool("agent")
+		r := prereqs.Check()
+
+		if agentMode {
+			profiles, _ := store.Load()
+			manifest := map[string]interface{}{
+				"tool":    "gitswitch",
+				"version": version,
+				"state": map[string]interface{}{
+					"profiles": len(profiles),
+					"git":      r.Git,
+					"gh":       r.GH,
+				},
+			}
+			b, _ := json.MarshalIndent(manifest, "", "  ")
+			fmt.Printf("%s\n", b)
+			return nil
+		}
+
+		fmt.Println()
+		fmt.Println("  Checking requirements...")
+		fmt.Println()
+		if r.Git.Installed {
+			fmt.Printf("  ✓  git %s\n", r.Git.Version)
+		} else {
+			fmt.Println("  ✗  git  not found")
+		}
+		if r.GH.Installed {
+			fmt.Printf("  ✓  gh  %s\n", r.GH.Version)
+		} else {
+			fmt.Println("  ⚠  gh   not found")
+		}
+		fmt.Println()
+		prereqs.PrintWarnings(r)
+
+		if r.AllOK() {
+			profiles, _ := store.Load()
+			if len(profiles) == 0 {
+				fmt.Println("  No accounts yet.  Run  gs login  to get started.")
+				fmt.Println()
+			} else {
+				fmt.Printf("  %d profile(s) configured.  Run  gs  to open the picker.\n", len(profiles))
+				fmt.Println()
+			}
+		}
+		return nil
+	},
+}
+
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, betaCmd, stableCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, doctorCmd, setupCmd, loginCmd, betaCmd, stableCmd, reauthorCmd)
 	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
@@ -596,6 +930,15 @@ func main() {
 	installCmd.Flags().BoolP("yes", "y", false, "Accept all defaults without prompts (for scripts and CI)")
 	uninstallCmd.Flags().String("shell", "", "Shell to uninstall for: zsh, bash, or fish (default: auto-detect)")
 	claudeCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills) or 'project' (.claude/skills)")
+	doctorCmd.Flags().Bool("json", false, "Output machine-readable JSON")
+	setupCmd.Flags().Bool("agent", false, "Emit machine-readable setup manifest for AI agents")
+	loginCmd.Flags().String("host", "", "GitHub host (default: github.com)")
+	loginCmd.Flags().String("client-id", "", "OAuth app client ID (overrides built-in)")
+	loginCmd.Flags().String("profile", "", "Profile nickname to create (default: GitHub username)")
+	reauthorCmd.Flags().String("to", "", "Profile nickname to attribute commits to (required)")
+	reauthorCmd.Flags().String("from", "", "Only rewrite commits currently authored by this email")
+	reauthorCmd.Flags().Bool("push", false, "Force-push (--force-with-lease) after rewriting")
+	reauthorCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompts (for scripts and agents)")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

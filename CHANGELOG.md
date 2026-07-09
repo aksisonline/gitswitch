@@ -1,38 +1,68 @@
 # Changelog
 
-## v0.2.0
-
-### What's New
-
-**gitswitch Beta is here — opt in to get the next generation of features early.**
-
-The beta channel is live and already ships several big upgrades:
-
-- **New UI** — rebuilt from the ground up, faster navigation and a cleaner look
-- **Custom Alias** — give any profile a short name and switch to it in one word
-- **OAuth Support** — connect your GitHub account without ever touching a token manually (uses GitHub's device flow)
-- **Easier Setup Flow** — first-run wizard walks you through everything in under a minute, no config file editing required
-
-To switch to beta:
-
-```sh
-gitswitch upgrade --channel beta
-```
-
-Or install fresh:
-
-```sh
-curl -fsSL https://gitswitch.dev/install.sh | bash -s -- --channel beta
-```
-
-Feedback and bug reports → https://github.com/aksisonline/gitswitch/issues
+All notable changes to gitswitch are documented here.
+Format: `[version] — date — summary`
 
 ---
 
-- Migrated CI/CD to GoReleaser — releases are now faster, Homebrew tap updates automatically, and checksums are always published
-- Added What's New splash screen — shows release highlights the first time you launch after a significant update (minor or major version)
+## [Unreleased]
 
-### Bug Fixes
+### Fixed
+- **Mouse works on every screen** — clicks are now hit-tested against the actual rendered output instead of hardcoded row offsets, so the Utilities and Settings boxes, wizard buttons, update prompt, tips, shell-confirm dialog, and arcade mode (whose score line shifted everything by one row) all respond correctly. Item-box clicks previously used a 5-row grid for 4-row boxes and often focused the wrong item or did nothing.
+- **Channel-locked update checks** — canary (beta) builds no longer get update notifications for stable releases, and vice versa. Moving between channels is explicit via `gitswitch stable` / `gitswitch beta`. Canary builds also keep receiving betas of newer targets (previously only same-base betas were offered).
+- **Arcade select flash no longer wraps** — the flash row was rendered 2 columns wider than the panel and broke the layout mid-animation; it now matches the list rows (including the email/username toggle).
+- **Edit form survives delete-cancel** — pressing `n` on the delete confirmation rebuilds the edit form with the profile's values instead of a stale/blank seed.
+- **Onboarding welcome** — removed the decorative "Import config file" button (feature doesn't exist); "Skip for now" is now clickable and actually skips.
+- **Mouse now works on Add/Edit Profile and Delete confirm** — huh (the form library) has no mouse support of its own; clicking a field's title, description, or input now focuses it, matching the rest of the app. Delete confirm's "confirm delete" / "cancel" labels are now clickable too.
 
-- Fixed: forced upgrade when running a version that was pulled from GitHub
-- Fixed: update banner no longer shows for a release that no longer exists (validates cached tag before displaying)
+### Added
+- **`gitswitch reauthor`** — rewrites author/committer identity on already-made commits to a stored profile in one command (`gitswitch reauthor <base> --to <nickname> [--from <old-email>] [--push]`), instead of hand-scripting `git rebase`/`git commit --amend`. `--from` scopes the rewrite to commits currently authored by a given email; `--push` force-pushes (`--force-with-lease`) after. Built so Claude/agents can fix pre-switch attribution in one call instead of a multi-step git dance.
+- **Tabs in arcade mode** — `1/2/3`, `tab`, and mouse clicks now switch tabs in arcade mode too, unlocking the arcade skins of the Utilities and Settings tabs (SHELL HOOK, SAVE FILE LOCATION, …) that were previously unreachable.
+- **Hover focus** — moving the mouse over profile rows and Utilities/Settings boxes moves the cursor/focus, like a real menu. Scroll wheel also moves focus on the Settings tab and in wizard lists.
+- **Persistent arcade high score** — HIGH SCORE survives restarts (`arcade_hi_score` in config.json); switching identities scores 200, adding/editing a profile 500. Factory high score is a beatable 5000.
+- **Wizard mouse support** — import list rows toggle on click, Import/Skip buttons work, detect screen advances on click. Detect and what's-new hints now say "or click" so the affordance isn't hidden.
+
+### Changed
+- Active tab is now rendered as a highlighted chip; arcade tab strip uses pellet separators.
+
+---
+
+## [v0.2.0-beta.12] — 2026-06-25
+
+### Fixed
+- **Shell alias actually applied** — toggling or renaming the alias now auto-reinstalls the shell integration block in-place (uninstall + install) so the change takes effect on next shell reload. No manual reinstall required.
+- `shell.Install` no longer overrides an empty alias with `"gs"` — empty now correctly skips the alias line.
+
+### Added
+- **Release notes in update screen** — when a newer version is available, the update prompt shows the GitHub release body (what's changed) fetched alongside the version check and cached to disk.
+
+---
+
+## [v0.2.0-beta.11] — 2026-06-25
+
+### Added
+- **Shell alias toggle** — Settings tab now shows a "Shell Alias" item with an on/off toggle (`enter` to toggle, `e` to rename). Default alias is `gs`.
+- **Editable alias name** — Rename the short alias from within the TUI; value persisted to `config.json`.
+- **Alias in shell snippets** — All shell integrations (zsh, bash, fish, p10k) now include `alias gs=gitswitch` (or the configured alias) in the installed block. Alias is omitted from the snippet when disabled.
+
+### Fixed
+- **Mouse clicks broken after editor** — Returning from an external editor (nano/vi) no longer kills mouse tracking; `tea.EnableMouseCellMotion` is re-sent on `editorDoneMsg`.
+
+---
+
+## [v0.2.0-beta.9] — 2026-06-25
+
+### Added
+- **Shell alias (initial)** — Editable alias field in Settings tab (`ShellAlias` in prefs, default `"gs"`).
+- Shell snippets updated to include `alias gs=gitswitch`.
+
+### Fixed
+- **Mouse after editor** — Re-enable mouse cell motion on return from external config editor.
+
+---
+
+## [v0.2.0-beta.8] — 2026-06-24
+
+### Fixed
+- Derive panel top-Y from actual render height instead of hardcoded estimates.
+- Stable status line height; disable utility nav with single item.

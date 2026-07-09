@@ -2,11 +2,29 @@ package tui
 
 import (
 	"github.com/aksisonline/gitswitch/internal/git"
+	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	ver "github.com/aksisonline/gitswitch/internal/version"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// openProfileForm builds the huh add/edit form seeded from the given values
+// and returns the form's Init command. edit=true wires the edit copy.
+func (m *Model) openProfileForm(edit bool, seed [6]string) tea.Cmd {
+	m.formData = &profileFormData{
+		nickname: seed[0],
+		userName: seed[1],
+		email:    seed[2],
+		signKey:  seed[3],
+		sshKey:   seed[4],
+		ghUser:   seed[5],
+	}
+	m.form = newProfileForm(m.formData, edit, m.panelWidth()-6)
+	return m.form.Init()
+}
 
 type State int
 
@@ -20,7 +38,14 @@ const (
 	StateSelectFlash
 	StateTransition
 	StateExitAnim
-	StateWhatsNew
+	StateWhatsNew      // one-time upgrade splash for v0.1.x users
+	StateUpdatePrompt  // shown when a newer version is found on launch
+	StateWizardWelcome // new-user onboarding step 0
+	StateWizardDetect  // new-user step 1: scanning for existing configs
+	StateWizardImport  // new-user step 2: import confirmation
+	StateWizardAddMore // new-user step 3: add more accounts
+	StateWizardDone    // new-user step 4: complete
+	StateShellConfirm  // confirm install/uninstall of shell integration
 )
 
 type Model struct {
@@ -32,15 +57,20 @@ type Model struct {
 	width    int
 	height   int
 
-	formFields  [6]string // nickname, user_name, email, sign_key, ssh_key, gh_user
+	formFields  [6]string // seed values when entering the add/edit form
 	formFocus   int
 	editingNick string
+
+	// huh-powered add/edit form (nil unless in StateAdd/StateEdit)
+	form     *huh.Form
+	formData *profileFormData
 
 	statusMsg   string
 	statusIsErr bool
 
 	currentVersion  string
 	latestVersion   string
+	releaseNotes    string
 	updateAvailable bool
 
 	colorTheme int // 0-11 normal palette index
@@ -63,6 +93,40 @@ type Model struct {
 	// pacman score state — purely cosmetic
 	score   int
 	hiScore int
+
+	// Tab navigation (used when state == StateList)
+	tabIndex int // 0=Accounts 1=Utilities 2=Settings
+
+	// Utilities tab focus (0=shell, 1=precommit, 2=credential)
+	utilityFocus int
+	// Settings tab focus (0=config, 1=theme)
+	settingsFocus int
+	// Shell integration toggle
+	shellEnabled bool
+	// Accounts secondary column: false=email (default), true=GitHub username
+	showUsername bool
+
+	// Shell-integration confirm dialog state
+	pendingShellInstall bool // true = about to install, false = about to remove
+	shellReturnTab      int  // tab to return to after the dialog
+
+	// New-user wizard
+	wizardStep       int
+	detectedProfiles []storage.Profile
+	importSelected   []bool
+
+	// Upgrade splash
+	splashSeen020 bool
+
+	// Shell alias (editable in Settings tab)
+	shellAlias         string
+	shellAliasDisabled bool
+	aliasEditing       bool
+	aliasInput         textinput.Model
+
+	LaunchLogin      bool
+	LaunchOAuth      bool
+	PendingReloadCmd string
 
 	whatsNewBody   string
 	whatsNewScroll int
@@ -93,7 +157,10 @@ func WithArcadeMode() Option {
 		m.arcadeMode = true
 		m.state = StateIntro
 		m.introMouthOpen = true
-		m.hiScore = 99990
+		// Beatable factory high score — real high scores persist via prefs.
+		if m.hiScore < 5000 {
+			m.hiScore = 5000
+		}
 	}
 }
 
@@ -117,30 +184,73 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 	if prefs.ColorTheme < 0 || prefs.ColorTheme >= len(normalThemes) {
 		prefs.ColorTheme = 0
 	}
+	shellAlias := prefs.ShellAlias
+	if shellAlias == "" {
+		shellAlias = "gs"
+	}
+	aliasInput := textinput.New()
+	aliasInput.CharLimit = 32
+	aliasInput.Width = 20
 	m := &Model{
-		store:          store,
-		profiles:       profiles,
-		active:         active,
-		state:          StateList,
-		currentVersion: currentVersion,
-		colorTheme:     prefs.ColorTheme,
+		store:              store,
+		profiles:           profiles,
+		active:             active,
+		state:              StateList,
+		currentVersion:     currentVersion,
+		colorTheme:         prefs.ColorTheme,
+		shellEnabled:       shell.IsInstalled(shell.RCFile(shell.DetectShell())),
+		showUsername:       prefs.ShowUsername,
+		splashSeen020:      prefs.SplashSeen020,
+		hiScore:            prefs.ArcadeHiScore,
+		shellAlias:         shellAlias,
+		shellAliasDisabled: prefs.ShellAliasDisabled,
+		aliasInput:         aliasInput,
 	}
 	for _, opt := range opts {
 		opt(m)
+	}
+	if store.WasMigrated() {
+		if store.BakCreated() {
+			m.statusMsg = "Profiles migrated to config.yaml (backup: profiles.json.v1.bak)"
+		} else {
+			m.statusMsg = "Profiles migrated to config.yaml"
+		}
+	}
+	if !m.arcadeMode {
+		if len(profiles) == 0 {
+			m.state = StateWizardWelcome
+		} else if !prefs.SplashSeen020 {
+			m.state = StateWhatsNew
+		}
 	}
 	return m, nil
 }
 
 func (m Model) Init() tea.Cmd {
 	configDir := m.store.ConfigDir()
+	cv := m.currentVersion
 	versionCmd := func() tea.Msg {
-		latest := ver.CachedLatestVersion(configDir)
-		return versionCheckMsg{latest: latest}
+		rel := ver.CachedLatestRelease(configDir, cv)
+		return versionCheckMsg{latest: rel.Version, notes: rel.Notes}
 	}
 	if m.arcadeMode {
 		return tea.Batch(versionCmd, arcadeTickCmd())
 	}
 	return versionCmd
+}
+
+// savePrefs persists all current preference fields in one place so callers
+// never accidentally clobber a field by omitting it from a struct literal.
+func (m *Model) savePrefs() error {
+	return m.store.SavePrefs(storage.Prefs{
+		ColorTheme:         m.colorTheme,
+		SplashSeen020:      m.splashSeen020,
+		ShellEnabled:       m.shellEnabled,
+		ShowUsername:       m.showUsername,
+		ShellAlias:         m.shellAlias,
+		ShellAliasDisabled: m.shellAliasDisabled,
+		ArcadeHiScore:      m.hiScore,
+	})
 }
 
 func (m Model) panelWidth() int {
