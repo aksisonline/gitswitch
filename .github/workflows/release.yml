@@ -193,13 +193,6 @@ jobs:
           cat gitswitch-*.sha256 > checksums.txt 2>/dev/null || echo "No checksums"
           ls -la
 
-      - name: Package skill file
-        run: |
-          mkdir -p gitswitch-skill
-          cp cmd/gitswitch/skill/SKILL.md gitswitch-skill/SKILL.md
-          zip -j release/gitswitch.skill gitswitch-skill/SKILL.md
-          echo "Packaged skill: $(ls -lh release/gitswitch.skill)"
-
       - name: Include install scripts
         run: |
           cp .github/install.ps1 release/install.ps1
