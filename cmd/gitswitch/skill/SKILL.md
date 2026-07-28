@@ -170,6 +170,30 @@ personal — Alice <alice@personal.dev>                      # global identity
 Check this in Step 1 before switching: if the repo is already pinned, a global
 `switch` will not change what commits here use, and switching is the wrong fix.
 
+## When HTTPS pushes use the wrong account
+
+If commits are attributed correctly but a **push** is rejected with something like
+`Permission to owner/repo denied to <other-account>`, the identity is fine and the
+*credential* is wrong. Diagnose with:
+
+```bash
+gitswitch doctor
+```
+
+Git asks credential helpers in config order and takes the first answer, so another
+tool's helper (usually `gh auth setup-git`'s) can be asked before gitswitch. doctor
+names it; `gitswitch install` repairs the order without removing the other helper.
+Re-running `gh auth setup-git` or an interactive `gh auth login` undoes the repair,
+so if it recurs, that is why.
+
+Do not "fix" this by running `gh auth switch` unless the user asks — that changes
+their active GitHub account machine-wide, which may be in use by another terminal
+or agent. To push once with the right token without touching global state:
+
+```bash
+git -c credential.helper= -c credential.helper='!gitswitch credential' push
+```
+
 ---
 
 ## How the auto-recommender works

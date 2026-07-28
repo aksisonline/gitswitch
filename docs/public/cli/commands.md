@@ -188,7 +188,7 @@ Runs an interactive wizard that installs:
 | Powerlevel10k | Drops segment function to rc file; prints manual step |
 | Raw zsh / bash / fish | Appends prompt + nudge + completion snippet to rc file |
 
-Idempotent — uses a `# gitswitch shell integration` marker to skip re-installation.
+Safe to re-run: everything gitswitch writes lives between `# gitswitch shell integration` markers, and re-running replaces that block in place rather than appending a second copy. Re-run it after upgrading to pick up an improved prompt, or to repair the credential helper order (see below).
 
 **Flags**
 
@@ -197,6 +197,34 @@ Idempotent — uses a `# gitswitch shell integration` marker to skip re-installa
 | `--shell <shell>` | Override shell detection. Values: `zsh`, `bash`, `fish`. Also skips the interactive wizard. |
 | `--yes` / `-y` | Accept all defaults without prompts. For scripts and CI. |
 | `--https` | Register the HTTPS credential helper (default: `true` when using `--yes`). |
+
+---
+
+## `gitswitch doctor` — check the setup
+
+```bash
+gitswitch doctor [--json]
+```
+
+Reports whether `git` and `gh` are installed and current, and whether HTTPS pushes are actually routed through gitswitch.
+
+That last check matters because git asks credential helpers in config order and takes the first answer, so another tool's helper can be registered ahead of gitswitch and gitswitch never gets asked — pushes then use whichever account that helper prefers:
+
+```
+  ✓  git 2.50.1
+  ✓  gh  2.95.0
+  ✗  HTTPS pushes answered by another helper before gitswitch:
+       credential.https://github.com.helper → !/opt/homebrew/bin/gh auth git-credential
+       pushes may use the wrong account — run: gitswitch install
+```
+
+`gitswitch install` repairs the order without removing the other helper. See [how the helper is registered](/docs/features/shell#how-the-https-credential-helper-is-registered).
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Machine-readable output, for scripts and agents. |
 
 ---
 

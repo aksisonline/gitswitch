@@ -8,6 +8,8 @@ Format: `[version] — date — summary`
 ## [Unreleased]
 
 ### Fixed
+- **HTTPS pushes could still use the wrong account** — if you had ever run `gh auth setup-git` (or answered yes to "Authenticate Git with your GitHub credentials?" during `gh auth login`), gh's per-host helper was asked before gitswitch and gitswitch never got a say, so pushes went out as whichever account gh had active. gitswitch now registers itself as the first helper git asks for every host, leaving gh and your keychain in place behind it as fallbacks. Run `gitswitch install` once to repair an existing setup.
+- **`gitswitch doctor` now checks HTTPS routing** — it reports whether pushes actually go through gitswitch and names the helper answering ahead of it if not, instead of leaving you to read `git config` yourself.
 - **`gitswitch install` now actually updates an existing setup** — it used to stop at "already installed" and leave your old shell hook in place, so the "shell integration updated" notice sent you to a command that did nothing. It now replaces the gitswitch block in your rc file (and only that block).
 - **Repos that set the same email as your global config no longer suppress the nudge** — a repo with a local `user.email` identical to your global one overrides nothing, but gitswitch was treating it as pinned and silently skipping both the nudge and its usage learning.
 - **Prompt footer no longer splits a key from its label** — the TUI footer measured itself against the panel's outer width instead of the usable width inside the border, so a long list could wrap between `1/2/3` and `tabs`.

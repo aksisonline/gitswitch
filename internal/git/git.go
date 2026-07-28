@@ -282,88 +282,185 @@ func GetGHUser() string {
 	return ""
 }
 
-// credentialHelperValue is the entry gitswitch adds to the global
-// credential.helper chain. The leading '!' tells git to run it as a shell
-// command (so it resolves gitswitch on PATH and appends the operation arg).
+// credentialHelperValue is the entry gitswitch adds to a credential.helper
+// chain. The leading '!' tells git to run it as a shell command (so it resolves
+// gitswitch on PATH and appends the operation arg).
 const credentialHelperValue = "!gitswitch credential"
 
-// getGlobalCredentialHelpers returns the current global credential.helper
-// chain as a slice of non-empty entries, in order.
-func getGlobalCredentialHelpers() []string {
-	out, err := exec.Command("git", "config", "--global", "--get-all", "credential.helper").Output()
+// Two git rules govern this whole section, both verified against git 2.50:
+//
+//  1. For a given URL, git accumulates the values of `credential.helper` AND of
+//     every matching `credential.<url>.helper` into ONE chain, in config-file
+//     order — a URL-scoped key does not override the generic one, it joins it.
+//  2. An empty helper value discards everything accumulated before it, and the
+//     first helper that returns a credential wins.
+//
+// So registering gitswitch in the generic key alone is not enough: `gh auth
+// setup-git` writes an empty reset plus its own helper under
+// credential.https://github.com.helper, which either wipes our generic entry or
+// answers ahead of it. gitswitch must be the first live entry in every chain.
+
+// credentialHelperKeys returns every global config key that holds a credential
+// helper chain — the generic one plus any URL-scoped keys another tool wrote —
+// deduplicated, generic first.
+func credentialHelperKeys() []string {
+	keys := []string{"credential.helper"}
+	seen := map[string]bool{"credential.helper": true}
+	out, err := exec.Command("git", "config", "--global", "--name-only",
+		"--get-regexp", `^credential\.([^=]*\.)?helper$`).Output()
 	if err != nil {
-		return nil
+		return keys // no keys set yet, or no global config
 	}
-	var helpers []string
 	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			helpers = append(helpers, line)
+		if k := strings.TrimSpace(line); k != "" && !seen[k] {
+			seen[k] = true
+			keys = append(keys, k)
 		}
 	}
-	return helpers
+	return keys
 }
 
-// IsCredentialHelperInstalled reports whether gitswitch is already registered
-// in the global credential.helper chain.
-func IsCredentialHelperInstalled() bool {
-	for _, h := range getGlobalCredentialHelpers() {
-		if h == credentialHelperValue {
-			return true
-		}
-	}
-	return false
-}
-
-// InstallCredentialHelper prepends gitswitch to the global credential.helper
-// chain so it is consulted first, while preserving any existing helpers
-// (osxkeychain, gh's per-host helper, etc.). Idempotent: a no-op if already
-// installed. gitswitch stays silent for hosts/repos it cannot serve, so git
-// falls through to the preserved helpers.
-func InstallCredentialHelper() error {
-	if IsCredentialHelperInstalled() {
+// credentialHelperChain returns one key's values in order. Read NUL-separated so
+// empty values survive — those are the resets that rule 2 above turns on, and
+// silently dropping one would re-enable a helper the user's other tool disabled.
+func credentialHelperChain(key string) []string {
+	out, err := exec.Command("git", "config", "--global", "--get-all", "-z", key).Output()
+	if err != nil || len(out) == 0 {
 		return nil
 	}
-	existing := getGlobalCredentialHelpers()
+	return strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00")
+}
 
-	// restore puts the original helper list back. Called on any failure after
-	// --unset-all so the user is never left without their keychain helpers.
-	restore := func() {
-		_ = exec.Command("git", "config", "--global", "--unset-all", "credential.helper").Run()
-		for _, e := range existing {
-			_ = exec.Command("git", "config", "--global", "--add", "credential.helper", e).Run()
+// firstLiveHelper returns the index of the first value git would actually run:
+// the one after the last reset, since everything before a reset is dead config.
+func firstLiveHelper(values []string) int {
+	live := 0
+	for i, v := range values {
+		if v == "" {
+			live = i + 1
 		}
 	}
+	return live
+}
 
-	// Wipe the list so we can re-add with gitswitch first.
-	if err := exec.Command("git", "config", "--global", "--unset-all", "credential.helper").Run(); err != nil {
-		if !isUnsetNothingErr(err) {
-			return fmt.Errorf("reset credential.helper: %w", err)
+// helperChainIsCurrent reports whether gitswitch is already the first live entry.
+func helperChainIsCurrent(values []string) bool {
+	i := firstLiveHelper(values)
+	return i < len(values) && values[i] == credentialHelperValue
+}
+
+// helperChainWithGitswitchFirst inserts gitswitch as the first live entry,
+// keeping every other value — including resets — exactly where it was. Removing
+// any existing gitswitch entry first makes this idempotent.
+func helperChainWithGitswitchFirst(values []string) []string {
+	stripped := make([]string, 0, len(values)+1)
+	for _, v := range values {
+		if v != credentialHelperValue {
+			stripped = append(stripped, v)
 		}
 	}
-	if err := exec.Command("git", "config", "--global", "--add", "credential.helper", credentialHelperValue).Run(); err != nil {
-		restore()
-		return fmt.Errorf("add credential.helper: %w", err)
+	at := firstLiveHelper(stripped)
+	out := make([]string, 0, len(stripped)+1)
+	out = append(out, stripped[:at]...)
+	out = append(out, credentialHelperValue)
+	return append(out, stripped[at:]...)
+}
+
+// IsCredentialHelperInstalled reports whether gitswitch will actually be
+// consulted first. False when another tool's URL-scoped helper shadows us, since
+// a registration that never gets asked is not an installation — that answer is
+// what makes `gitswitch install` offer to repair it.
+func IsCredentialHelperInstalled() bool {
+	for _, key := range credentialHelperKeys() {
+		chain := credentialHelperChain(key)
+		if key != "credential.helper" && len(chain) == 0 {
+			continue // key vanished between the two reads
+		}
+		if !helperChainIsCurrent(chain) {
+			return false
+		}
 	}
-	for _, e := range existing {
-		if err := exec.Command("git", "config", "--global", "--add", "credential.helper", e).Run(); err != nil {
-			restore()
-			return fmt.Errorf("restore credential.helper %q: %w", e, err)
+	return true
+}
+
+// HelperConflict names a chain where some other helper is asked before gitswitch,
+// so gitswitch never gets to route that host's credentials.
+type HelperConflict struct {
+	Key    string // e.g. credential.https://github.com.helper
+	Winner string // the helper git asks instead, "" when nothing is registered
+}
+
+// CredentialHelperConflicts lists the chains where gitswitch is not first, so
+// `doctor` can name the tool that is shadowing it instead of just saying no.
+func CredentialHelperConflicts() []HelperConflict {
+	var out []HelperConflict
+	for _, key := range credentialHelperKeys() {
+		chain := credentialHelperChain(key)
+		if helperChainIsCurrent(chain) {
+			continue
+		}
+		if key != "credential.helper" && len(chain) == 0 {
+			continue
+		}
+		winner := ""
+		if i := firstLiveHelper(chain); i < len(chain) {
+			winner = chain[i]
+		}
+		out = append(out, HelperConflict{Key: key, Winner: winner})
+	}
+	return out
+}
+
+// InstallCredentialHelper makes gitswitch the first helper git asks, for every
+// host, while preserving every other helper (osxkeychain, gh's per-host entries)
+// behind it. gitswitch stays silent for hosts and repos it cannot serve, so git
+// falls through to those. Idempotent.
+func InstallCredentialHelper() error {
+	for _, key := range credentialHelperKeys() {
+		existing := credentialHelperChain(key)
+		if helperChainIsCurrent(existing) {
+			continue
+		}
+		if err := rewriteHelperChain(key, existing, helperChainWithGitswitchFirst(existing)); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-// UninstallCredentialHelper removes only gitswitch's entry from the global
-// credential.helper chain, preserving all others. Tolerates the helper not
-// being present.
-func UninstallCredentialHelper() error {
-	if err := exec.Command("git", "config", "--global", "--unset-all",
-		"credential.helper", "^"+regexp.QuoteMeta(credentialHelperValue)+"$").Run(); err != nil {
-		if isUnsetNothingErr(err) {
-			return nil
+// rewriteHelperChain replaces one key's values wholesale, restoring the original
+// list if any write fails — the user must never be left without their helpers.
+func rewriteHelperChain(key string, existing, want []string) error {
+	restore := func() {
+		_ = exec.Command("git", "config", "--global", "--unset-all", key).Run()
+		for _, v := range existing {
+			_ = exec.Command("git", "config", "--global", "--add", key, v).Run()
 		}
-		return fmt.Errorf("unset credential.helper: %w", err)
+	}
+	if err := exec.Command("git", "config", "--global", "--unset-all", key).Run(); err != nil {
+		if !isUnsetNothingErr(err) {
+			return fmt.Errorf("reset %s: %w", key, err)
+		}
+	}
+	for _, v := range want {
+		if err := exec.Command("git", "config", "--global", "--add", key, v).Run(); err != nil {
+			restore()
+			return fmt.Errorf("add %s %q: %w", key, v, err)
+		}
+	}
+	return nil
+}
+
+// UninstallCredentialHelper removes only gitswitch's entries, from every chain,
+// leaving each one otherwise as it was. Tolerates not being present.
+func UninstallCredentialHelper() error {
+	pattern := "^" + regexp.QuoteMeta(credentialHelperValue) + "$"
+	for _, key := range credentialHelperKeys() {
+		if err := exec.Command("git", "config", "--global", "--unset-all", key, pattern).Run(); err != nil {
+			if !isUnsetNothingErr(err) {
+				return fmt.Errorf("unset %s: %w", key, err)
+			}
+		}
 	}
 	return nil
 }

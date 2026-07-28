@@ -10,6 +10,11 @@ import (
 
 // isolatedGitConfig points GIT_CONFIG_GLOBAL at a fresh temp file so that
 // --global writes don't touch the developer's real ~/.gitconfig.
+//
+// GIT_CONFIG_NOSYSTEM matters as much as the temp file: Apple git reads a system
+// gitconfig inside Xcode.app that ships `credential.helper = osxkeychain`, and
+// GIT_CONFIG_SYSTEM=/dev/null does not suppress it. Without NOSYSTEM the
+// credential tests reach the developer's real login keychain.
 func isolatedGitConfig(t *testing.T) {
 	t.Helper()
 	cfg := filepath.Join(t.TempDir(), "gitconfig")
@@ -17,6 +22,7 @@ func isolatedGitConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 }
 
 func globalHelpers(t *testing.T) []string {
@@ -172,6 +178,121 @@ func TestLocalIdentityRoundtrip(t *testing.T) {
 	// Clearing an already-clean scope is a no-op, not an error (git exit 5).
 	if err := local.ClearIdentity(); err != nil {
 		t.Errorf("second ClearIdentity should be a no-op, got: %v", err)
+	}
+}
+
+// chainOf reads one helper key NUL-separated, so empty reset entries are visible.
+func chainOf(t *testing.T, key string) []string {
+	t.Helper()
+	return credentialHelperChain(key)
+}
+
+// TestInstallCredentialHelper_BeatsURLScopedHelper covers the shape `gh auth
+// setup-git` leaves behind, which silently defeated the old generic-key-only
+// registration: an empty reset (which wipes our generic entry) followed by gh's
+// own helper (which answers before it). gitswitch must end up first in the
+// URL-scoped chain, with gh preserved right behind it.
+func TestInstallCredentialHelper_BeatsURLScopedHelper(t *testing.T) {
+	isolatedGitConfig(t)
+	const ghHelper = "!/opt/homebrew/bin/gh auth git-credential"
+	const scoped = "credential.https://github.com.helper"
+
+	// Reproduce gh's exact writes, plus an inherited system-style helper.
+	for _, args := range [][]string{
+		{"--add", "credential.helper", "osxkeychain"},
+		{"--add", scoped, ""},
+		{"--add", scoped, ghHelper},
+		{"--add", "credential.https://gist.github.com.helper", ""},
+		{"--add", "credential.https://gist.github.com.helper", ghHelper},
+	} {
+		if err := exec.Command("git", append([]string{"config", "--global"}, args...)...).Run(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// gh's scoped helper shadows us, so we are not meaningfully installed yet.
+	if IsCredentialHelperInstalled() {
+		t.Error("should report not-installed while a URL-scoped helper outranks us")
+	}
+	if err := InstallCredentialHelper(); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if !IsCredentialHelperInstalled() {
+		t.Error("should report installed after repairing every chain")
+	}
+
+	// The reset must stay first (it is gh's deliberate choice), gitswitch next,
+	// gh behind us — never dropped.
+	want := []string{"", credentialHelperValue, ghHelper}
+	for _, key := range []string{scoped, "credential.https://gist.github.com.helper"} {
+		got := chainOf(t, key)
+		if len(got) != len(want) {
+			t.Fatalf("%s = %q, want %q", key, got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("%s = %q, want %q", key, got, want)
+				break
+			}
+		}
+	}
+	// The generic chain keeps osxkeychain, behind us.
+	if got := chainOf(t, "credential.helper"); len(got) != 2 || got[0] != credentialHelperValue || got[1] != "osxkeychain" {
+		t.Errorf("credential.helper = %q, want [gitswitch osxkeychain]", got)
+	}
+
+	// Re-running changes nothing.
+	before := chainOf(t, scoped)
+	if err := InstallCredentialHelper(); err != nil {
+		t.Fatalf("second install: %v", err)
+	}
+	if after := chainOf(t, scoped); strings.Join(after, "\x00") != strings.Join(before, "\x00") {
+		t.Errorf("second install changed the chain: %q -> %q", before, after)
+	}
+
+	// Uninstall must strip us from every chain and leave the rest intact.
+	if err := UninstallCredentialHelper(); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	for _, key := range []string{scoped, "credential.https://gist.github.com.helper"} {
+		got := chainOf(t, key)
+		if len(got) != 2 || got[0] != "" || got[1] != ghHelper {
+			t.Errorf("after uninstall %s = %q, want [\"\" gh]", key, got)
+		}
+	}
+	if got := chainOf(t, "credential.helper"); len(got) != 1 || got[0] != "osxkeychain" {
+		t.Errorf("after uninstall credential.helper = %q, want [osxkeychain]", got)
+	}
+}
+
+// A reset written *after* our entry still kills us, so that must not count as
+// installed — this is the case a future `gh auth setup-git` re-run can create.
+func TestCredentialHelperChainOrdering(t *testing.T) {
+	cases := []struct {
+		name    string
+		chain   []string
+		current bool
+		want    []string
+	}{
+		{"empty", nil, false, []string{credentialHelperValue}},
+		{"ours only", []string{credentialHelperValue}, true, []string{credentialHelperValue}},
+		{"ours first", []string{credentialHelperValue, "osxkeychain"}, true, []string{credentialHelperValue, "osxkeychain"}},
+		{"ours last", []string{"osxkeychain", credentialHelperValue}, false, []string{credentialHelperValue, "osxkeychain"}},
+		{"reset then gh", []string{"", "gh"}, false, []string{"", credentialHelperValue, "gh"}},
+		{"reset after us", []string{credentialHelperValue, "", "gh"}, false, []string{"", credentialHelperValue, "gh"}},
+		{"reset only", []string{""}, false, []string{"", credentialHelperValue}},
+	}
+	for _, c := range cases {
+		if got := helperChainIsCurrent(c.chain); got != c.current {
+			t.Errorf("%s: helperChainIsCurrent(%q) = %v, want %v", c.name, c.chain, got, c.current)
+		}
+		got := helperChainWithGitswitchFirst(c.chain)
+		if strings.Join(got, "|") != strings.Join(c.want, "|") {
+			t.Errorf("%s: rewrite(%q) = %q, want %q", c.name, c.chain, got, c.want)
+		}
+		if !helperChainIsCurrent(got) {
+			t.Errorf("%s: rewrite result %q is not first-live", c.name, got)
+		}
 	}
 }
 

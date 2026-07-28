@@ -135,6 +135,34 @@ gitswitch uninstall
 
 This removes the marker block from your rc file (or the oh-my-zsh plugin file) and unregisters the HTTPS credential helper if it was installed. Reload your shell to complete removal.
 
+## How the HTTPS credential helper is registered
+
+Worth knowing if you also use `gh`, because git's rules here are surprising.
+
+Git does not pick *one* credential helper. For a given URL it collects the values of `credential.helper` **and** every matching `credential.<host>.helper` into a single list, in the order they appear in your config files, then asks each one in turn until one returns a username and password. Two consequences:
+
+- A host-specific entry does **not** override the generic one — it just joins the same list.
+- A helper set to the **empty string** discards everything collected before it. `gh auth setup-git` writes exactly that, followed by its own helper, which is how it removes your keychain helper for github.com.
+
+So gitswitch cannot simply add itself to `credential.helper`: `gh`'s empty entry would erase it. Instead `gitswitch install` makes gitswitch the first *live* entry in every helper list it finds, leaving everything else — including `gh`'s helper and your keychain — in place behind it:
+
+```
+[credential "https://github.com"]
+	helper =                                     # gh's reset, preserved
+	helper = !gitswitch credential               # gitswitch answers first
+	helper = !/opt/homebrew/bin/gh auth git-credential   # fallback, untouched
+```
+
+gitswitch stays silent for any host or repo it cannot serve, so git falls straight through to the next helper. Nothing is removed, and `gitswitch uninstall` takes only gitswitch's own lines back out.
+
+**Re-running `gh auth setup-git` (or an interactive `gh auth login`) undoes this.** gh rewrites that whole key with `--replace-all`, which drops gitswitch's line along with anything else there. `gitswitch doctor` detects it and names the helper answering ahead of gitswitch; `gitswitch install` puts things back.
+
+Check the current state any time with:
+
+```bash
+gitswitch doctor
+```
+
 ## Troubleshooting
 
 **Prompt segment not appearing**

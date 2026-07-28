@@ -950,6 +950,26 @@ var doctorCmd = &cobra.Command{
 		} else {
 			fmt.Println("  ⚠  gh   not found (optional)")
 		}
+
+		// HTTPS routing: being registered is not enough — another tool's per-host
+		// helper can be asked first, and then gitswitch never sees the request.
+		conflicts := git.CredentialHelperConflicts()
+		switch {
+		case len(conflicts) == 0:
+			fmt.Println("  ✓  HTTPS pushes routed by gitswitch")
+		case conflicts[0].Winner == "" && len(conflicts) == 1:
+			fmt.Println("  ⚠  HTTPS pushes not routed by gitswitch — run: gitswitch install")
+		default:
+			fmt.Println("  ✗  HTTPS pushes answered by another helper before gitswitch:")
+			for _, c := range conflicts {
+				if c.Winner == "" {
+					continue
+				}
+				fmt.Printf("       %s → %s\n", c.Key, c.Winner)
+			}
+			fmt.Println("       pushes may use the wrong account — run: gitswitch install")
+		}
+
 		fmt.Println()
 		prereqs.PrintWarnings(r)
 		return nil
