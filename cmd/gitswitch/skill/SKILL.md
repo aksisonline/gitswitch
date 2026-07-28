@@ -158,6 +158,18 @@ If a repo was configured by hand before gitswitch (`git config --local
 user.email …`), bare `gitswitch pin` adopts that identity: it matches the email
 to a stored profile and fills in the rest.
 
+`gitswitch current` names the scope, so you can tell these apart without reading
+git config yourself:
+
+```
+work — Alice W <alice@work.com>  (pinned to this repo)     # repo-local
+work — Alice W <alice@work.com>  (this terminal's session) # GIT_CONFIG_* env vars
+personal — Alice <alice@personal.dev>                      # global identity
+```
+
+Check this in Step 1 before switching: if the repo is already pinned, a global
+`switch` will not change what commits here use, and switching is the wrong fix.
+
 ---
 
 ## How the auto-recommender works

@@ -128,14 +128,21 @@ Prints the nickname, name, and email of the currently active profile.
 work — Alice Smith <alice@company.com>
 ```
 
+When the repo or your terminal overrides the global identity, the source is named:
+
+```bash
+gitswitch current
+# work — Alice W <alice@work.com>  (pinned to this repo)
+```
+
 Prints `No active profile` if none has been applied yet.
 
 **Flags**
 
 | Flag | Description |
 |------|-------------|
-| `--short` | Outputs `nickname\temail` tab-separated. Used by the Starship prompt block. |
-| `--prompt` | Outputs `nickname\tcolor` tab-separated, where color is the ANSI 256-color index for the current theme's primary color. Used by shell prompt functions. |
+| `--short` | Outputs `nickname\temail` tab-separated. Used by the Starship prompt block. The nickname carries the scope marker (`work●`) since Starship renders the output verbatim. |
+| `--prompt` | Outputs `nickname\tcolor\tmarker` tab-separated: the ANSI 256-color index for the current theme's primary color, then the scope marker (`●` pinned repo, `◆` session, empty when global). Used by shell prompt functions. |
 
 ---
 

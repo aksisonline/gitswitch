@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aksisonline/gitswitch/internal/git"
+	"github.com/aksisonline/gitswitch/internal/history"
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	ver "github.com/aksisonline/gitswitch/internal/version"
@@ -19,6 +20,14 @@ import (
 )
 
 type switchDoneMsg struct {
+	profile  *storage.Profile
+	warnings []string
+	err      error
+}
+
+// pinDoneMsg reports the result of pinning or releasing this repo's identity.
+// A nil profile means the pin was removed.
+type pinDoneMsg struct {
 	profile  *storage.Profile
 	warnings []string
 	err      error
@@ -359,6 +368,22 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.statusIsErr = false
 			}
+		case "p":
+			if m.tabIndex != 0 || len(m.profiles) == 0 {
+				break
+			}
+			if m.repoKey == "" {
+				m.statusMsg = "not inside a git repo — nothing to pin to"
+				m.statusIsErr = true
+				return m, nil
+			}
+			p := m.profiles[m.cursor]
+			// One key both ways: pinning the profile this repo is already pinned to
+			// releases it, like the other toggles in the app.
+			if m.scope == git.ScopeRepo && m.scopeProfile != nil && m.scopeProfile.Nickname == p.Nickname {
+				return m, m.unpinProfileCmd()
+			}
+			return m, m.pinProfileCmd(p)
 		case "1", "2", "3":
 			m.tabIndex = int(msg.String()[0] - '1')
 			m.statusMsg = ""
@@ -403,12 +428,30 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.profiles = profiles
 			m.active = git.DetectActive(profiles)
+			m.refreshRepoScope()
 			if len(msg.warnings) > 0 {
 				m.statusMsg = fmt.Sprintf("switched to %s (warning: %s)", msg.profile.Nickname, msg.warnings[0])
 			} else {
 				m.statusMsg = fmt.Sprintf("switched to %s", msg.profile.Nickname)
 			}
 			m.statusIsErr = false
+		}
+	case pinDoneMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("error: %v", msg.err)
+			m.statusIsErr = true
+			break
+		}
+		m.refreshRepoScope()
+		m.statusIsErr = false
+		if msg.profile == nil {
+			m.statusMsg = "unpinned — this repo now uses the global identity"
+			break
+		}
+		if len(msg.warnings) > 0 {
+			m.statusMsg = fmt.Sprintf("pinned %s to this repo (warning: %s)", msg.profile.Nickname, msg.warnings[0])
+		} else {
+			m.statusMsg = fmt.Sprintf("pinned %s to this repo", msg.profile.Nickname)
 		}
 	}
 	return m, nil
@@ -643,6 +686,45 @@ func (m Model) switchProfileCmd(p storage.Profile) tea.Cmd {
 			return switchDoneMsg{err: err}
 		}
 		return switchDoneMsg{profile: &p, warnings: warnings}
+	}
+}
+
+// pinProfileCmd writes a profile into this repo's own git config and records the
+// pin, leaving the global identity alone — the same two writes as `gitswitch pin`.
+func (m Model) pinProfileCmd(p storage.Profile) tea.Cmd {
+	return func() tea.Msg {
+		cfg := git.New(false)
+		if err := cfg.SetUser(p.UserName, p.Email); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		if err := cfg.SetSignKey(p.SignKey); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		if err := cfg.SetSSHKey(p.SSHKey); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		var warnings []string
+		if w := git.SwitchGHUser(p.GHUser); w != "" {
+			warnings = append(warnings, w)
+		}
+		if err := history.Pin(m.repoKey, p.Nickname); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		return pinDoneMsg{profile: &p, warnings: warnings}
+	}
+}
+
+// unpinProfileCmd clears this repo's local identity so it follows the global
+// profile again.
+func (m Model) unpinProfileCmd() tea.Cmd {
+	return func() tea.Msg {
+		if err := git.New(false).ClearIdentity(); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		if err := history.Unpin(m.repoKey); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		return pinDoneMsg{}
 	}
 }
 

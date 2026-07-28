@@ -155,15 +155,31 @@ func applyProfile(cfg *git.Config, p *storage.Profile) error {
 	return nil
 }
 
-// effectiveProfile returns the identity commits in dir will actually use: the
-// repo's own local identity when it has one, otherwise the globally active
-// profile. Everything user-facing resolves through this, so the prompt and
-// `gitswitch current` agree with what git will really write.
-func effectiveProfile(dir string) (*storage.Profile, error) {
-	if p := store.GetByEmail(git.LocalEmail(dir)); p != nil {
-		return p, nil
+// effectiveProfile returns the identity commits in dir will actually use, and the
+// scope it comes from: this terminal's session, the repo's own config, or the
+// global active profile. Everything user-facing resolves through this, so the
+// prompt and `gitswitch current` agree with what git will really write.
+func effectiveProfile(dir string) (*storage.Profile, git.Scope, error) {
+	if scope, email := git.ResolveIdentity(dir); scope == git.ScopeRepo || scope == git.ScopeSession {
+		if p := store.GetByEmail(email); p != nil {
+			return p, scope, nil
+		}
 	}
-	return store.GetActive()
+	p, err := store.GetActive()
+	return p, git.ScopeGlobal, err
+}
+
+// scopeMarker is the glyph appended to the profile name in the shell prompt when
+// the identity does not come from the global config. Empty for the global case —
+// a user with no pins and no sessions sees nothing new.
+func scopeMarker(s git.Scope) string {
+	switch s {
+	case git.ScopeRepo:
+		return "●"
+	case git.ScopeSession:
+		return "◆"
+	}
+	return ""
 }
 
 func quickSwitch(nickname string) error {
@@ -272,7 +288,7 @@ var currentCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		short, _ := cmd.Flags().GetBool("short")
 		cwd, _ := os.Getwd()
-		p, err := effectiveProfile(cwd)
+		p, scope, err := effectiveProfile(cwd)
 		if err != nil {
 			return err
 		}
@@ -282,18 +298,29 @@ var currentCmd = &cobra.Command{
 			}
 			return nil
 		}
+		marker := scopeMarker(scope)
 		if short {
-			fmt.Printf("%s\t%s\n", p.Nickname, p.Email)
+			// Starship renders this through a format string we don't control, so the
+			// marker rides along on the nickname rather than as a new field.
+			fmt.Printf("%s%s\t%s\n", p.Nickname, marker, p.Email)
 			return nil
 		}
 		prompt, _ := cmd.Flags().GetBool("prompt")
 		if prompt {
 			prefs, _ := store.LoadPrefs()
 			color := tui.ThemePromptColor(prefs.ColorTheme)
-			fmt.Printf("%s\t%s\n", p.Nickname, color)
+			// Third field: older installed hooks read only fields 1-2 and ignore it.
+			fmt.Printf("%s\t%s\t%s\n", p.Nickname, color, marker)
 			return nil
 		}
-		fmt.Printf("%s — %s <%s>\n", p.Nickname, p.UserName, p.Email)
+		switch scope {
+		case git.ScopeRepo:
+			fmt.Printf("%s — %s <%s>  (pinned to this repo)\n", p.Nickname, p.UserName, p.Email)
+		case git.ScopeSession:
+			fmt.Printf("%s — %s <%s>  (this terminal's session)\n", p.Nickname, p.UserName, p.Email)
+		default:
+			fmt.Printf("%s — %s <%s>\n", p.Nickname, p.UserName, p.Email)
+		}
 		if git.IsCredentialHelperInstalled() {
 			fmt.Println("HTTPS credential helper: active")
 		}
@@ -580,11 +607,11 @@ var recordCmd = &cobra.Command{
 		if repoKey == "" {
 			return nil
 		}
-		// A repo carrying its own identity is already decided: don't record the
-		// global profile against it (that would teach the wrong one), but do point
-		// gh at the matching account so pushes from here use the right GitHub user.
-		if localEmail := git.LocalEmail(path); localEmail != "" {
-			if p := store.GetByEmail(localEmail); p != nil {
+		// A repo or session carrying its own identity is already decided: don't
+		// record the global profile against it (that would teach the wrong one), but
+		// do point gh at the matching account so pushes from here use the right user.
+		if scope, email := git.ResolveIdentity(path); scope == git.ScopeRepo || scope == git.ScopeSession {
+			if p := store.GetByEmail(email); p != nil {
 				// ponytail: unconditional `gh auth switch` — it is idempotent, and a
 				// "is it already right?" check costs the same gh round-trip. Only
 				// profiles with a gh_user pay it. Skip via a cached account if cd
@@ -624,8 +651,8 @@ var recommendCmd = &cobra.Command{
 		if repoKey == "" {
 			return errNoRecommendation
 		}
-		// A repo with its own identity (a pin, or hand-set git config) already
-		// commits correctly — never nudge the user to switch globally for it.
+		// A repo or terminal with its own identity (a pin, hand-set git config, or a
+		// session) already commits correctly — never nudge it to switch globally.
 		if git.HasLocalIdentity(path) {
 			return errNoRecommendation
 		}
@@ -705,7 +732,10 @@ prompts (for scripts and CI).`,
 
 		var shellResult string
 		if opts.InstallShell {
-			shellResult, err = shell.Install(opts.Shell, opts.Framework, "gs")
+			// Reinstall, not Install: Install is a no-op when the marker block is
+			// already there, so a user told "shell integration updated — run gitswitch
+			// install" would keep their old hook forever. Reinstall replaces it.
+			shellResult, err = shell.Reinstall(opts.Shell, opts.Framework, "gs")
 			if err != nil {
 				return fmt.Errorf("shell install failed: %w", err)
 			}

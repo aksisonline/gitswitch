@@ -34,6 +34,54 @@ func globalHelpers(t *testing.T) []string {
 	return helpers
 }
 
+// TestResolveIdentity pins the scope rules the prompt marker, the TUI glyphs and
+// the credential helper all read. The local==global case is the one that bites:
+// plenty of repos carry a local user.email identical to the global one, and
+// treating those as pinned silently kills the nudge hook for them.
+func TestResolveIdentity(t *testing.T) {
+	isolatedGitConfig(t)
+	repo := t.TempDir()
+	if err := exec.Command("git", "-C", repo, "init").Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	assert := func(what string, wantScope Scope, wantEmail string) {
+		t.Helper()
+		gotScope, gotEmail := ResolveIdentity(repo)
+		if gotScope != wantScope || gotEmail != wantEmail {
+			t.Errorf("%s: ResolveIdentity = (%v, %q), want (%v, %q)", what, gotScope, gotEmail, wantScope, wantEmail)
+		}
+		if want := wantScope == ScopeRepo || wantScope == ScopeSession; HasLocalIdentity(repo) != want {
+			t.Errorf("%s: HasLocalIdentity = %v, want %v", what, !want, want)
+		}
+	}
+	set := func(t *testing.T, args ...string) {
+		t.Helper()
+		if err := exec.Command("git", append([]string{"-C", repo, "config"}, args...)...).Run(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	assert("nothing configured", ScopeNone, "")
+
+	set(t, "--global", "user.email", "me@global.dev")
+	assert("global only", ScopeGlobal, "me@global.dev")
+
+	// A local value that just repeats the global one overrides nothing.
+	set(t, "--local", "user.email", "ME@GLOBAL.DEV")
+	assert("local same as global", ScopeGlobal, "ME@GLOBAL.DEV")
+
+	set(t, "--local", "user.email", "me@work.com")
+	assert("local overrides global", ScopeRepo, "me@work.com")
+
+	// GIT_CONFIG_* env vars are how a session identity arrives; git reports them
+	// as scope "command" and they beat the repo's own config.
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "user.email")
+	t.Setenv("GIT_CONFIG_VALUE_0", "me@session.dev")
+	assert("session overrides repo", ScopeSession, "me@session.dev")
+}
+
 func gitConfigValue(t *testing.T, key string) string {
 	t.Helper()
 	out, err := exec.Command("git", "config", "--global", key).Output()

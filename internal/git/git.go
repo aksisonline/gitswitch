@@ -176,9 +176,72 @@ func (c *Config) GetSSHKey() string {
 	return ""
 }
 
+// Scope says where the identity git will actually use comes from. Ordered by
+// git's own precedence: a narrower scope overrides every wider one.
+type Scope int
+
+const (
+	ScopeNone    Scope = iota // no identity configured anywhere
+	ScopeGlobal               // ~/.gitconfig — whichever profile is active
+	ScopeRepo                 // this repo's .git/config — a gitswitch pin, or hand-set
+	ScopeSession              // GIT_CONFIG_* env vars — this terminal and its children
+)
+
+// String names the scope for user-facing output.
+func (s Scope) String() string {
+	switch s {
+	case ScopeRepo:
+		return "repo"
+	case ScopeSession:
+		return "session"
+	case ScopeGlobal:
+		return "global"
+	}
+	return "none"
+}
+
+// ResolveIdentity reports the email git will actually author with in dir, and
+// which scope supplies it. One `git config` call answers both: --show-scope
+// labels every value with its source, and git lists them in precedence order,
+// so the last line wins.
+//
+// A repo whose local user.email merely repeats the global one overrides nothing,
+// so it reports ScopeGlobal — otherwise near every repo would look pinned.
+func ResolveIdentity(dir string) (Scope, string) {
+	out, err := exec.Command("git", "-C", dir, "config", "--show-scope", "--get-all", "user.email").Output()
+	if err != nil {
+		return ScopeNone, ""
+	}
+	var scope Scope
+	var email, globalEmail string
+	for _, line := range strings.Split(string(out), "\n") {
+		label, value, ok := strings.Cut(strings.TrimSpace(line), "\t")
+		if !ok || value == "" {
+			continue
+		}
+		switch label {
+		case "command": // GIT_CONFIG_* env vars, or git -c
+			scope, email = ScopeSession, value
+		case "local", "worktree":
+			scope, email = ScopeRepo, value
+		case "global", "system":
+			scope, email = ScopeGlobal, value
+			globalEmail = value
+		}
+	}
+	if email == "" {
+		return ScopeNone, ""
+	}
+	if scope != ScopeGlobal && strings.EqualFold(email, globalEmail) {
+		return ScopeGlobal, email
+	}
+	return scope, email
+}
+
 // LocalEmail returns the repo-local user.email at dir, or "" if the repo has
-// none. A non-empty value means the repo commits with that identity no matter
-// which profile is active globally — set by a gitswitch pin, or by hand.
+// none. Prefer ResolveIdentity unless you specifically need the file value —
+// this ignores session env vars and cannot tell a real override from a repo that
+// merely repeats the global identity.
 func LocalEmail(dir string) string {
 	out, err := exec.Command("git", "-C", dir, "config", "--local", "user.email").Output()
 	if err != nil {
@@ -187,9 +250,12 @@ func LocalEmail(dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// HasLocalIdentity reports whether the repo at dir carries its own identity, so
-// there is nothing to recommend or learn for it.
-func HasLocalIdentity(dir string) bool { return LocalEmail(dir) != "" }
+// HasLocalIdentity reports whether the repo at dir overrides the global identity
+// — via a pin or a session — so there is nothing to recommend or learn for it.
+func HasLocalIdentity(dir string) bool {
+	scope, _ := ResolveIdentity(dir)
+	return scope == ScopeRepo || scope == ScopeSession
+}
 
 // GetGHUser reads the currently active GitHub CLI account.
 // Returns empty string if gh is not installed or no account is active.

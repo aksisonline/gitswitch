@@ -202,6 +202,8 @@ gitswitch unpin
 
 Removes the identity keys gitswitch wrote to this repo's local git config, so the repo falls back to your global identity, and clears the pin from history. The auto-recommender falls back to usage counts.
 
+Both `pin` and `unpin` are also bound to `p` in the TUI, acting on the repo it was launched from.
+
 Must be run from inside a git repo.
 
 ---

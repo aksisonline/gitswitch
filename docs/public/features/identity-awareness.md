@@ -69,11 +69,34 @@ Everything else follows the repo automatically, so git and GitHub never disagree
 
 - **gh CLI** — pinning switches `gh` to that profile's account, and entering the repo later switches it back (the shell hook keeps it in step).
 - **HTTPS pushes** — the credential helper serves this repo's tokens from the pinned account.
-- **Prompt and `gitswitch current`** — both report the repo's identity while you are inside it, not the global one.
+- **Prompt and `gitswitch current`** — both report the repo's identity while you are inside it, not the global one, and mark it as pinned (see [Telling the scopes apart](#telling-the-scopes-apart)).
 
 Your globally active profile is the one thing left alone — pinning one repo should not change what every other repo does.
 
 Since the repo already commits correctly, the shell hook does not nudge you when you enter it.
+
+A repo whose local `user.email` merely repeats your global one is not treated as pinned — it overrides nothing, so gitswitch leaves the nudges on and shows no marker.
+
+### Pinning from the TUI
+
+Inside the TUI, `p` pins the highlighted profile to the repo you launched it from, and pressing `p` again on the pinned profile releases it. `enter` always means the same thing it ever did — change your **global** identity — so the two never get confused.
+
+The key only appears in the footer when you are actually inside a git repo.
+
+### Telling the scopes apart
+
+Three things can decide who you commit as. Both the TUI and the shell prompt mark which one is in play:
+
+| Marker | Scope | Where it lives |
+|---|---|---|
+| `✓` | global identity | `~/.gitconfig` — the profile you last switched to |
+| `●` | pinned to this repo | the repo's own `.git/config` |
+| `◉` | pinned to this repo **and** your global identity | both agree |
+| `◆` | this terminal's session | environment variables (see below) |
+
+In the shell prompt the same markers ride next to the nickname — `[work]` for global, `[work●]` in a pinned repo. Nothing is added when you are on your global identity, so a setup with no pins looks exactly as it always did.
+
+The session marker (`◆`) appears when git config environment variables override both your repo and your global config — for example a terminal launched with `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0`/`GIT_CONFIG_VALUE_0` set. Anything started from that terminal, including AI coding agents, inherits it. First-class commands for this are on the roadmap; gitswitch already reports it correctly today.
 
 ### Repos you already configured by hand
 

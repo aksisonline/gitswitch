@@ -107,8 +107,9 @@ func ghAuthToken(host, ghUser string) (string, error) {
 
 // resolveGHUser picks which profile's gh_user to use for this request.
 //
-//  1. If the repo has its own local user.email, that identity wins outright —
-//     commits here are authored as that profile, so pushes must use its token.
+//  1. If the repo or this terminal's session overrides the global identity, that
+//     wins outright — commits here are authored as that profile, so pushes must
+//     use its token.
 //  2. Otherwise determine the globally active profile.
 //  3. Ask history for a per-repo recommendation (pinned/learned identity for
 //     repoKey). history.Recommend returns ("",false) when the recommendation
@@ -117,8 +118,10 @@ func ghAuthToken(host, ghUser string) (string, error) {
 //
 // Returns "" if no profile applies (the caller then stays silent).
 func resolveGHUser(req Request, st *storage.Store, repoKey, repoDir string) string {
-	if p := st.GetByEmail(git.LocalEmail(repoDir)); p != nil {
-		return p.GHUser
+	if scope, email := git.ResolveIdentity(repoDir); scope == git.ScopeRepo || scope == git.ScopeSession {
+		if p := st.GetByEmail(email); p != nil {
+			return p.GHUser
+		}
 	}
 
 	active, _ := st.GetActive()

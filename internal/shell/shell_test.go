@@ -36,6 +36,26 @@ func TestPromptSnippetsUsePromptFlag(t *testing.T) {
 	}
 }
 
+// The scope marker (● pinned / ◆ session) is field 3 of `current --prompt`, and
+// every prompt renderer must read it and print it next to the nickname —
+// otherwise a user in a pinned repo sees a prompt indistinguishable from global.
+func TestPromptSnippetsRenderScopeMarker(t *testing.T) {
+	for _, c := range []struct{ name, snippet, reads, prints string }{
+		{"zsh", nudgeSnippetZsh("gs"), "cut -f3", "${nick}${mark}"},
+		{"bash", nudgeSnippetBash("gs"), "cut -f3", `[%s%s]`},
+		{"fish", nudgeSnippetFish("gs"), "$parts[3..-1]", `[%s%s]`},
+		{"omz", omzPluginContent(), "cut -f3", "${nick}${mark}"},
+		{"p10k", p10kSnippet("gs"), "cut -f3", "[$nick$mark]"},
+	} {
+		if !strings.Contains(c.snippet, c.reads) {
+			t.Errorf("%s: prompt must read the marker field with %q", c.name, c.reads)
+		}
+		if !strings.Contains(c.snippet, c.prints) {
+			t.Errorf("%s: prompt must render the marker next to the nickname (%q)", c.name, c.prints)
+		}
+	}
+}
+
 func TestStarshipSnippetUsesShortFlag(t *testing.T) {
 	s := starshipSnippet()
 	if !strings.Contains(s, "gitswitch current --short") {

@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 
+	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -86,12 +87,22 @@ func (m Model) viewAccountsTab(pw int) string {
 	footerPairs := [][2]string{
 		{"↑/↓", "navigate"},
 		{"enter", "switch"},
-		{"a", "add"},
-		{"e", "edit"},
-		{"v", secondaryToggleLabel(m.showUsername)},
-		{"?", "cli tips"},
-		{"q", "quit"},
 	}
+	// Only offer the pin key when there is a repo to pin to.
+	if m.repoKey != "" {
+		label := "pin to repo"
+		if m.scope == git.ScopeRepo {
+			label = "pin/unpin repo"
+		}
+		footerPairs = append(footerPairs, [2]string{"p", label})
+	}
+	footerPairs = append(footerPairs,
+		[2]string{"a", "add"},
+		[2]string{"e", "edit"},
+		[2]string{"v", secondaryToggleLabel(m.showUsername)},
+		[2]string{"?", "cli tips"},
+		[2]string{"q", "quit"},
+	)
 	footerPairs = append(footerPairs, [2]string{"1/2/3", "tabs"})
 	if m.updateAvailable {
 		footerPairs = append(footerPairs, [2]string{"u", "upgrade"})

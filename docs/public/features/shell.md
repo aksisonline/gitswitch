@@ -41,7 +41,7 @@ gitswitch detects your prompt framework and installs accordingly:
 | Powerlevel10k | Segment function dropped to rc file; manual step printed for `~/.p10k.zsh` |
 | Raw zsh / bash / fish | Prompt function, nudge hook, and completion snippet appended to rc file |
 
-All installations are idempotent — a `# gitswitch shell integration` marker is used to skip re-installation on subsequent runs.
+All installations are idempotent — everything gitswitch adds lives between `# gitswitch shell integration` markers, and re-running `gitswitch install` replaces that block in place rather than appending a second copy. That is also how you pick up an improved prompt after upgrading, which is what the "shell integration updated — run `gitswitch install`" notice is asking you to do.
 
 After installing, reload your shell:
 
@@ -53,20 +53,29 @@ source ~/.bashrc   # bash
 
 ## Prompt segment
 
-The prompt segment shows your active git identity when inside a git repo. It calls:
+The prompt segment shows the git identity in effect when you are inside a git repo. It calls:
 
 ```bash
-gitswitch current --short
-# work	alice@company.com
+gitswitch current --prompt
+# work	141	●
 ```
 
-Example prompt (with Starship):
+The three fields are the profile nickname, the theme colour, and a **scope marker** saying where that identity comes from:
+
+| Marker | Meaning |
+|---|---|
+| _(none)_ | your global identity — the profile you last switched to |
+| `●` | this repo is [pinned](/docs/features/identity-awareness#pin-a-repo) and overrides the global identity |
+| `◆` | this terminal's session overrides both |
+
+So a glance at the prompt tells you whether a commit here will use the identity you think it will:
 
 ```
-~/work/api [work: alice@company.com] ❯
+~/personal/blog  [personal] ❯
+~/work/api       [work●] ❯
 ```
 
-The segment is hidden when you're not inside a git repo.
+The segment is hidden when you're not inside a git repo. Starship uses `gitswitch current --short` instead, where the marker rides on the nickname (`work●`) because Starship renders the command output verbatim.
 
 ### Starship customization
 
@@ -75,17 +84,19 @@ The block added to `~/.config/starship.toml`:
 ```toml
 [custom.gitswitch]
 command = "gitswitch current --short"
-when = "git rev-parse --git-dir 2>/dev/null"
-symbol = ""
-format = "[$output]($style) "
-style = "bold 141"
+when = "git rev-parse --git-dir > /dev/null 2>&1"
+symbol = " "
+style = "bold cyan"
+format = "[$symbol($output)]($style) "
 ```
 
 Edit `style` to change the color, or `symbol` to add an icon.
 
 ### oh-my-zsh customization
 
-Edit `~/.oh-my-zsh/custom/plugins/gitswitch/gitswitch.plugin.zsh` directly.
+Edit the `__gitswitch_prompt` function in the gitswitch block of your `~/.zshrc` directly.
+
+Re-running `gitswitch install` replaces that block with a fresh one, so keep customizations elsewhere in the file if you want them to survive an upgrade.
 
 ## Identity nudge
 
