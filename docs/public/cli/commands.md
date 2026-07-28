@@ -67,7 +67,7 @@ gitswitch add <nickname> <user-name> <email> [flags]
 
 | Flag | Description |
 |------|-------------|
-| `--sign-key <key>` | GPG key ID. Sets `git config user.signingkey` on switch. |
+| `--sign-key <key>` | GPG key ID **or** SSH key path (`~/.ssh/id_ed25519.pub`). Sets `user.signingkey` on switch, and `gpg.format=ssh` for SSH keys. |
 | `--ssh-key <path>` | Path to SSH private key. Sets `core.sshCommand` to `ssh -i <path> -o IdentitiesOnly=yes` on switch. |
 | `--gh-user <username>` | GitHub CLI username. Runs `gh auth switch --user <username>` on switch. Best-effort — fails gracefully if `gh` is not installed or the account is not logged in. |
 

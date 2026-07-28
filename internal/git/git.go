@@ -45,16 +45,57 @@ func (c *Config) SetUser(name, email string) error {
 	return nil
 }
 
+// IsSSHSignKey reports whether a signing key value is an SSH key rather than a
+// GPG key ID. SSH keys are either a literal public key ("ssh-ed25519 AAAA…",
+// "key::…") or a path to one (~/.ssh/id_ed25519.pub); GPG keys are bare hex IDs
+// or emails, which contain none of those markers.
+func IsSSHSignKey(key string) bool {
+	return strings.HasPrefix(key, "ssh-") ||
+		strings.HasPrefix(key, "key::") ||
+		strings.HasPrefix(key, "~") ||
+		strings.ContainsAny(key, `/\`) ||
+		strings.HasSuffix(key, ".pub")
+}
+
+// SetSignKey sets user.signingkey and the matching gpg.format, so an SSH key
+// signs with SSH and a GPG key ID signs with OpenPGP. Both are unset together
+// when key is empty.
 func (c *Config) SetSignKey(key string) error {
 	if key == "" {
 		// Best-effort unset — ignore "key not set" (exit 5) but surface real failures.
-		if err := exec.Command("git", "config", c.scope(), "--unset", "user.signingkey").Run(); err != nil && !isUnsetNothingErr(err) {
-			return fmt.Errorf("unset signingkey: %w", err)
+		for _, k := range []string{"user.signingkey", "gpg.format"} {
+			if err := exec.Command("git", "config", c.scope(), "--unset", k).Run(); err != nil && !isUnsetNothingErr(err) {
+				return fmt.Errorf("unset %s: %w", k, err)
+			}
 		}
 		return nil
 	}
+	if IsSSHSignKey(key) {
+		switch {
+		case strings.HasPrefix(key, "ssh-"):
+			key = "key::" + key // git requires the key:: prefix for inline public keys
+		case !strings.HasPrefix(key, "key::"):
+			key = ExpandPath(key) // git does not resolve ~ in user.signingkey
+		}
+		if err := exec.Command("git", "config", c.scope(), "gpg.format", "ssh").Run(); err != nil {
+			return fmt.Errorf("set gpg.format: %w", err)
+		}
+	} else if err := exec.Command("git", "config", c.scope(), "--unset", "gpg.format").Run(); err != nil && !isUnsetNothingErr(err) {
+		return fmt.Errorf("unset gpg.format: %w", err)
+	}
 	if err := exec.Command("git", "config", c.scope(), "user.signingkey", key).Run(); err != nil {
 		return fmt.Errorf("set signingkey: %w", err)
+	}
+	return nil
+}
+
+// ClearIdentity removes every key gitswitch writes in this config scope, so the
+// scope falls back to whatever the next-wider one says. Used to undo a repo pin.
+func (c *Config) ClearIdentity() error {
+	for _, k := range []string{"user.name", "user.email", "user.signingkey", "gpg.format", "core.sshCommand"} {
+		if err := exec.Command("git", "config", c.scope(), "--unset", k).Run(); err != nil && !isUnsetNothingErr(err) {
+			return fmt.Errorf("unset %s: %w", k, err)
+		}
 	}
 	return nil
 }
@@ -134,6 +175,21 @@ func (c *Config) GetSSHKey() string {
 	}
 	return ""
 }
+
+// LocalEmail returns the repo-local user.email at dir, or "" if the repo has
+// none. A non-empty value means the repo commits with that identity no matter
+// which profile is active globally — set by a gitswitch pin, or by hand.
+func LocalEmail(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "config", "--local", "user.email").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// HasLocalIdentity reports whether the repo at dir carries its own identity, so
+// there is nothing to recommend or learn for it.
+func HasLocalIdentity(dir string) bool { return LocalEmail(dir) != "" }
 
 // GetGHUser reads the currently active GitHub CLI account.
 // Returns empty string if gh is not installed or no account is active.

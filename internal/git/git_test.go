@@ -34,6 +34,99 @@ func globalHelpers(t *testing.T) []string {
 	return helpers
 }
 
+func gitConfigValue(t *testing.T, key string) string {
+	t.Helper()
+	out, err := exec.Command("git", "config", "--global", key).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TestSetSignKey_FormatFollowsKey pins the SSH-vs-GPG detection: gpg.format must
+// track the kind of key given, or signing silently fails with the wrong backend.
+func TestSetSignKey_FormatFollowsKey(t *testing.T) {
+	isolatedGitConfig(t)
+	c := New(true)
+
+	cases := []struct {
+		key, wantFormat, wantKeyPrefix string
+	}{
+		{"ABCD1234EF567890", "", "ABCD1234EF567890"},         // GPG key ID → openpgp (unset)
+		{"~/.ssh/id_ed25519.pub", "ssh", ExpandPath("~/")},   // path → ssh, ~ expanded
+		{"ssh-ed25519 AAAAC3Nz", "ssh", "key::ssh-ed25519"},  // inline key → ssh, key:: added
+		{"key::ssh-ed25519 AAAAC3Nz", "ssh", "key::ssh-ed2"}, // already prefixed → untouched
+	}
+	for _, tc := range cases {
+		if err := c.SetSignKey(tc.key); err != nil {
+			t.Fatalf("SetSignKey(%q): %v", tc.key, err)
+		}
+		if got := gitConfigValue(t, "gpg.format"); got != tc.wantFormat {
+			t.Errorf("SetSignKey(%q): gpg.format = %q, want %q", tc.key, got, tc.wantFormat)
+		}
+		if got := gitConfigValue(t, "user.signingkey"); !strings.HasPrefix(got, tc.wantKeyPrefix) {
+			t.Errorf("SetSignKey(%q): user.signingkey = %q, want prefix %q", tc.key, got, tc.wantKeyPrefix)
+		}
+	}
+
+	// Empty key clears both, so a GPG-less profile leaves no stale ssh format.
+	if err := c.SetSignKey(""); err != nil {
+		t.Fatalf("SetSignKey(\"\"): %v", err)
+	}
+	if got := gitConfigValue(t, "gpg.format"); got != "" {
+		t.Errorf("gpg.format should be unset, got %q", got)
+	}
+	if got := gitConfigValue(t, "user.signingkey"); got != "" {
+		t.Errorf("user.signingkey should be unset, got %q", got)
+	}
+}
+
+// TestLocalIdentityRoundtrip covers the repo-pin path: a pin writes identity to
+// the repo's own config (leaving global alone), unpin removes every key it wrote.
+func TestLocalIdentityRoundtrip(t *testing.T) {
+	isolatedGitConfig(t)
+	repo := t.TempDir()
+	if err := exec.Command("git", "-C", repo, "init").Run(); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(repo)
+
+	if HasLocalIdentity(repo) {
+		t.Fatal("fresh repo should have no local identity")
+	}
+
+	local := New(false)
+	if err := local.SetUser("Ada", "ada@work.dev"); err != nil {
+		t.Fatal(err)
+	}
+	if err := local.SetSignKey("~/.ssh/id_ed25519.pub"); err != nil {
+		t.Fatal(err)
+	}
+	if !HasLocalIdentity(repo) {
+		t.Error("pinned repo should report a local identity")
+	}
+	if got := gitConfigValue(t, "user.email"); got != "" {
+		t.Errorf("global user.email should be untouched by a pin, got %q", got)
+	}
+
+	if err := local.ClearIdentity(); err != nil {
+		t.Fatalf("ClearIdentity: %v", err)
+	}
+	if HasLocalIdentity(repo) {
+		t.Error("unpinned repo should have no local identity")
+	}
+	for _, k := range []string{"user.name", "gpg.format", "user.signingkey"} {
+		out, err := exec.Command("git", "-C", repo, "config", "--local", k).Output()
+		if err == nil && strings.TrimSpace(string(out)) != "" {
+			t.Errorf("local %s should be cleared, got %q", k, out)
+		}
+	}
+	// Clearing an already-clean scope is a no-op, not an error (git exit 5).
+	if err := local.ClearIdentity(); err != nil {
+		t.Errorf("second ClearIdentity should be a no-op, got: %v", err)
+	}
+}
+
 func TestInstallCredentialHelper_Idempotent(t *testing.T) {
 	isolatedGitConfig(t)
 

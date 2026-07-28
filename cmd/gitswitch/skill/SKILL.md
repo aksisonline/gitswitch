@@ -63,7 +63,9 @@ gitswitch add <nickname> "<Full Name>" <email> [flags]
 # Common flags:
 #   --ssh-key ~/.ssh/id_work       force a specific SSH key
 #   --gh-user <github-handle>      also switch gh CLI account
-#   --sign-key <GPG-key-ID>        for signed commits
+#   --sign-key <key>               signed commits: GPG key ID, or an SSH
+#                                  key path (~/.ssh/id_ed25519.pub) — gitswitch
+#                                  sets gpg.format=ssh automatically
 
 # Examples:
 gitswitch add work "Alice Smith" alice@company.com --ssh-key ~/.ssh/id_work --gh-user alice-corp
@@ -133,14 +135,28 @@ source ~/.zshrc   # or open a new terminal
 
 ## Pinning an identity to a repo
 
-If you always want a specific identity recommended for a repo regardless of usage history:
+When one repo should *always* use a given identity, pin it instead of switching globally:
 
 ```bash
-gitswitch pin work      # always recommend 'work' in this repo
-gitswitch unpin         # remove the pin, fall back to auto-recommendation
+gitswitch pin work      # write 'work' into this repo's local git config
+gitswitch pin           # adopt the identity the repo already has configured
+gitswitch unpin         # remove it, fall back to the global identity
 ```
 
-The pin takes permanent priority over the auto-learned counts. `unpin` reverts to the usage-based recommender.
+A pin is a **local** identity: gitswitch writes `user.name`, `user.email`,
+`user.signingkey`/`gpg.format`, and `core.sshCommand` to the repo's own
+`.git/config`, so commits here are correct no matter which profile is active
+globally. It also switches the gh CLI to the matching account, and the HTTPS
+credential helper serves this repo's pushes from it. Nothing needs to be
+switched when entering the repo, so the nudge hook stays quiet.
+
+Prefer this over `gitswitch switch` whenever the user's problem is "this one repo
+keeps committing as the wrong person" — it fixes that repo permanently without
+disturbing the others.
+
+If a repo was configured by hand before gitswitch (`git config --local
+user.email …`), bare `gitswitch pin` adopts that identity: it matches the email
+to a stored profile and fills in the rest.
 
 ---
 
@@ -190,7 +206,7 @@ gitswitch personal   # or: gitswitch work
 ### "I want gitswitch to always remind me to use the right account in a repo"
 ```bash
 gitswitch install        # sets up the shell nudge hook
-gitswitch pin work       # optional: force 'work' regardless of history
+gitswitch pin work       # better: pin it so the repo is just always correct
 ```
 
 ### "Is this tool the same as `gh auth switch`?"
@@ -218,8 +234,8 @@ gitswitch     # opens the interactive TUI, use ↑↓ to navigate, Enter to swit
 | `gitswitch current --short` | Output `nickname\temail` (used by Starship prompt) |
 | `gitswitch add …` | Add a new profile |
 | `gitswitch remove <name>` | Delete a profile |
-| `gitswitch pin <name>` | Pin an identity to the current repo permanently |
-| `gitswitch unpin` | Remove pin, fall back to usage-based recommendation |
+| `gitswitch pin [name]` | Pin an identity to this repo's local git config (no name = adopt existing) |
+| `gitswitch unpin` | Remove the repo's local identity, fall back to global |
 | `gitswitch record` | Log current identity for this repo (called by shell hooks) |
 | `gitswitch recommend` | Print recommended identity if threshold met |
 | `gitswitch install` | Set up shell prompt segment, nudge hook, and tab completion |

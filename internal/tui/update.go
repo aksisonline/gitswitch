@@ -742,7 +742,7 @@ var profileFormFieldTitles = [6]struct{ key, title string }{
 	{"email", "Email"},
 	{"ghUser", "GitHub username"},
 	{"sshKey", "SSH key path"},
-	{"signKey", "GPG signing key"},
+	{"signKey", "Signing key"},
 }
 
 // formFieldAt returns the key of the field block under relY: the last field

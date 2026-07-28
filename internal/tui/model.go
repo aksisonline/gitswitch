@@ -136,7 +136,7 @@ var formLabels = [6]string{
 	"Nickname",
 	"User Name",
 	"Email",
-	"GPG Signing Key",
+	"Signing Key",
 	"SSH Key Path",
 	"GitHub Username",
 }
@@ -145,7 +145,7 @@ var formSubtitles = [6]string{
 	"label shown in this list — not written to git config",
 	"git user.name — author name on commits",
 	"git user.email — author email on commits",
-	"git user.signingkey — optional, leave blank to skip",
+	"GPG key ID or SSH key path — optional, leave blank to skip",
 	"sets core.sshCommand, e.g. ~/.ssh/id_work — optional",
 	"for gh auth switch — optional, leave blank to skip",
 }

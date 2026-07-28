@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -275,6 +276,25 @@ func (s *Store) Get(nickname string) (*Profile, error) {
 		}
 	}
 	return nil, fmt.Errorf("profile '%s' not found", nickname)
+}
+
+// GetByEmail returns the profile owning an email address, or nil if none does.
+// Matching is case-insensitive: git config casing need not match what was saved.
+// Used to recognise an identity gitswitch did not write (a hand-configured repo).
+func (s *Store) GetByEmail(email string) *Profile {
+	if email == "" {
+		return nil
+	}
+	profiles, err := s.Load()
+	if err != nil {
+		return nil
+	}
+	for i := range profiles {
+		if strings.EqualFold(profiles[i].Email, email) {
+			return &profiles[i]
+		}
+	}
+	return nil
 }
 
 func (s *Store) SetActive(nickname string) error {

@@ -102,8 +102,8 @@ func newProfileForm(d *profileFormData, edit bool, width int) *huh.Form {
 				Value(&d.sshKey),
 			huh.NewInput().
 				Key("signKey").
-				Title("GPG signing key").
-				Description("Optional — git user.signingkey for signed commits.").
+				Title("Signing key").
+				Description("Optional — GPG key ID or SSH key path (~/.ssh/id_ed25519.pub).").
 				Placeholder("optional").
 				Value(&d.signKey),
 		),

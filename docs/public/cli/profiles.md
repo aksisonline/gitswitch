@@ -71,12 +71,12 @@ gitswitch
 - Tilde (`~`) and `$HOME` expand to your home directory.
 - If omitted, SSH key routing is not changed when switching.
 
-### GPG key (`sign_key`)
+### Signing key (`sign_key`)
 
-- 16-character GPG key ID from `gpg --list-secret-keys --keyid-format LONG`.
-- On switch: sets `git config --global user.signingkey <key>`
-- If omitted, the signing key is not changed when switching.
-- See [GPG Signing](/docs/features/gpg) for key setup.
+- A 16-character GPG key ID from `gpg --list-secret-keys --keyid-format LONG`, **or** an SSH key (`~/.ssh/id_ed25519.pub`, or an inline `ssh-…` key) if you sign with SSH instead of GPG.
+- On switch: sets `git config --global user.signingkey <key>`, plus `gpg.format=ssh` when the value is an SSH key. GPG key IDs clear `gpg.format` so git signs with OpenPGP.
+- If omitted, both settings are cleared when switching, so another profile's signing setup never leaks into this one.
+- See [Commit Signing](/docs/features/gpg) for key setup.
 
 ### GitHub username (`gh_user`)
 

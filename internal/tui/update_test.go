@@ -33,7 +33,7 @@ func TestFormFieldAt(t *testing.T) {
 		"  git user.name",
 		"  > Ada Lovelace",
 		"",
-		"  GPG signing key",
+		"  Signing key",
 		"  optional",
 		"  > ",
 	}
