@@ -58,6 +58,54 @@ func TestScopeGlyph(t *testing.T) {
 	}
 }
 
+// Pressing enter on the HTTPS Credential Helper item must actually flip git
+// config, not just the toggle glyph — this is the toggle that used to be a
+// permanently-disabled "coming soon" stub.
+func TestCredentialHelperToggle(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(home, "gitconfig"))
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	if err := os.WriteFile(filepath.Join(home, "gitconfig"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	m := Model{
+		store: storage.NewAt(t.TempDir()), state: StateList, width: 84, height: 30,
+		tabIndex: 1, utilityFocus: 2, credentialHelperEnabled: false,
+	}
+	if git.IsCredentialHelperInstalled() {
+		t.Fatal("should not be installed in a fresh config")
+	}
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	got := next.(Model)
+	if cmd == nil {
+		t.Fatal("enter on the credential helper item should return a command")
+	}
+	msg := cmd()
+	got2, _ := got.Update(msg)
+	final := got2.(Model)
+	if !final.credentialHelperEnabled {
+		t.Errorf("credentialHelperEnabled = false after enabling, statusMsg=%q", final.statusMsg)
+	}
+	if !git.IsCredentialHelperInstalled() {
+		t.Error("git config should show gitswitch installed after the toggle")
+	}
+
+	// Toggle again: must remove it.
+	next, cmd = final.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	got = next.(Model)
+	next2, _ := got.Update(cmd())
+	final = next2.(Model)
+	if final.credentialHelperEnabled {
+		t.Error("credentialHelperEnabled = true after disabling")
+	}
+	if git.IsCredentialHelperInstalled() {
+		t.Error("git config should show gitswitch removed after the second toggle")
+	}
+}
+
 // The TUI must notice the repo it was launched from: without this wiring the
 // glyphs and the Current line silently report the global identity while git uses
 // the pinned one.

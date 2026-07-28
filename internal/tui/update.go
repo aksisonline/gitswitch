@@ -25,6 +25,14 @@ type switchDoneMsg struct {
 	err      error
 }
 
+// credentialHelperDoneMsg reports the result of toggling the HTTPS credential
+// helper. enabled reflects git.IsCredentialHelperInstalled() after the toggle —
+// not just "we ran install" — since another tool's helper can still shadow us.
+type credentialHelperDoneMsg struct {
+	enabled bool
+	err     error
+}
+
 // pinDoneMsg reports the result of pinning or releasing this repo's identity.
 // A nil profile means the pin was removed.
 type pinDoneMsg struct {
@@ -93,6 +101,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusIsErr = true
 		}
 		return m, tea.EnableMouseAllMotion
+	}
+	if cd, ok := msg.(credentialHelperDoneMsg); ok {
+		if cd.err != nil {
+			m.statusMsg = fmt.Sprintf("credential helper: %v", cd.err)
+			m.statusIsErr = true
+		} else {
+			m.credentialHelperEnabled = cd.enabled
+			if cd.enabled {
+				m.statusMsg = "HTTPS credential helper enabled"
+			} else {
+				m.statusMsg = "HTTPS credential helper removed"
+			}
+			m.statusIsErr = false
+		}
+		return m, nil
 	}
 	if sd, ok := msg.(shellDoneMsg); ok {
 		if sd.err != nil {
@@ -219,7 +242,10 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor--
 				}
 			case 1:
-				// only one active item — navigation disabled until more ship
+				// Pre-commit safety (index 1) is still a disabled placeholder — skip it.
+				if m.utilityFocus == 2 {
+					m.utilityFocus = 0
+				}
 			case 2:
 				if m.settingsFocus > 0 {
 					m.settingsFocus--
@@ -234,7 +260,10 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor++
 				}
 			case 1:
-				// only one active item — navigation disabled until more ship
+				// Pre-commit safety (index 1) is still a disabled placeholder — skip it.
+				if m.utilityFocus == 0 {
+					m.utilityFocus = 2
+				}
 			case 2:
 				if m.settingsFocus < 2 {
 					m.settingsFocus++
@@ -258,6 +287,9 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.utilityFocus == 0 {
 					m.openShellConfirm(!m.shellEnabled)
 					return m, nil
+				}
+				if m.utilityFocus == 2 {
+					return m, m.toggleCredentialHelperCmd()
 				}
 			case 2: // Settings
 				if m.settingsFocus == 0 {
@@ -689,6 +721,27 @@ func (m Model) switchProfileCmd(p storage.Profile) tea.Cmd {
 	}
 }
 
+// toggleCredentialHelperCmd installs or removes the HTTPS credential helper,
+// mirroring `gitswitch install`/`uninstall --https`. Toggle direction is
+// decided by current state so it behaves like the other Utilities toggles: one
+// key/click, no confirm dialog (unlike shell integration, this never touches an
+// rc file or requires a shell reload).
+func (m Model) toggleCredentialHelperCmd() tea.Cmd {
+	wasEnabled := m.credentialHelperEnabled
+	return func() tea.Msg {
+		var err error
+		if wasEnabled {
+			err = git.UninstallCredentialHelper()
+		} else {
+			err = git.InstallCredentialHelper()
+		}
+		if err != nil {
+			return credentialHelperDoneMsg{enabled: wasEnabled, err: err}
+		}
+		return credentialHelperDoneMsg{enabled: git.IsCredentialHelperInstalled()}
+	}
+}
+
 // pinProfileCmd writes a profile into this repo's own git config and records the
 // pin, leaving the global identity alone — the same two writes as `gitswitch pin`.
 func (m Model) pinProfileCmd(p storage.Profile) tea.Cmd {
@@ -966,8 +1019,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				m.cursor = idx
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff); ok && idx == 0 {
-				m.utilityFocus = 0
+			if idx, ok := itemBoxAt(relY, arcadeOff); ok && idx != 1 {
+				m.utilityFocus = idx
 			}
 		case 2:
 			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
@@ -1149,8 +1202,11 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		case 1:
 			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
 				m.utilityFocus = idx
-				if idx == 0 {
+				switch idx {
+				case 0:
 					m.openShellConfirm(!m.shellEnabled)
+				case 2:
+					return m, m.toggleCredentialHelperCmd()
 				}
 			}
 		case 2:

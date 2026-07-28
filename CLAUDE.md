@@ -49,6 +49,10 @@ The in-app splash screen fires when the installed version has a higher MINOR or 
 
 So: great CHANGELOG = great splash = users understand what changed without Googling.
 
+## UI Consistency Check
+
+Before every push that ships a feature or behavior change, check whether the TUI (`internal/tui/`), CLI help text, `gitswitch doctor`, and docs (`docs/public/`) all agree with what actually shipped. This codebase has repeatedly shipped a backend feature (HTTPS credential helper, repo pins) while the Utilities/Settings tab kept showing it as a disabled "coming soon" stub — don't let that recur. Concretely: if a command's behavior, a config field, or a status changes, grep the TUI views and CLI flag descriptions for stale references before committing.
+
 ## CI/CD
 
 Workflow: `.github/workflows/release.yml`  

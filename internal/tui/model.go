@@ -114,6 +114,9 @@ type Model struct {
 	settingsFocus int
 	// Shell integration toggle
 	shellEnabled bool
+	// HTTPS credential helper toggle — true means gitswitch will actually be
+	// asked first (git.IsCredentialHelperInstalled), not just "registered".
+	credentialHelperEnabled bool
 	// Accounts secondary column: false=email (default), true=GitHub username
 	showUsername bool
 
@@ -253,19 +256,20 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 	aliasInput.CharLimit = 32
 	aliasInput.Width = 20
 	m := &Model{
-		store:              store,
-		profiles:           profiles,
-		active:             active,
-		state:              StateList,
-		currentVersion:     currentVersion,
-		colorTheme:         prefs.ColorTheme,
-		shellEnabled:       shell.IsInstalled(shell.RCFile(shell.DetectShell())),
-		showUsername:       prefs.ShowUsername,
-		splashSeen020:      prefs.SplashSeen020,
-		hiScore:            prefs.ArcadeHiScore,
-		shellAlias:         shellAlias,
-		shellAliasDisabled: prefs.ShellAliasDisabled,
-		aliasInput:         aliasInput,
+		store:                   store,
+		profiles:                profiles,
+		active:                  active,
+		state:                   StateList,
+		currentVersion:          currentVersion,
+		colorTheme:              prefs.ColorTheme,
+		shellEnabled:            shell.IsInstalled(shell.RCFile(shell.DetectShell())),
+		credentialHelperEnabled: git.IsCredentialHelperInstalled(),
+		showUsername:            prefs.ShowUsername,
+		splashSeen020:           prefs.SplashSeen020,
+		hiScore:                 prefs.ArcadeHiScore,
+		shellAlias:              shellAlias,
+		shellAliasDisabled:      prefs.ShellAliasDisabled,
+		aliasInput:              aliasInput,
 	}
 	m.refreshRepoScope()
 	for _, opt := range opts {
