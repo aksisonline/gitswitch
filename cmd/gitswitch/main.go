@@ -104,13 +104,26 @@ var rootCmd = &cobra.Command{
 					name = user.Login
 				}
 				if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
-					_ = store.Update(nickname, storage.Profile{
+					// Merge OAuth fields onto existing profile — keep SSH/GPG keys.
+					existing, _ := store.Get(nickname)
+					updated := storage.Profile{
 						Nickname: nickname,
 						UserName: name,
 						Email:    user.Email,
 						GHUser:   user.Login,
 						TokenRef: ref,
-					})
+					}
+					if existing != nil {
+						updated.SignKey = existing.SignKey
+						updated.SSHKey = existing.SSHKey
+						if updated.UserName == "" {
+							updated.UserName = existing.UserName
+						}
+						if updated.Email == "" {
+							updated.Email = existing.Email
+						}
+					}
+					_ = store.Update(nickname, updated)
 				} else {
 					_ = store.Update(nickname, storage.Profile{
 						Nickname: nickname,
@@ -753,14 +766,26 @@ var loginCmd = &cobra.Command{
 			name = user.Login
 		}
 		if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
-			// Profile exists — update TokenRef only
-			_ = store.Update(nickname, storage.Profile{
+			// Profile exists — merge OAuth fields, keep SSH/GPG keys.
+			existing, _ := store.Get(nickname)
+			updated := storage.Profile{
 				Nickname: nickname,
 				UserName: name,
 				Email:    user.Email,
 				GHUser:   user.Login,
 				TokenRef: ref,
-			})
+			}
+			if existing != nil {
+				updated.SignKey = existing.SignKey
+				updated.SSHKey = existing.SSHKey
+				if updated.UserName == "" {
+					updated.UserName = existing.UserName
+				}
+				if updated.Email == "" {
+					updated.Email = existing.Email
+				}
+			}
+			_ = store.Update(nickname, updated)
 		} else {
 			// Set TokenRef on the newly created profile
 			_ = store.Update(nickname, storage.Profile{

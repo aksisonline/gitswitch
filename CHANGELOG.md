@@ -8,6 +8,13 @@ Format: `[version] — date — summary`
 ## [Unreleased]
 
 ### Fixed
+- **Upgrade prompt no longer freezes after install** — finishing an in-app upgrade from the “new version” screen now returns to the list with a success or error message (the result was previously dropped while still on that screen).
+- **Editing a profile no longer drops the OAuth token link** — saving from the edit form keeps the keychain `token_ref` so re-login is not required after a name/email tweak.
+- **Re-login keeps SSH and GPG keys** — `gitswitch login` on an existing nickname merges the new GitHub token without wiping `ssh_key` / `sign_key`.
+- **Settings → edit config reloads profiles** — leaving the external editor refreshes the in-memory list so YAML edits show up without restarting.
+- **Cancel on delete no longer blanks the edit form** — pressing `n` / cancel rebuilds the form immediately with the profile’s values.
+- **Onboarding actually scans gh accounts and SSH keys** — the setup wizard imports logged-in `gh` users and attaches private keys from `~/.ssh`, not only `user.name` / `user.email`.
+- **HTTPS credential helper is toggleable in Utilities** — the row is no longer a false “coming soon” chip; enter/click installs or removes `!gitswitch credential` like the CLI wizard.
 - **Mouse works on every screen** — clicks are now hit-tested against the actual rendered output instead of hardcoded row offsets, so the Utilities and Settings boxes, wizard buttons, update prompt, tips, shell-confirm dialog, and arcade mode (whose score line shifted everything by one row) all respond correctly. Item-box clicks previously used a 5-row grid for 4-row boxes and often focused the wrong item or did nothing.
 - **Channel-locked update checks** — canary (beta) builds no longer get update notifications for stable releases, and vice versa. Moving between channels is explicit via `gitswitch stable` / `gitswitch beta`. Canary builds also keep receiving betas of newer targets (previously only same-base betas were offered).
 - **Arcade select flash no longer wraps** — the flash row was rendered 2 columns wider than the panel and broke the layout mid-animation; it now matches the list rows (including the email/username toggle).

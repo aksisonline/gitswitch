@@ -66,9 +66,9 @@ func (m Model) viewWizardDetect(pw int) string {
 
 	spin := lipgloss.NewStyle().Foreground(colorGreen).Render("✓")
 	checks := divLine +
-		"\n\n  " + spin + "  " + styleCurrentVal.Render("~/.gitconfig") + "          " + styleBrand.Render("checking...") +
-		"\n  " + spin + "  " + styleCurrentVal.Render("gh CLI accounts") + "       " + styleBrand.Render("checking...") +
-		"\n  " + spin + "  " + styleCurrentVal.Render("SSH keys in ~/.ssh/") + "   " + styleBrand.Render("checking...")
+		"\n\n  " + spin + "  " + styleCurrentVal.Render("~/.gitconfig") + "          " + styleBrand.Render("name, email, keys") +
+		"\n  " + spin + "  " + styleCurrentVal.Render("gh CLI accounts") + "       " + styleBrand.Render("logged-in users") +
+		"\n  " + spin + "  " + styleCurrentVal.Render("SSH keys in ~/.ssh/") + "   " + styleBrand.Render("private keys")
 
 	hint := "\n\n  " + styleBrand.Render("press ") + styleFooterKey.Render("enter") + styleBrand.Render(" or click to continue")
 

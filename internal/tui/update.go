@@ -82,8 +82,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if ed.err != nil {
 			m.statusMsg = fmt.Sprintf("editor: %v", ed.err)
 			m.statusIsErr = true
+		} else if profiles, err := m.store.Load(); err != nil {
+			m.statusMsg = fmt.Sprintf("reload config: %v", err)
+			m.statusIsErr = true
+		} else {
+			m.profiles = profiles
+			m.active = git.DetectActive(profiles)
+			if m.cursor >= len(m.profiles) && m.cursor > 0 {
+				m.cursor = len(m.profiles) - 1
+			}
+			m.statusMsg = "config reloaded"
+			m.statusIsErr = false
 		}
 		return m, tea.EnableMouseAllMotion
+	}
+	if ud, ok := msg.(upgradeDoneMsg); ok {
+		if ud.err != nil {
+			m.statusMsg = fmt.Sprintf("upgrade failed: %v", ud.err)
+			m.statusIsErr = true
+		} else {
+			m.statusMsg = fmt.Sprintf("upgraded to %s — restart to apply", m.latestVersion)
+			m.statusIsErr = false
+			m.updateAvailable = false
+		}
+		m.state = StateList
+		return m, nil
+	}
+	if ch, ok := msg.(credHelperDoneMsg); ok {
+		if ch.err != nil {
+			m.statusMsg = fmt.Sprintf("credential helper: %v", ch.err)
+			m.statusIsErr = true
+		} else {
+			m.credHelperEnabled = ch.installed
+			if ch.installed {
+				m.statusMsg = "HTTPS credential helper enabled"
+			} else {
+				m.statusMsg = "HTTPS credential helper removed"
+			}
+			m.statusIsErr = false
+		}
+		return m, nil
 	}
 	if sd, ok := msg.(shellDoneMsg); ok {
 		if sd.err != nil {
@@ -210,7 +248,13 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor--
 				}
 			case 1:
-				// only one active item — navigation disabled until more ship
+				if m.utilityFocus > 0 {
+					m.utilityFocus--
+					// Skip pre-commit (idx 1) which is still coming soon.
+					if m.utilityFocus == 1 {
+						m.utilityFocus = 0
+					}
+				}
 			case 2:
 				if m.settingsFocus > 0 {
 					m.settingsFocus--
@@ -225,7 +269,12 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor++
 				}
 			case 1:
-				// only one active item — navigation disabled until more ship
+				if m.utilityFocus < 2 {
+					m.utilityFocus++
+					if m.utilityFocus == 1 {
+						m.utilityFocus = 2
+					}
+				}
 			case 2:
 				if m.settingsFocus < 2 {
 					m.settingsFocus++
@@ -248,6 +297,14 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case 1: // Utilities — toggle focused item
 				if m.utilityFocus == 0 {
 					m.openShellConfirm(!m.shellEnabled)
+					return m, nil
+				}
+				if m.utilityFocus == 2 {
+					return m, m.toggleCredentialHelperCmd()
+				}
+				if m.utilityFocus == 1 {
+					m.statusMsg = "pre-commit safety net — coming soon"
+					m.statusIsErr = false
 					return m, nil
 				}
 			case 2: // Settings
@@ -380,15 +437,6 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return upgradeDoneMsg{err: err}
 				})
 			}
-		}
-	case upgradeDoneMsg:
-		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("upgrade failed: %v", msg.err)
-			m.statusIsErr = true
-		} else {
-			m.statusMsg = fmt.Sprintf("upgraded to %s — restart to apply", m.latestVersion)
-			m.statusIsErr = false
-			m.updateAvailable = false
 		}
 	case switchDoneMsg:
 		if msg.err != nil {
@@ -564,6 +612,8 @@ func (m Model) updateDelete(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.confirmDelete()
 		case "n", "N", "esc":
 			m.state = StateEdit
+			// Rebuild immediately so cancel never shows a blank edit form.
+			return m, m.openProfileForm(true, m.formFields)
 		}
 	}
 	return m, nil
@@ -850,6 +900,18 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 					m.cursor++
 				}
 				m.statusMsg = ""
+			case 1:
+				if up && m.utilityFocus > 0 {
+					m.utilityFocus--
+					if m.utilityFocus == 1 {
+						m.utilityFocus = 0
+					}
+				} else if !up && m.utilityFocus < 2 {
+					m.utilityFocus++
+					if m.utilityFocus == 1 {
+						m.utilityFocus = 2
+					}
+				}
 			case 2:
 				if up && m.settingsFocus > 0 {
 					m.settingsFocus--
@@ -884,8 +946,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				m.cursor = idx
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff); ok && idx == 0 {
-				m.utilityFocus = 0
+			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
+				m.utilityFocus = idx
 			}
 		case 2:
 			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
@@ -1025,6 +1087,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 		if onRow("cancel") {
 			m.state = StateEdit
+			return m, m.openProfileForm(true, m.formFields)
 		}
 		return m, nil
 
@@ -1069,6 +1132,11 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				m.utilityFocus = idx
 				if idx == 0 {
 					m.openShellConfirm(!m.shellEnabled)
+				} else if idx == 2 {
+					return m, m.toggleCredentialHelperCmd()
+				} else if idx == 1 {
+					m.statusMsg = "pre-commit safety net — coming soon"
+					m.statusIsErr = false
 				}
 			}
 		case 2:
@@ -1222,30 +1290,100 @@ type detectConfigsMsg struct {
 
 func (m Model) detectExistingConfigsCmd() tea.Cmd {
 	return func() tea.Msg {
-		var found []storage.Profile
-		// Read global gitconfig
-		name, email := readGlobalGitConfig()
-		if name != "" && email != "" {
-			found = append(found, storage.Profile{
-				Nickname: deriveNickname(email),
-				UserName: name,
-				Email:    email,
-			})
-		}
-		return detectConfigsMsg{profiles: found}
+		return detectConfigsMsg{profiles: detectExistingProfiles()}
 	}
 }
 
-func readGlobalGitConfig() (name, email string) {
-	cmdName := exec.Command("git", "config", "--global", "user.name")
-	if out, err := cmdName.Output(); err == nil {
-		name = strings.TrimSpace(string(out))
+// detectExistingProfiles scans git config, gh accounts, and ~/.ssh for
+// identities the user can import. Used by the onboarding wizard.
+func detectExistingProfiles() []storage.Profile {
+	var found []storage.Profile
+	seenNick := map[string]bool{}
+	seenEmail := map[string]bool{}
+
+	add := func(p storage.Profile) {
+		if p.Nickname == "" {
+			return
+		}
+		if seenNick[p.Nickname] {
+			// Merge missing fields into the first hit.
+			for i := range found {
+				if found[i].Nickname != p.Nickname {
+					continue
+				}
+				if found[i].UserName == "" {
+					found[i].UserName = p.UserName
+				}
+				if found[i].Email == "" {
+					found[i].Email = p.Email
+				}
+				if found[i].SignKey == "" {
+					found[i].SignKey = p.SignKey
+				}
+				if found[i].SSHKey == "" {
+					found[i].SSHKey = p.SSHKey
+				}
+				if found[i].GHUser == "" {
+					found[i].GHUser = p.GHUser
+				}
+				return
+			}
+		}
+		if p.Email != "" && seenEmail[p.Email] && p.GHUser == "" {
+			return
+		}
+		seenNick[p.Nickname] = true
+		if p.Email != "" {
+			seenEmail[p.Email] = true
+		}
+		found = append(found, p)
 	}
-	cmdEmail := exec.Command("git", "config", "--global", "user.email")
-	if out, err := cmdEmail.Output(); err == nil {
-		email = strings.TrimSpace(string(out))
+
+	cfg := git.New(true)
+	name, email, _ := cfg.GetUser()
+	if name != "" && email != "" {
+		add(storage.Profile{
+			Nickname: deriveNickname(email),
+			UserName: name,
+			Email:    email,
+			SignKey:  cfg.GetSignKey(),
+			SSHKey:   cfg.GetSSHKey(),
+			GHUser:   git.GetGHUser(),
+		})
 	}
-	return
+
+	for _, acct := range git.ListGHUsers() {
+		nick := acct.Login
+		if nick == "" {
+			continue
+		}
+		add(storage.Profile{
+			Nickname: nick,
+			UserName: nick,
+			Email:    nick + "@users.noreply.github.com",
+			GHUser:   acct.Login,
+		})
+	}
+
+	// Attach first SSH key found to the first profile if none set yet;
+	// otherwise surface a profile-ready hint via a dedicated entry only
+	// when we have no profiles at all.
+	keys := git.ListSSHPrivateKeys()
+	if len(keys) > 0 && len(found) > 0 {
+		for i := range found {
+			if found[i].SSHKey == "" {
+				// Prefer tilde form for display/portability.
+				k := keys[0]
+				if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(k, home+string(os.PathSeparator)) {
+					k = "~/" + strings.TrimPrefix(k, home+string(os.PathSeparator))
+				}
+				found[i].SSHKey = k
+				break
+			}
+		}
+	}
+
+	return found
 }
 
 func deriveNickname(email string) string {
@@ -1253,6 +1391,28 @@ func deriveNickname(email string) string {
 		return email[:at]
 	}
 	return email
+}
+
+// toggleCredentialHelperCmd installs or removes gitswitch's HTTPS credential helper.
+func (m Model) toggleCredentialHelperCmd() tea.Cmd {
+	install := !m.credHelperEnabled
+	return func() tea.Msg {
+		var err error
+		if install {
+			err = git.InstallCredentialHelper()
+		} else {
+			err = git.UninstallCredentialHelper()
+		}
+		if err != nil {
+			return credHelperDoneMsg{installed: m.credHelperEnabled, err: err}
+		}
+		return credHelperDoneMsg{installed: install, err: nil}
+	}
+}
+
+type credHelperDoneMsg struct {
+	installed bool
+	err       error
 }
 
 func (m Model) openConfigEditor() tea.Cmd {

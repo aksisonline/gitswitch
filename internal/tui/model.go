@@ -103,6 +103,8 @@ type Model struct {
 	settingsFocus int
 	// Shell integration toggle
 	shellEnabled bool
+	// HTTPS credential helper toggle (git credential.helper = !gitswitch credential)
+	credHelperEnabled bool
 	// Accounts secondary column: false=email (default), true=GitHub username
 	showUsername bool
 
@@ -199,6 +201,7 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		currentVersion:     currentVersion,
 		colorTheme:         prefs.ColorTheme,
 		shellEnabled:       shell.IsInstalled(shell.RCFile(shell.DetectShell())),
+		credHelperEnabled:  git.IsCredentialHelperInstalled(),
 		showUsername:       prefs.ShowUsername,
 		splashSeen020:      prefs.SplashSeen020,
 		hiScore:            prefs.ArcadeHiScore,

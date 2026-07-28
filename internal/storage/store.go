@@ -237,6 +237,11 @@ func (s *Store) Update(nickname string, updated Profile) error {
 	for i, p := range profiles {
 		if p.Nickname == nickname {
 			updated.Active = p.Active
+			// TokenRef is never on the edit form — preserve it when callers omit it
+			// so OAuth keychain links survive profile edits.
+			if updated.TokenRef == "" {
+				updated.TokenRef = p.TokenRef
+			}
 			profiles[i] = updated
 			return s.Save(profiles)
 		}
