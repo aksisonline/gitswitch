@@ -935,8 +935,23 @@ var doctorCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonOut, _ := cmd.Flags().GetBool("json")
 		r := prereqs.Check()
+		conflicts := git.CredentialHelperConflicts()
 		if jsonOut {
-			fmt.Printf("%s\n", r.JSON())
+			// Embedded so git/gh stay top-level, matching the pre-existing shape.
+			report := struct {
+				prereqs.CheckResult
+				HTTPS struct {
+					RoutedByGitswitch bool                 `json:"routed_by_gitswitch"`
+					Conflicts         []git.HelperConflict `json:"conflicts,omitempty"`
+				} `json:"https"`
+			}{CheckResult: r}
+			report.HTTPS.RoutedByGitswitch = len(conflicts) == 0
+			report.HTTPS.Conflicts = conflicts
+			b, err := json.MarshalIndent(report, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%s\n", b)
 			return nil
 		}
 		fmt.Println()
@@ -953,7 +968,6 @@ var doctorCmd = &cobra.Command{
 
 		// HTTPS routing: being registered is not enough — another tool's per-host
 		// helper can be asked first, and then gitswitch never sees the request.
-		conflicts := git.CredentialHelperConflicts()
 		switch {
 		case len(conflicts) == 0:
 			fmt.Println("  ✓  HTTPS pushes routed by gitswitch")

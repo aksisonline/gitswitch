@@ -386,8 +386,8 @@ func IsCredentialHelperInstalled() bool {
 // HelperConflict names a chain where some other helper is asked before gitswitch,
 // so gitswitch never gets to route that host's credentials.
 type HelperConflict struct {
-	Key    string // e.g. credential.https://github.com.helper
-	Winner string // the helper git asks instead, "" when nothing is registered
+	Key    string `json:"key"`    // e.g. credential.https://github.com.helper
+	Winner string `json:"winner"` // the helper git asks instead, "" when nothing is registered
 }
 
 // CredentialHelperConflicts lists the chains where gitswitch is not first, so
