@@ -51,7 +51,7 @@ func (m Model) utilItem(pw, iw, idx int) string {
 	case 1: // Pre-commit Safety Net
 		title := "Pre-commit Safety Net"
 		desc := "Warn before committing as the wrong identity in a pinned repo."
-		chip := "v0.2.1"
+		chip := "soon"
 		if m.arcadeMode {
 			title = "PRE-COMMIT SAFETY NET"
 			desc = "Stops wrong-player commits. Bonus stage."
