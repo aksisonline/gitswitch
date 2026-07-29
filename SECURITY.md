@@ -14,7 +14,7 @@ Use GitHub's private reporting instead: go to the
 maintainer can see, and lets us collaborate on a fix before anything is
 public.
 
-If you'd rather not use GitHub, email **abhiramkanna@edirq.com** with:
+If you'd rather not use GitHub, email **hello@aksisonline.com** with:
 
 - What you found and why it's a security issue (not just a bug).
 - Steps to reproduce, or a PoC if you have one.
