@@ -41,7 +41,7 @@ elsewhere.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to **abhiramkanna@edirq.com**. All complaints will be reviewed and
+reported to **hello@aksisonline.com**. All complaints will be reviewed and
 investigated promptly and fairly.
 
 ## Attribution
