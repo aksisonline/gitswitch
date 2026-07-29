@@ -260,26 +260,117 @@ func HasLocalIdentity(dir string) bool {
 // GetGHUser reads the currently active GitHub CLI account.
 // Returns empty string if gh is not installed or no account is active.
 func GetGHUser() string {
+	users := ListGHUsers()
+	for _, u := range users {
+		if u.Active {
+			return u.Login
+		}
+	}
+	if len(users) > 0 {
+		return users[0].Login
+	}
+	return ""
+}
+
+// GHAccount is one account listed by `gh auth status`.
+type GHAccount struct {
+	Login  string
+	Active bool
+}
+
+// ListGHUsers parses `gh auth status` for every logged-in account.
+// Returns nil when gh is missing or reports nothing.
+func ListGHUsers() []GHAccount {
+	if !IsGHInstalled() {
+		return nil
+	}
 	out, err := exec.Command("gh", "auth", "status").CombinedOutput()
+	if err != nil && len(out) == 0 {
+		return nil
+	}
+	var users []GHAccount
+	lines := strings.Split(string(out), "\n")
+	for i, line := range lines {
+		// "  ✓ Logged in to github.com account <username> (keyring)"
+		// or older: "  ✓ account <username> ..."
+		fields := strings.Fields(line)
+		var login string
+		for j, f := range fields {
+			if f == "account" && j+1 < len(fields) {
+				login = fields[j+1]
+				break
+			}
+		}
+		if login == "" {
+			continue
+		}
+		active := false
+		// "Active account: true" is usually on the next non-empty line(s).
+		for k := i + 1; k < len(lines) && k <= i+4; k++ {
+			if strings.Contains(lines[k], "Active account: true") {
+				active = true
+				break
+			}
+			// Next account line — stop scanning this block.
+			if strings.Contains(lines[k], " account ") || strings.Contains(lines[k], "Logged in") {
+				break
+			}
+		}
+		// Deduplicate by login (status can repeat per host).
+		dup := false
+		for _, u := range users {
+			if u.Login == login {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			users = append(users, GHAccount{Login: login, Active: active})
+		}
+	}
+	return users
+}
+
+// GetSignKey reads user.signingkey from the given scope.
+func (c *Config) GetSignKey() string {
+	out, err := exec.Command("git", "config", c.scope(), "user.signingkey").Output()
 	if err != nil {
 		return ""
 	}
-	lines := strings.Split(string(out), "\n")
-	for i, line := range lines {
-		if strings.Contains(line, "Active account: true") {
-			// The username appears on the preceding line: "  ✓ account <username> ..."
-			if i > 0 {
-				prev := lines[i-1]
-				fields := strings.Fields(prev)
-				for j, f := range fields {
-					if f == "account" && j+1 < len(fields) {
-						return fields[j+1]
-					}
-				}
-			}
+	return strings.TrimSpace(string(out))
+}
+
+// ListSSHPrivateKeys returns private key paths under ~/.ssh that look like
+// identity keys (id_*, or non-pub files that are not known_hosts/config).
+func ListSSHPrivateKeys() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	dir := filepath.Join(home, ".ssh")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var keys []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasSuffix(name, ".pub") {
+			continue
+		}
+		switch name {
+		case "known_hosts", "known_hosts.old", "config", "authorized_keys", "authorized_keys2":
+			continue
+		}
+		// Prefer classic id_* names; also accept other non-dot private key files.
+		if strings.HasPrefix(name, "id_") || (!strings.HasPrefix(name, ".") && !strings.Contains(name, "known_hosts")) {
+			keys = append(keys, filepath.Join(dir, name))
 		}
 	}
-	return ""
+	return keys
 }
 
 // credentialHelperValue is the entry gitswitch adds to a credential.helper
