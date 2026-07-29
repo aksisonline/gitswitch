@@ -3,7 +3,7 @@
 A terminal UI for managing multiple local git identities. Switch the name, email, SSH key, and GitHub account that are used for your commits — instantly, without touching config files manually.
 
 ![gitswitch TUI](https://img.shields.io/badge/built%20with-Go-00ADD8?style=flat-square&logo=go)
-![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
+![license](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)
 
 > **Credits:** Switching logic (SSH key management, `gh auth switch` integration, profile state detection) is inspired by [dankozlowski/git-switcher](https://github.com/dankozlowski/git-switcher). The TUI, profile storage, and CLI design are original to this project.
 

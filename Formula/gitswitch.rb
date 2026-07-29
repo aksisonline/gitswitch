@@ -5,7 +5,7 @@ class Gitswitch < Formula
   homepage "https://github.com/aksisonline/gitswitch"
   url "https://github.com/aksisonline/gitswitch/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "TODO_SHA256"
-  license "MIT"
+  license "Apache-2.0"
 
   depends_on "go" => :build
 
