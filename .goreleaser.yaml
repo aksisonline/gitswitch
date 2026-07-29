@@ -43,6 +43,6 @@ brews:
     directory: Formula
     homepage: https://github.com/aksisonline/gitswitch
     description: Manage multiple git profiles locally
-    license: MIT
+    license: Apache-2.0
     test: |
       system "#{bin}/gitswitch", "current"
