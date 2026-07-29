@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/aksisonline/gitswitch/security/advisories/new
+    about: Please don't file credential/key/token security issues as a public issue — use private reporting (see SECURITY.md).

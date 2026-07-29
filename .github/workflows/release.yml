@@ -173,7 +173,7 @@ jobs:
 
   publish:
     name: Create release and tag
-    needs: [version, release]
+    needs: [check, version, release]
     runs-on: ubuntu-latest
 
     steps:
@@ -211,7 +211,23 @@ jobs:
 
       - name: Prepare release notes
         run: |
-          sed "s/^## v[0-9].*/## ${{ needs.version.outputs.new_tag }}/" CHANGELOG.md > /tmp/release-notes.md
+          NEW_TAG="${{ needs.version.outputs.new_tag }}"
+          PREV_TAG="${{ needs.check.outputs.latest_tag }}"
+          DATE="$(date -u +%Y-%m-%d)"
+
+          # CHANGELOG.md accumulates every past version too — only the
+          # [Unreleased] section is this release's notes. Extract just that.
+          awk -v tag="$NEW_TAG" -v date="$DATE" '
+            /^## \[Unreleased\]/ { flag=1; print "## " tag " — " date; next }
+            /^## \[/ { if (flag) exit }
+            flag { print }
+          ' CHANGELOG.md > /tmp/release-notes.md
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "" >> /tmp/release-notes.md
+            echo "**Full Changelog**: https://github.com/aksisonline/gitswitch/compare/${PREV_TAG}...${NEW_TAG}" >> /tmp/release-notes.md
+          fi
+
           mkdir -p /tmp/gs-skill
           cp cmd/gitswitch/skill/SKILL.md /tmp/gs-skill/
           zip -j /tmp/gitswitch.skill /tmp/gs-skill/SKILL.md

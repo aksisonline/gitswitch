@@ -197,6 +197,22 @@ jobs:
           git tag "${{ needs.version.outputs.new_tag }}"
           git push origin "${{ needs.version.outputs.new_tag }}"
 
+      - name: Prepare release notes
+        run: |
+          NEW_TAG="${{ needs.version.outputs.new_tag }}"
+
+          # Pull the [Unreleased] section out of CHANGELOG.md so the beta
+          # actually says what's in it, instead of shipping empty boilerplate.
+          awk '
+            /^## \[Unreleased\]/ { flag=1; next }
+            /^## \[/ { if (flag) exit }
+            flag { print }
+          ' CHANGELOG.md > /tmp/changelog-snippet.md
+
+          sed "s/__TAG__/$NEW_TAG/g" .github/release-templates/beta-install.md > /tmp/notes-install.md
+
+          cat .github/release-templates/beta-header.md /tmp/changelog-snippet.md /tmp/notes-install.md > /tmp/release-notes.md
+
       - name: Create GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
@@ -204,25 +220,6 @@ jobs:
           name: "${{ needs.version.outputs.new_tag }} (beta)"
           prerelease: true
           generate_release_notes: true
-          body: |
-            > **⚠ This is a canary/beta release** — not for production use.
-            > Test it and report issues before the stable v0.2.0 drops.
-
-            ### Install this beta
-
-            **macOS / Linux**
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh | bash -s -- ${{ needs.version.outputs.new_tag }}
-            ```
-
-            **Windows — PowerShell**
-            ```powershell
-            $env:GS_VERSION="${{ needs.version.outputs.new_tag }}"; irm https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.ps1 | iex
-            ```
-
-            **Windows — Command Prompt**
-            ```cmd
-            curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.cmd -o install.cmd && install.cmd ${{ needs.version.outputs.new_tag }}
-            ```
+          body_path: /tmp/release-notes.md
           files: release/*
           token: ${{ secrets.GITHUB_TOKEN }}
