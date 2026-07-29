@@ -106,24 +106,13 @@ var rootCmd = &cobra.Command{
 				if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
 					// Merge OAuth fields onto existing profile — keep SSH/GPG keys.
 					existing, _ := store.Get(nickname)
-					updated := storage.Profile{
+					_ = store.Update(nickname, mergeOAuthUpdate(existing, storage.Profile{
 						Nickname: nickname,
 						UserName: name,
 						Email:    user.Email,
 						GHUser:   user.Login,
 						TokenRef: ref,
-					}
-					if existing != nil {
-						updated.SignKey = existing.SignKey
-						updated.SSHKey = existing.SSHKey
-						if updated.UserName == "" {
-							updated.UserName = existing.UserName
-						}
-						if updated.Email == "" {
-							updated.Email = existing.Email
-						}
-					}
-					_ = store.Update(nickname, updated)
+					}))
 				} else {
 					_ = store.Update(nickname, storage.Profile{
 						Nickname: nickname,
@@ -147,6 +136,24 @@ var rootCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+// mergeOAuthUpdate builds the profile to save after a login/re-login: the fresh
+// OAuth fields win, but SSH/GPG keys and any name/email already on the existing
+// profile survive (OAuth never carries them, so a blank here means "unset").
+func mergeOAuthUpdate(existing *storage.Profile, updated storage.Profile) storage.Profile {
+	if existing == nil {
+		return updated
+	}
+	updated.SignKey = existing.SignKey
+	updated.SSHKey = existing.SSHKey
+	if updated.UserName == "" {
+		updated.UserName = existing.UserName
+	}
+	if updated.Email == "" {
+		updated.Email = existing.Email
+	}
+	return updated
 }
 
 // applyProfile writes a profile's identity into one git config scope and points
@@ -863,24 +870,13 @@ var loginCmd = &cobra.Command{
 		if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
 			// Profile exists — merge OAuth fields, keep SSH/GPG keys.
 			existing, _ := store.Get(nickname)
-			updated := storage.Profile{
+			_ = store.Update(nickname, mergeOAuthUpdate(existing, storage.Profile{
 				Nickname: nickname,
 				UserName: name,
 				Email:    user.Email,
 				GHUser:   user.Login,
 				TokenRef: ref,
-			}
-			if existing != nil {
-				updated.SignKey = existing.SignKey
-				updated.SSHKey = existing.SSHKey
-				if updated.UserName == "" {
-					updated.UserName = existing.UserName
-				}
-				if updated.Email == "" {
-					updated.Email = existing.Email
-				}
-			}
-			_ = store.Update(nickname, updated)
+			}))
 		} else {
 			// Set TokenRef on the newly created profile
 			_ = store.Update(nickname, storage.Profile{

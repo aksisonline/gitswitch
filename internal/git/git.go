@@ -366,7 +366,7 @@ func ListSSHPrivateKeys() []string {
 			continue
 		}
 		// Prefer classic id_* names; also accept other non-dot private key files.
-		if strings.HasPrefix(name, "id_") || (!strings.HasPrefix(name, ".") && !strings.Contains(name, "known_hosts")) {
+		if strings.HasPrefix(name, "id_") || !strings.HasPrefix(name, ".") {
 			keys = append(keys, filepath.Join(dir, name))
 		}
 	}

@@ -1382,41 +1382,37 @@ func (m Model) detectExistingConfigsCmd() tea.Cmd {
 // identities the user can import. Used by the onboarding wizard.
 func detectExistingProfiles() []storage.Profile {
 	var found []storage.Profile
-	seenNick := map[string]bool{}
 	seenEmail := map[string]bool{}
 
 	add := func(p storage.Profile) {
 		if p.Nickname == "" {
 			return
 		}
-		if seenNick[p.Nickname] {
-			// Merge missing fields into the first hit.
-			for i := range found {
-				if found[i].Nickname != p.Nickname {
-					continue
-				}
-				if found[i].UserName == "" {
-					found[i].UserName = p.UserName
-				}
-				if found[i].Email == "" {
-					found[i].Email = p.Email
-				}
-				if found[i].SignKey == "" {
-					found[i].SignKey = p.SignKey
-				}
-				if found[i].SSHKey == "" {
-					found[i].SSHKey = p.SSHKey
-				}
-				if found[i].GHUser == "" {
-					found[i].GHUser = p.GHUser
-				}
-				return
+		// Already have this nickname — merge missing fields into the first hit.
+		for i := range found {
+			if found[i].Nickname != p.Nickname {
+				continue
 			}
+			if found[i].UserName == "" {
+				found[i].UserName = p.UserName
+			}
+			if found[i].Email == "" {
+				found[i].Email = p.Email
+			}
+			if found[i].SignKey == "" {
+				found[i].SignKey = p.SignKey
+			}
+			if found[i].SSHKey == "" {
+				found[i].SSHKey = p.SSHKey
+			}
+			if found[i].GHUser == "" {
+				found[i].GHUser = p.GHUser
+			}
+			return
 		}
 		if p.Email != "" && seenEmail[p.Email] && p.GHUser == "" {
 			return
 		}
-		seenNick[p.Nickname] = true
 		if p.Email != "" {
 			seenEmail[p.Email] = true
 		}
