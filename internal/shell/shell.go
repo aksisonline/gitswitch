@@ -180,13 +180,14 @@ func nudgeSnippetZsh(alias string) string {
 ` + marker + ` begin
 __gitswitch_prompt() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
-  local info nick color
+  local info nick color mark
   info=$(gitswitch current --prompt 2>/dev/null)
   [[ -z "$info" ]] && return
   nick=$(echo "$info" | cut -f1)
   color=$(echo "$info" | cut -f2)
+  mark=$(echo "$info" | cut -f3)
   [[ -z "$color" ]] && color=141
-  echo "%F{$color}[${nick}]%f"
+  echo "%F{$color}[${nick}${mark}]%f"
 }
 
 __gitswitch_nudge() {
@@ -228,13 +229,14 @@ func nudgeSnippetBash(alias string) string {
 ` + marker + ` begin
 __gitswitch_prompt() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
-  local info nick color
+  local info nick color mark
   info=$(gitswitch current --prompt 2>/dev/null)
   [[ -z "$info" ]] && return
   nick=$(echo "$info" | cut -f1)
   color=$(echo "$info" | cut -f2)
+  mark=$(echo "$info" | cut -f3)
   [[ -z "$color" ]] && color=141
-  printf '\[\e[38;5;%sm\][%s]\[\e[0m\] ' "$color" "$nick"
+  printf '\[\e[38;5;%sm\][%s%s]\[\e[0m\] ' "$color" "$nick" "$mark"
 }
 
 __gitswitch_nudge() {
@@ -281,8 +283,9 @@ function __gitswitch_prompt
   set parts (string split \t $info)
   set nick $parts[1]
   set color $parts[2]
+  set mark $parts[3..-1]
   test -z "$color"; and set color 141
-  printf '\e[38;5;%sm[%s]\e[0m' $color $nick
+  printf '\e[38;5;%sm[%s%s]\e[0m' $color $nick $mark
 end
 
 function __gitswitch_nudge
@@ -334,13 +337,14 @@ func omzPluginContent() string {
 	return `# gitswitch oh-my-zsh plugin
 __gitswitch_prompt() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
-  local info nick color
+  local info nick color mark
   info=$(gitswitch current --prompt 2>/dev/null)
   [[ -z "$info" ]] && return
   nick=$(echo "$info" | cut -f1)
   color=$(echo "$info" | cut -f2)
+  mark=$(echo "$info" | cut -f3)
   [[ -z "$color" ]] && color=141
-  echo "%F{$color}[${nick}]%f"
+  echo "%F{$color}[${nick}${mark}]%f"
 }
 
 __gitswitch_nudge() {
@@ -381,13 +385,14 @@ func p10kSnippet(alias string) string {
 ` + marker + ` begin
 function prompt_gitswitch() {
   git rev-parse --git-dir > /dev/null 2>&1 || return
-  local info nick color
+  local info nick color mark
   info=$(gitswitch current --prompt 2>/dev/null)
   [[ -z "$info" ]] && return
   nick=$(echo "$info" | cut -f1)
   color=$(echo "$info" | cut -f2)
+  mark=$(echo "$info" | cut -f3)
   [[ -z "$color" ]] && color=141
-  p10k segment -f "$color" -t "[$nick]"
+  p10k segment -f "$color" -t "[$nick$mark]"
 }
 
 __gitswitch_nudge() {

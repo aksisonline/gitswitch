@@ -26,6 +26,7 @@ gitswitch users range from students running their first git command to senior en
 - **Beginners need context, pros need precision.** Write the plain version, then add the precise qualifier in parens or after a dash.
 - **Beta / canary callouts get their own block** — clear opt-in command, what's in it, nothing speculative.
 - **No internal jargon** — no PR numbers, no internal ticket refs, no "as discussed".
+- **Credit external contributions.** When a release note is based on a PR from a non-maintainer, tag their GitHub username at the end of the item: "... (thanks @username)". Maintainer commits need no tag.
 
 ### Commit convention and version bumping
 
@@ -48,6 +49,10 @@ Use `feat:` / `fix:` / `chore:` prefixes for readability — they don't affect t
 The in-app splash screen fires when the installed version has a higher MINOR or MAJOR than the user's last-seen version. The splash content is the GitHub release body — which is `CHANGELOG.md` passed to GoReleaser via `--release-notes CHANGELOG.md`.
 
 So: great CHANGELOG = great splash = users understand what changed without Googling.
+
+## UI Consistency Check
+
+Before every push that ships a feature or behavior change, check whether the TUI (`internal/tui/`), CLI help text, `gitswitch doctor`, and docs (`docs/public/`) all agree with what actually shipped. This codebase has repeatedly shipped a backend feature (HTTPS credential helper, repo pins) while the Utilities/Settings tab kept showing it as a disabled "coming soon" stub — don't let that recur. Concretely: if a command's behavior, a config field, or a status changes, grep the TUI views and CLI flag descriptions for stale references before committing.
 
 ## CI/CD
 

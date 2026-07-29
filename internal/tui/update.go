@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/aksisonline/gitswitch/internal/git"
+	"github.com/aksisonline/gitswitch/internal/history"
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	ver "github.com/aksisonline/gitswitch/internal/version"
@@ -19,6 +20,22 @@ import (
 )
 
 type switchDoneMsg struct {
+	profile  *storage.Profile
+	warnings []string
+	err      error
+}
+
+// credentialHelperDoneMsg reports the result of toggling the HTTPS credential
+// helper. enabled reflects git.IsCredentialHelperInstalled() after the toggle —
+// not just "we ran install" — since another tool's helper can still shadow us.
+type credentialHelperDoneMsg struct {
+	enabled bool
+	err     error
+}
+
+// pinDoneMsg reports the result of pinning or releasing this repo's identity.
+// A nil profile means the pin was removed.
+type pinDoneMsg struct {
 	profile  *storage.Profile
 	warnings []string
 	err      error
@@ -82,8 +99,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if ed.err != nil {
 			m.statusMsg = fmt.Sprintf("editor: %v", ed.err)
 			m.statusIsErr = true
+		} else if profiles, err := m.store.Load(); err != nil {
+			m.statusMsg = fmt.Sprintf("reload config: %v", err)
+			m.statusIsErr = true
+		} else {
+			m.profiles = profiles
+			m.active = git.DetectActive(profiles)
+			if m.cursor >= len(m.profiles) && m.cursor > 0 {
+				m.cursor = len(m.profiles) - 1
+			}
+			m.statusMsg = "config reloaded"
+			m.statusIsErr = false
 		}
 		return m, tea.EnableMouseAllMotion
+	}
+	if ud, ok := msg.(upgradeDoneMsg); ok {
+		if ud.err != nil {
+			m.statusMsg = fmt.Sprintf("upgrade failed: %v", ud.err)
+			m.statusIsErr = true
+		} else {
+			m.statusMsg = fmt.Sprintf("upgraded to %s — restart to apply", m.latestVersion)
+			m.statusIsErr = false
+			m.updateAvailable = false
+		}
+		m.state = StateList
+		return m, nil
+	}
+	if cd, ok := msg.(credentialHelperDoneMsg); ok {
+		if cd.err != nil {
+			m.statusMsg = fmt.Sprintf("credential helper: %v", cd.err)
+			m.statusIsErr = true
+		} else {
+			m.credentialHelperEnabled = cd.enabled
+			if cd.enabled {
+				m.statusMsg = "HTTPS credential helper enabled"
+			} else {
+				m.statusMsg = "HTTPS credential helper removed"
+			}
+			m.statusIsErr = false
+		}
+		return m, nil
 	}
 	if sd, ok := msg.(shellDoneMsg); ok {
 		if sd.err != nil {
@@ -210,7 +265,10 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor--
 				}
 			case 1:
-				// only one active item — navigation disabled until more ship
+				// Pre-commit safety (index 1) is still a disabled placeholder — skip it.
+				if m.utilityFocus == 2 {
+					m.utilityFocus = 0
+				}
 			case 2:
 				if m.settingsFocus > 0 {
 					m.settingsFocus--
@@ -225,7 +283,10 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor++
 				}
 			case 1:
-				// only one active item — navigation disabled until more ship
+				// Pre-commit safety (index 1) is still a disabled placeholder — skip it.
+				if m.utilityFocus == 0 {
+					m.utilityFocus = 2
+				}
 			case 2:
 				if m.settingsFocus < 2 {
 					m.settingsFocus++
@@ -249,6 +310,9 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.utilityFocus == 0 {
 					m.openShellConfirm(!m.shellEnabled)
 					return m, nil
+				}
+				if m.utilityFocus == 2 {
+					return m, m.toggleCredentialHelperCmd()
 				}
 			case 2: // Settings
 				if m.settingsFocus == 0 {
@@ -359,6 +423,22 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.statusIsErr = false
 			}
+		case "p":
+			if m.tabIndex != 0 || len(m.profiles) == 0 {
+				break
+			}
+			if m.repoKey == "" {
+				m.statusMsg = "not inside a git repo — nothing to pin to"
+				m.statusIsErr = true
+				return m, nil
+			}
+			p := m.profiles[m.cursor]
+			// One key both ways: pinning the profile this repo is already pinned to
+			// releases it, like the other toggles in the app.
+			if m.scope == git.ScopeRepo && m.scopeProfile != nil && m.scopeProfile.Nickname == p.Nickname {
+				return m, m.unpinProfileCmd()
+			}
+			return m, m.pinProfileCmd(p)
 		case "1", "2", "3":
 			m.tabIndex = int(msg.String()[0] - '1')
 			m.statusMsg = ""
@@ -381,15 +461,6 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				})
 			}
 		}
-	case upgradeDoneMsg:
-		if msg.err != nil {
-			m.statusMsg = fmt.Sprintf("upgrade failed: %v", msg.err)
-			m.statusIsErr = true
-		} else {
-			m.statusMsg = fmt.Sprintf("upgraded to %s — restart to apply", m.latestVersion)
-			m.statusIsErr = false
-			m.updateAvailable = false
-		}
 	case switchDoneMsg:
 		if msg.err != nil {
 			m.statusMsg = fmt.Sprintf("error: %v", msg.err)
@@ -403,12 +474,30 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.profiles = profiles
 			m.active = git.DetectActive(profiles)
+			m.refreshRepoScope()
 			if len(msg.warnings) > 0 {
 				m.statusMsg = fmt.Sprintf("switched to %s (warning: %s)", msg.profile.Nickname, msg.warnings[0])
 			} else {
 				m.statusMsg = fmt.Sprintf("switched to %s", msg.profile.Nickname)
 			}
 			m.statusIsErr = false
+		}
+	case pinDoneMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("error: %v", msg.err)
+			m.statusIsErr = true
+			break
+		}
+		m.refreshRepoScope()
+		m.statusIsErr = false
+		if msg.profile == nil {
+			m.statusMsg = "unpinned — this repo now uses the global identity"
+			break
+		}
+		if len(msg.warnings) > 0 {
+			m.statusMsg = fmt.Sprintf("pinned %s to this repo (warning: %s)", msg.profile.Nickname, msg.warnings[0])
+		} else {
+			m.statusMsg = fmt.Sprintf("pinned %s to this repo", msg.profile.Nickname)
 		}
 	}
 	return m, nil
@@ -646,6 +735,66 @@ func (m Model) switchProfileCmd(p storage.Profile) tea.Cmd {
 	}
 }
 
+// toggleCredentialHelperCmd installs or removes the HTTPS credential helper,
+// mirroring `gitswitch install`/`uninstall --https`. Toggle direction is
+// decided by current state so it behaves like the other Utilities toggles: one
+// key/click, no confirm dialog (unlike shell integration, this never touches an
+// rc file or requires a shell reload).
+func (m Model) toggleCredentialHelperCmd() tea.Cmd {
+	wasEnabled := m.credentialHelperEnabled
+	return func() tea.Msg {
+		var err error
+		if wasEnabled {
+			err = git.UninstallCredentialHelper()
+		} else {
+			err = git.InstallCredentialHelper()
+		}
+		if err != nil {
+			return credentialHelperDoneMsg{enabled: wasEnabled, err: err}
+		}
+		return credentialHelperDoneMsg{enabled: git.IsCredentialHelperInstalled()}
+	}
+}
+
+// pinProfileCmd writes a profile into this repo's own git config and records the
+// pin, leaving the global identity alone — the same two writes as `gitswitch pin`.
+func (m Model) pinProfileCmd(p storage.Profile) tea.Cmd {
+	return func() tea.Msg {
+		cfg := git.New(false)
+		if err := cfg.SetUser(p.UserName, p.Email); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		if err := cfg.SetSignKey(p.SignKey); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		if err := cfg.SetSSHKey(p.SSHKey); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		var warnings []string
+		if w := git.SwitchGHUser(p.GHUser); w != "" {
+			warnings = append(warnings, w)
+		}
+		if err := history.Pin(m.repoKey, p.Nickname); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		return pinDoneMsg{profile: &p, warnings: warnings}
+	}
+}
+
+// unpinProfileCmd clears this repo's local identity so it follows the global
+// profile again.
+func (m Model) unpinProfileCmd() tea.Cmd {
+	return func() tea.Msg {
+		if err := git.New(false).ClearIdentity(); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		if err := history.Unpin(m.repoKey); err != nil {
+			return pinDoneMsg{err: err}
+		}
+		return pinDoneMsg{}
+	}
+}
+
 // addScore bumps the arcade score and persists a beaten high score.
 func (m *Model) addScore(points int) {
 	m.score += points
@@ -742,7 +891,7 @@ var profileFormFieldTitles = [6]struct{ key, title string }{
 	{"email", "Email"},
 	{"ghUser", "GitHub username"},
 	{"sshKey", "SSH key path"},
-	{"signKey", "GPG signing key"},
+	{"signKey", "Signing key"},
 }
 
 // formFieldAt returns the key of the field block under relY: the last field
@@ -884,8 +1033,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				m.cursor = idx
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff); ok && idx == 0 {
-				m.utilityFocus = 0
+			if idx, ok := itemBoxAt(relY, arcadeOff); ok && idx != 1 {
+				m.utilityFocus = idx
 			}
 		case 2:
 			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
@@ -1067,8 +1216,11 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		case 1:
 			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
 				m.utilityFocus = idx
-				if idx == 0 {
+				switch idx {
+				case 0:
 					m.openShellConfirm(!m.shellEnabled)
+				case 2:
+					return m, m.toggleCredentialHelperCmd()
 				}
 			}
 		case 2:
@@ -1222,30 +1374,96 @@ type detectConfigsMsg struct {
 
 func (m Model) detectExistingConfigsCmd() tea.Cmd {
 	return func() tea.Msg {
-		var found []storage.Profile
-		// Read global gitconfig
-		name, email := readGlobalGitConfig()
-		if name != "" && email != "" {
-			found = append(found, storage.Profile{
-				Nickname: deriveNickname(email),
-				UserName: name,
-				Email:    email,
-			})
-		}
-		return detectConfigsMsg{profiles: found}
+		return detectConfigsMsg{profiles: detectExistingProfiles()}
 	}
 }
 
-func readGlobalGitConfig() (name, email string) {
-	cmdName := exec.Command("git", "config", "--global", "user.name")
-	if out, err := cmdName.Output(); err == nil {
-		name = strings.TrimSpace(string(out))
+// detectExistingProfiles scans git config, gh accounts, and ~/.ssh for
+// identities the user can import. Used by the onboarding wizard.
+func detectExistingProfiles() []storage.Profile {
+	var found []storage.Profile
+	seenEmail := map[string]bool{}
+
+	add := func(p storage.Profile) {
+		if p.Nickname == "" {
+			return
+		}
+		// Already have this nickname — merge missing fields into the first hit.
+		for i := range found {
+			if found[i].Nickname != p.Nickname {
+				continue
+			}
+			if found[i].UserName == "" {
+				found[i].UserName = p.UserName
+			}
+			if found[i].Email == "" {
+				found[i].Email = p.Email
+			}
+			if found[i].SignKey == "" {
+				found[i].SignKey = p.SignKey
+			}
+			if found[i].SSHKey == "" {
+				found[i].SSHKey = p.SSHKey
+			}
+			if found[i].GHUser == "" {
+				found[i].GHUser = p.GHUser
+			}
+			return
+		}
+		if p.Email != "" && seenEmail[p.Email] && p.GHUser == "" {
+			return
+		}
+		if p.Email != "" {
+			seenEmail[p.Email] = true
+		}
+		found = append(found, p)
 	}
-	cmdEmail := exec.Command("git", "config", "--global", "user.email")
-	if out, err := cmdEmail.Output(); err == nil {
-		email = strings.TrimSpace(string(out))
+
+	cfg := git.New(true)
+	name, email, _ := cfg.GetUser()
+	if name != "" && email != "" {
+		add(storage.Profile{
+			Nickname: deriveNickname(email),
+			UserName: name,
+			Email:    email,
+			SignKey:  cfg.GetSignKey(),
+			SSHKey:   cfg.GetSSHKey(),
+			GHUser:   git.GetGHUser(),
+		})
 	}
-	return
+
+	for _, acct := range git.ListGHUsers() {
+		nick := acct.Login
+		if nick == "" {
+			continue
+		}
+		add(storage.Profile{
+			Nickname: nick,
+			UserName: nick,
+			Email:    nick + "@users.noreply.github.com",
+			GHUser:   acct.Login,
+		})
+	}
+
+	// Attach first SSH key found to the first profile if none set yet;
+	// otherwise surface a profile-ready hint via a dedicated entry only
+	// when we have no profiles at all.
+	keys := git.ListSSHPrivateKeys()
+	if len(keys) > 0 && len(found) > 0 {
+		for i := range found {
+			if found[i].SSHKey == "" {
+				// Prefer tilde form for display/portability.
+				k := keys[0]
+				if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(k, home+string(os.PathSeparator)) {
+					k = "~/" + strings.TrimPrefix(k, home+string(os.PathSeparator))
+				}
+				found[i].SSHKey = k
+				break
+			}
+		}
+	}
+
+	return found
 }
 
 func deriveNickname(email string) string {

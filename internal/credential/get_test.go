@@ -1,6 +1,7 @@
 package credential
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -37,7 +38,7 @@ func TestGet_ActiveProfile(t *testing.T) {
 
 	var b strings.Builder
 	req := Request{Protocol: "https", Host: "github.com"}
-	if err := Get(req, st, "", &b); err != nil {
+	if err := Get(req, st, "", t.TempDir(), &b); err != nil {
 		t.Fatalf("Get error: %v", err)
 	}
 
@@ -72,7 +73,7 @@ func TestGet_PinnedRepoOverridesActive(t *testing.T) {
 
 	var b strings.Builder
 	req := Request{Protocol: "https", Host: "github.com"}
-	if err := Get(req, st, repoKey, &b); err != nil {
+	if err := Get(req, st, repoKey, t.TempDir(), &b); err != nil {
 		t.Fatal(err)
 	}
 
@@ -81,6 +82,42 @@ func TestGet_PinnedRepoOverridesActive(t *testing.T) {
 	}
 	if !strings.Contains(b.String(), "username=work-gh") || !strings.Contains(b.String(), "password=ghp_work") {
 		t.Errorf("output did not use pinned profile: %q", b.String())
+	}
+}
+
+// A repo with its own local user.email commits as that profile, so its pushes
+// must use that profile's token — even when another profile is active globally
+// and history points somewhere else entirely.
+func TestGet_LocalRepoIdentityWinsOverActiveAndHistory(t *testing.T) {
+	st := newIsolatedStore(t)
+	_ = st.Add("personal", "Alice", "alice@personal.dev", "", "", "alice-gh")
+	_ = st.Add("work", "Alice W", "alice@work.com", "", "", "work-gh")
+	_ = st.SetActive("personal")
+
+	repoKey := "git@github.com:acme/widget.git"
+	_ = history.Pin(repoKey, "personal")
+
+	repo := t.TempDir()
+	if err := exec.Command("git", "-C", repo, "init").Run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := exec.Command("git", "-C", repo, "config", "--local", "user.email", "ALICE@WORK.COM").Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	var gotUser string
+	withTokenFetcher(t, func(host, ghUser string) (string, error) {
+		gotUser = ghUser
+		return "ghp_work", nil
+	})
+
+	var b strings.Builder
+	req := Request{Protocol: "https", Host: "github.com"}
+	if err := Get(req, st, repoKey, repo, &b); err != nil {
+		t.Fatal(err)
+	}
+	if gotUser != "work-gh" {
+		t.Errorf("fetcher called with ghUser %q, want work-gh (repo's local identity, matched case-insensitively)", gotUser)
 	}
 }
 
@@ -95,7 +132,7 @@ func TestGet_NoTokenWritesNothing(t *testing.T) {
 
 	var b strings.Builder
 	req := Request{Protocol: "https", Host: "github.com"}
-	if err := Get(req, st, "", &b); err != nil {
+	if err := Get(req, st, "", t.TempDir(), &b); err != nil {
 		t.Fatal(err)
 	}
 	if b.Len() != 0 {
@@ -114,7 +151,7 @@ func TestGet_NoActiveProfileWritesNothing(t *testing.T) {
 
 	var b strings.Builder
 	req := Request{Protocol: "https", Host: "github.com"}
-	if err := Get(req, st, "", &b); err != nil {
+	if err := Get(req, st, "", t.TempDir(), &b); err != nil {
 		t.Fatal(err)
 	}
 	if b.Len() != 0 {
@@ -137,7 +174,7 @@ func TestGet_ActiveProfileEmptyGHUserWritesNothing(t *testing.T) {
 	})
 
 	var b strings.Builder
-	if err := Get(Request{Protocol: "https", Host: "github.com"}, st, "", &b); err != nil {
+	if err := Get(Request{Protocol: "https", Host: "github.com"}, st, "", t.TempDir(), &b); err != nil {
 		t.Fatal(err)
 	}
 	if b.Len() != 0 || called {
@@ -157,7 +194,7 @@ func TestResolveGHUser_HostPortStrippedForFetch(t *testing.T) {
 	})
 
 	var b strings.Builder
-	if err := Get(Request{Protocol: "https", Host: "github.com:443"}, st, "", &b); err != nil {
+	if err := Get(Request{Protocol: "https", Host: "github.com:443"}, st, "", t.TempDir(), &b); err != nil {
 		t.Fatal(err)
 	}
 	if gotHost != "github.com" {

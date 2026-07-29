@@ -104,13 +104,15 @@ var rootCmd = &cobra.Command{
 					name = user.Login
 				}
 				if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
-					_ = store.Update(nickname, storage.Profile{
+					// Merge OAuth fields onto existing profile — keep SSH/GPG keys.
+					existing, _ := store.Get(nickname)
+					_ = store.Update(nickname, mergeOAuthUpdate(existing, storage.Profile{
 						Nickname: nickname,
 						UserName: name,
 						Email:    user.Email,
 						GHUser:   user.Login,
 						TokenRef: ref,
-					})
+					}))
 				} else {
 					_ = store.Update(nickname, storage.Profile{
 						Nickname: nickname,
@@ -136,12 +138,28 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func quickSwitch(nickname string) error {
-	p, err := store.Get(nickname)
-	if err != nil {
-		return err
+// mergeOAuthUpdate builds the profile to save after a login/re-login: the fresh
+// OAuth fields win, but SSH/GPG keys and any name/email already on the existing
+// profile survive (OAuth never carries them, so a blank here means "unset").
+func mergeOAuthUpdate(existing *storage.Profile, updated storage.Profile) storage.Profile {
+	if existing == nil {
+		return updated
 	}
-	cfg := git.New(true)
+	updated.SignKey = existing.SignKey
+	updated.SSHKey = existing.SSHKey
+	if updated.UserName == "" {
+		updated.UserName = existing.UserName
+	}
+	if updated.Email == "" {
+		updated.Email = existing.Email
+	}
+	return updated
+}
+
+// applyProfile writes a profile's identity into one git config scope and points
+// the gh CLI at the matching account, so git and GitHub never disagree about who
+// you are.
+func applyProfile(cfg *git.Config, p *storage.Profile) error {
 	if err := cfg.SetUser(p.UserName, p.Email); err != nil {
 		return err
 	}
@@ -153,6 +171,44 @@ func quickSwitch(nickname string) error {
 	}
 	if w := git.SwitchGHUser(p.GHUser); w != "" {
 		fmt.Printf("warning: %s\n", w)
+	}
+	return nil
+}
+
+// effectiveProfile returns the identity commits in dir will actually use, and the
+// scope it comes from: this terminal's session, the repo's own config, or the
+// global active profile. Everything user-facing resolves through this, so the
+// prompt and `gitswitch current` agree with what git will really write.
+func effectiveProfile(dir string) (*storage.Profile, git.Scope, error) {
+	if scope, email := git.ResolveIdentity(dir); scope == git.ScopeRepo || scope == git.ScopeSession {
+		if p := store.GetByEmail(email); p != nil {
+			return p, scope, nil
+		}
+	}
+	p, err := store.GetActive()
+	return p, git.ScopeGlobal, err
+}
+
+// scopeMarker is the glyph appended to the profile name in the shell prompt when
+// the identity does not come from the global config. Empty for the global case —
+// a user with no pins and no sessions sees nothing new.
+func scopeMarker(s git.Scope) string {
+	switch s {
+	case git.ScopeRepo:
+		return "●"
+	case git.ScopeSession:
+		return "◆"
+	}
+	return ""
+}
+
+func quickSwitch(nickname string) error {
+	p, err := store.Get(nickname)
+	if err != nil {
+		return err
+	}
+	if err := applyProfile(git.New(true), p); err != nil {
+		return err
 	}
 	if err := store.SetActive(p.Nickname); err != nil {
 		return err
@@ -199,18 +255,8 @@ var switchCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		cfg := git.New(true)
-		if err := cfg.SetUser(p.UserName, p.Email); err != nil {
+		if err := applyProfile(git.New(true), p); err != nil {
 			return err
-		}
-		if err := cfg.SetSignKey(p.SignKey); err != nil {
-			return err
-		}
-		if err := cfg.SetSSHKey(p.SSHKey); err != nil {
-			return err
-		}
-		if w := git.SwitchGHUser(p.GHUser); w != "" {
-			fmt.Printf("warning: %s\n", w)
 		}
 		if err := store.SetActive(p.Nickname); err != nil {
 			return err
@@ -261,7 +307,8 @@ var currentCmd = &cobra.Command{
 	Short: "Show current profile",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		short, _ := cmd.Flags().GetBool("short")
-		p, err := store.GetActive()
+		cwd, _ := os.Getwd()
+		p, scope, err := effectiveProfile(cwd)
 		if err != nil {
 			return err
 		}
@@ -271,18 +318,29 @@ var currentCmd = &cobra.Command{
 			}
 			return nil
 		}
+		marker := scopeMarker(scope)
 		if short {
-			fmt.Printf("%s\t%s\n", p.Nickname, p.Email)
+			// Starship renders this through a format string we don't control, so the
+			// marker rides along on the nickname rather than as a new field.
+			fmt.Printf("%s%s\t%s\n", p.Nickname, marker, p.Email)
 			return nil
 		}
 		prompt, _ := cmd.Flags().GetBool("prompt")
 		if prompt {
 			prefs, _ := store.LoadPrefs()
 			color := tui.ThemePromptColor(prefs.ColorTheme)
-			fmt.Printf("%s\t%s\n", p.Nickname, color)
+			// Third field: older installed hooks read only fields 1-2 and ignore it.
+			fmt.Printf("%s\t%s\t%s\n", p.Nickname, color, marker)
 			return nil
 		}
-		fmt.Printf("%s — %s <%s>\n", p.Nickname, p.UserName, p.Email)
+		switch scope {
+		case git.ScopeRepo:
+			fmt.Printf("%s — %s <%s>  (pinned to this repo)\n", p.Nickname, p.UserName, p.Email)
+		case git.ScopeSession:
+			fmt.Printf("%s — %s <%s>  (this terminal's session)\n", p.Nickname, p.UserName, p.Email)
+		default:
+			fmt.Printf("%s — %s <%s>\n", p.Nickname, p.UserName, p.Email)
+		}
 		if git.IsCredentialHelperInstalled() {
 			fmt.Println("HTTPS credential helper: active")
 		}
@@ -482,38 +540,73 @@ func confirm(question string) bool {
 	return resp == "y" || resp == "yes"
 }
 
+// A pin is a local identity: it writes the profile into this repo's
+// .git/config, so commits here are correct no matter which profile is active
+// globally. Nothing needs to be switched on entry.
 var pinCmd = &cobra.Command{
-	Use:   "pin <nickname>",
-	Short: "Pin an identity to this repo — always recommended regardless of usage history",
-	Args:  cobra.ExactArgs(1),
+	Use:   "pin [nickname]",
+	Short: "Pin an identity to this repo — writes it to the repo's local git config",
+	Long: "Pin an identity to this repo — writes it to the repo's local git config and\n" +
+		"switches the gh CLI to the matching account.\n\n" +
+		"With no nickname, adopts the identity the repo already has in its local git\n" +
+		"config (useful for repos configured by hand before gitswitch).",
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := store.Get(args[0]); err != nil {
-			return err
-		}
 		repoKey := history.GetRepoKey()
 		if repoKey == "" {
 			return fmt.Errorf("not inside a git repo")
 		}
-		if err := history.Pin(repoKey, args[0]); err != nil {
+		cwd, _ := os.Getwd()
+		existing := git.LocalEmail(cwd)
+
+		var p *storage.Profile
+		if len(args) == 1 {
+			var err error
+			if p, err = store.Get(args[0]); err != nil {
+				return err
+			}
+			// Never silently replace a per-repo identity the user set themselves.
+			if existing != "" && !strings.EqualFold(existing, p.Email) {
+				fmt.Printf("Replacing this repo's existing local identity <%s>\n", existing)
+			}
+		} else {
+			// Adopt what the repo already declares.
+			if existing == "" {
+				return fmt.Errorf("this repo has no local git identity to adopt — run 'gitswitch pin <nickname>'")
+			}
+			if p = store.GetByEmail(existing); p == nil {
+				return fmt.Errorf("this repo commits as <%s>, which matches no stored profile — add it first, or run 'gitswitch pin <nickname>'", existing)
+			}
+			fmt.Printf("Adopted this repo's existing identity <%s>\n", existing)
+		}
+
+		if err := applyProfile(git.New(false), p); err != nil {
 			return err
 		}
-		fmt.Printf("Pinned '%s' to this repo\n", args[0])
+		if err := history.Pin(repoKey, p.Nickname); err != nil {
+			return err
+		}
+		fmt.Printf("Pinned '%s' to this repo — %s <%s> (local git config; global identity unchanged)\n",
+			p.Nickname, p.UserName, p.Email)
 		return nil
 	},
 }
 
 var unpinCmd = &cobra.Command{
 	Use:   "unpin",
-	Short: "Remove pinned identity for this repo, fall back to auto-recommendation",
+	Short: "Remove this repo's local identity, fall back to the global one",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repoKey := history.GetRepoKey()
 		if repoKey == "" {
 			return fmt.Errorf("not inside a git repo")
 		}
+		if err := git.New(false).ClearIdentity(); err != nil {
+			return err
+		}
 		if err := history.Unpin(repoKey); err != nil {
 			return err
 		}
-		fmt.Println("Unpinned — identity recommendation now based on usage history")
+		fmt.Println("Unpinned — this repo now uses the global identity")
 		return nil
 	},
 }
@@ -532,6 +625,19 @@ var recordCmd = &cobra.Command{
 		}
 		repoKey := history.GetRepoKeyForPath(path)
 		if repoKey == "" {
+			return nil
+		}
+		// A repo or session carrying its own identity is already decided: don't
+		// record the global profile against it (that would teach the wrong one), but
+		// do point gh at the matching account so pushes from here use the right user.
+		if scope, email := git.ResolveIdentity(path); scope == git.ScopeRepo || scope == git.ScopeSession {
+			if p := store.GetByEmail(email); p != nil {
+				// ponytail: unconditional `gh auth switch` — it is idempotent, and a
+				// "is it already right?" check costs the same gh round-trip. Only
+				// profiles with a gh_user pay it. Skip via a cached account if cd
+				// latency ever shows up.
+				_ = git.SwitchGHUser(p.GHUser) // best-effort; hooks must stay silent
+			}
 			return nil
 		}
 		active, err := store.GetActive()
@@ -563,6 +669,11 @@ var recommendCmd = &cobra.Command{
 
 		repoKey := history.GetRepoKeyForPath(path)
 		if repoKey == "" {
+			return errNoRecommendation
+		}
+		// A repo or terminal with its own identity (a pin, hand-set git config, or a
+		// session) already commits correctly — never nudge it to switch globally.
+		if git.HasLocalIdentity(path) {
 			return errNoRecommendation
 		}
 
@@ -641,7 +752,10 @@ prompts (for scripts and CI).`,
 
 		var shellResult string
 		if opts.InstallShell {
-			shellResult, err = shell.Install(opts.Shell, opts.Framework, "gs")
+			// Reinstall, not Install: Install is a no-op when the marker block is
+			// already there, so a user told "shell integration updated — run gitswitch
+			// install" would keep their old hook forever. Reinstall replaces it.
+			shellResult, err = shell.Reinstall(opts.Shell, opts.Framework, "gs")
 			if err != nil {
 				return fmt.Errorf("shell install failed: %w", err)
 			}
@@ -702,7 +816,8 @@ var credentialCmd = &cobra.Command{
 			if err != nil {
 				return nil // graceful: exit 0, no output
 			}
-			return credential.Get(req, store, history.GetRepoKey(), os.Stdout)
+			cwd, _ := os.Getwd()
+			return credential.Get(req, store, history.GetRepoKey(), cwd, os.Stdout)
 		default:
 			// store/approve/erase/reject/"" — gitswitch stores no tokens.
 			return nil
@@ -753,14 +868,15 @@ var loginCmd = &cobra.Command{
 			name = user.Login
 		}
 		if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
-			// Profile exists — update TokenRef only
-			_ = store.Update(nickname, storage.Profile{
+			// Profile exists — merge OAuth fields, keep SSH/GPG keys.
+			existing, _ := store.Get(nickname)
+			_ = store.Update(nickname, mergeOAuthUpdate(existing, storage.Profile{
 				Nickname: nickname,
 				UserName: name,
 				Email:    user.Email,
 				GHUser:   user.Login,
 				TokenRef: ref,
-			})
+			}))
 		} else {
 			// Set TokenRef on the newly created profile
 			_ = store.Update(nickname, storage.Profile{
@@ -840,8 +956,23 @@ var doctorCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonOut, _ := cmd.Flags().GetBool("json")
 		r := prereqs.Check()
+		conflicts := git.CredentialHelperConflicts()
 		if jsonOut {
-			fmt.Printf("%s\n", r.JSON())
+			// Embedded so git/gh stay top-level, matching the pre-existing shape.
+			report := struct {
+				prereqs.CheckResult
+				HTTPS struct {
+					RoutedByGitswitch bool                 `json:"routed_by_gitswitch"`
+					Conflicts         []git.HelperConflict `json:"conflicts,omitempty"`
+				} `json:"https"`
+			}{CheckResult: r}
+			report.HTTPS.RoutedByGitswitch = len(conflicts) == 0
+			report.HTTPS.Conflicts = conflicts
+			b, err := json.MarshalIndent(report, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%s\n", b)
 			return nil
 		}
 		fmt.Println()
@@ -855,6 +986,25 @@ var doctorCmd = &cobra.Command{
 		} else {
 			fmt.Println("  ⚠  gh   not found (optional)")
 		}
+
+		// HTTPS routing: being registered is not enough — another tool's per-host
+		// helper can be asked first, and then gitswitch never sees the request.
+		switch {
+		case len(conflicts) == 0:
+			fmt.Println("  ✓  HTTPS pushes routed by gitswitch")
+		case conflicts[0].Winner == "" && len(conflicts) == 1:
+			fmt.Println("  ⚠  HTTPS pushes not routed by gitswitch — run: gitswitch install")
+		default:
+			fmt.Println("  ✗  HTTPS pushes answered by another helper before gitswitch:")
+			for _, c := range conflicts {
+				if c.Winner == "" {
+					continue
+				}
+				fmt.Printf("       %s → %s\n", c.Key, c.Winner)
+			}
+			fmt.Println("       pushes may use the wrong account — run: gitswitch install")
+		}
+
 		fmt.Println()
 		prereqs.PrintWarnings(r)
 		return nil
@@ -916,7 +1066,7 @@ var setupCmd = &cobra.Command{
 
 func main() {
 	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, doctorCmd, setupCmd, loginCmd, betaCmd, stableCmd, reauthorCmd)
-	addCmd.Flags().String("sign-key", "", "GPG signing key (git user.signingkey)")
+	addCmd.Flags().String("sign-key", "", "Signing key: GPG key ID, or SSH key path for gpg.format=ssh")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
 	currentCmd.Flags().Bool("short", false, "Output nickname and email tab-separated (for Starship and scripts)")

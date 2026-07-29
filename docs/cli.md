@@ -57,7 +57,7 @@ gitswitch add <nickname> <user-name> <email> [flags]
 
 | Flag | Description |
 |------|-------------|
-| `--sign-key <key>` | GPG key ID. Sets `git config user.signingkey`. |
+| `--sign-key <key>` | Signing key. Sets `user.signingkey`, plus `gpg.format=ssh` when the value is an SSH key (a path like `~/.ssh/id_ed25519.pub`, or an inline `ssh-…` key). A bare hex GPG key ID unsets `gpg.format` for OpenPGP signing. |
 | `--ssh-key <path>` | Path to SSH private key (e.g. `~/.ssh/id_work`). Sets `core.sshCommand` to force that key and disable SSH agent fallback. |
 | `--gh-user <username>` | GitHub CLI username. Runs `gh auth switch --user <username>` on every switch. Fails gracefully if `gh` is not installed. |
 
@@ -186,7 +186,9 @@ Idempotent — uses a `# gitswitch shell integration` marker to skip if already 
 gitswitch pin <nickname>
 ```
 
-Permanently marks a profile as the recommended identity for the current repo. The pin takes priority over all usage-count data — `gitswitch recommend` will always return the pinned identity regardless of history.
+Writes the profile into this repo's **local** git config (`.git/config`) — `user.name`, `user.email`, `user.signingkey`/`gpg.format`, and `core.sshCommand` — so commits here use that identity no matter which profile is active globally. Your global identity is left untouched, and `gh auth` is not switched (that is machine-wide state, not per-repo).
+
+The pin is also recorded in history, so the HTTPS credential helper serves this repo's tokens from the pinned account. Because the repo is already correct, the shell hook stops nudging you to switch when you enter it.
 
 Must be run from inside a git repo. Validates that the nickname exists.
 
@@ -198,7 +200,9 @@ Must be run from inside a git repo. Validates that the nickname exists.
 gitswitch unpin
 ```
 
-Clears the pinned identity for the current repo. The auto-recommender falls back to usage counts.
+Removes the identity keys gitswitch wrote to this repo's local git config, so the repo falls back to your global identity, and clears the pin from history. The auto-recommender falls back to usage counts.
+
+Both `pin` and `unpin` are also bound to `p` in the TUI, acting on the repo it was launched from.
 
 Must be run from inside a git repo.
 
@@ -229,7 +233,7 @@ gitswitch recommend [--path <dir>]
 Checks usage history (and any pin) for the current repo and prints the recommended identity if one exists.
 
 - **Exits 0** and prints `nickname\tname\temail` if a recommendation is warranted
-- **Exits 1** silently if already on the right identity, no history, or threshold not met
+- **Exits 1** silently if already on the right identity, no history, threshold not met, or the repo has its own local identity (a pin, or hand-set `git config --local user.email`)
 
 Used internally by the shell nudge hook. Useful for scripting or debugging.
 
