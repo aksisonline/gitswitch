@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -87,9 +88,17 @@ func RCFile(sh Shell) string {
 	}
 }
 
-// WriteHookVersion persists the installed hook version to configDir/hook-version.
-// Skips writing when version is "dev" so local/test builds don't corrupt the
-// version file and cause spurious "dev → vX.Y.Z" nudges for real installs.
+// shellHookRevision identifies the content of the nudge/completion snippets
+// this version of gitswitch installs. Bump it only when those snippets
+// actually change — unlike currentVersion, it does NOT bump on every patch
+// release, so a patch that doesn't touch shell integration doesn't nag users
+// to reinstall it.
+const shellHookRevision = 2
+
+// WriteHookVersion persists the installed hook version+revision to
+// configDir/hook-version, as "version|revision". Skips writing when version
+// is "dev" so local/test builds don't corrupt the version file and cause
+// spurious "dev → vX.Y.Z" nudges for real installs.
 func WriteHookVersion(configDir, version string) error {
 	if version == "dev" || version == "" {
 		return nil
@@ -97,7 +106,8 @@ func WriteHookVersion(configDir, version string) error {
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(configDir, "hook-version"), []byte(version), 0644)
+	content := fmt.Sprintf("%s|%d", version, shellHookRevision)
+	return os.WriteFile(filepath.Join(configDir, "hook-version"), []byte(content), 0644)
 }
 
 // HookUpdateMessage returns a one-line hint shown in the terminal on shell
@@ -105,9 +115,9 @@ func WriteHookVersion(configDir, version string) error {
 //
 // Checks (in priority order):
 //  1. No version file + shell marker present → old install, nudge to reinstall
-//  2. Version bumped + HTTPS not yet registered → combined "updated + new features" message
-//  3. Version bumped, HTTPS already registered → plain "shell updated" message
-//  4. Version current, HTTPS not registered → targeted HTTPS nudge
+//  2. Shell hook content changed + something else needed → combined message
+//  3. Shell hook content changed only → plain "shell updated" message
+//  4. HTTPS and/or Session Isolation needed, hook otherwise current → targeted nudge
 //
 // credHelperInstalled should be the result of git.IsCredentialHelperInstalled().
 // Passing it as a variadic bool avoids an import cycle (shell ← git).
@@ -119,6 +129,7 @@ func HookUpdateMessage(configDir, rcFile, currentVersion string, credHelperInsta
 	}
 
 	httpsNeeded := len(credHelperInstalled) > 0 && !credHelperInstalled[0] && IsInstalled(rcFile)
+	isolationNeeded := IsInstalled(rcFile) && !IsGHWrapperInstalled(rcFile)
 
 	data, err := os.ReadFile(filepath.Join(configDir, "hook-version"))
 	if err != nil {
@@ -135,23 +146,32 @@ func HookUpdateMessage(configDir, rcFile, currentVersion string, credHelperInsta
 		return ""
 	}
 
-	installed := strings.TrimSpace(string(data))
+	installed, installedRevision := strings.TrimSpace(string(data)), 0
+	if version, rev, ok := strings.Cut(installed, "|"); ok {
+		installed = version
+		installedRevision, _ = strconv.Atoi(rev)
+	}
 
 	// Ignore stale "dev" entries left by test/local builds.
 	if installed == "dev" || installed == "" {
 		installed = currentVersion
+		installedRevision = shellHookRevision
 	}
 
-	versionBumped := installed != currentVersion
+	revisionBumped := installedRevision < shellHookRevision
 
 	switch {
-	case versionBumped && httpsNeeded:
-		// One message covers both: version changed AND new feature waiting.
+	case revisionBumped && (httpsNeeded || isolationNeeded):
+		// One message covers both: shell integration changed AND new feature waiting.
 		return fmt.Sprintf("gitswitch updated (%s → %s) — new features available. Run: gitswitch install", installed, currentVersion)
-	case versionBumped:
+	case revisionBumped:
 		return fmt.Sprintf("gitswitch: shell integration updated (%s → %s) — run: gitswitch install", installed, currentVersion)
+	case httpsNeeded && isolationNeeded:
+		return "gitswitch: HTTPS credential routing and Session Isolation available — run: gitswitch install"
 	case httpsNeeded:
 		return "gitswitch: HTTPS credential routing available — run: gitswitch install"
+	case isolationNeeded:
+		return "gitswitch: Session Isolation available — run: gitswitch install"
 	default:
 		return ""
 	}

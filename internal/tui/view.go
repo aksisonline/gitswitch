@@ -147,6 +147,9 @@ func (m Model) viewCurrentLine(compact bool) string {
 		case git.ScopeSession:
 			tags += "  " + styleScopeMark.Render("session")
 		}
+		if m.pinnedInactive != "" {
+			tags += "  " + styleItemDim.Render("pin: "+m.pinnedInactive+" (isolation off)")
+		}
 		if cur.SSHKey != "" {
 			tags += "  " + styleItemDim.Render("ssh")
 		}
@@ -393,13 +396,8 @@ func (m Model) viewIntro(pw int) string {
 
 	track := "  " + m.renderIntroTrack(pw)
 
-	var readyRow, sceneLabel string
-	switch m.introPhase {
-	case 0:
-		sceneLabel = styleBrand.Render("  scene 1: chase")
-	case 1:
-		sceneLabel = lipgloss.NewStyle().Foreground(arcadeFrightened).Bold(true).Render("  POWER PELLET! ghosts frightened")
-	case 2:
+	var readyRow string
+	if m.introPhase == 2 {
 		readyStyle := lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
 		if m.introReadyFrame%2 == 1 {
 			readyStyle = lipgloss.NewStyle().Foreground(colorDim)
@@ -408,7 +406,7 @@ func (m Model) viewIntro(pw int) string {
 	}
 
 	skipHint := styleBrand.Render("  [any key to skip]")
-	body := titleRow + "\n" + subtitleRow + "\n\n\n" + track + "\n" + sceneLabel + readyRow + "\n\n" + skipHint + "\n"
+	body := titleRow + "\n" + subtitleRow + "\n\n\n" + track + "\n" + readyRow + "\n\n" + skipHint + "\n"
 	return score + "\n" + stylePanelBorder(pw).Render(body)
 }
 

@@ -171,7 +171,7 @@ Usage history is stored at `~/.config/gitswitch/history.json`.
 
 ### Pin a permanent identity to a repo
 
-For repos where you always want a specific identity, skip the learned-count logic entirely:
+Requires Session Isolation (on by default via `gitswitch install`; pinning turns it on automatically if it's off). For repos where you always want a specific identity, skip the learned-count logic entirely:
 
 ```bash
 gitswitch pin work    # always recommend 'work' for this repo
@@ -248,7 +248,7 @@ gitswitch add work     "Alice" alice@company.com --ssh-key ~/.ssh/id_work     --
 
 **Always use the right identity automatically**
 ```bash
-gitswitch install      # set up shell integration once
+gitswitch install      # set up shell integration once (enables Session Isolation by default)
 gitswitch pin work     # pin 'work' to your work repo — never forget again
 ```
 

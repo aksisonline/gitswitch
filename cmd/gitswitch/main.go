@@ -44,10 +44,11 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "gitswitch [nickname]",
-	Short: "Switch between GitHub accounts on one machine",
-	Long:  `Run without arguments to open the profile picker.`,
-	Args:  cobra.MaximumNArgs(1),
+	Use:           "gitswitch [nickname]",
+	Short:         "Switch between GitHub accounts on one machine",
+	Long:          `Run without arguments to open the profile picker.`,
+	Args:          cobra.MaximumNArgs(1),
+	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := ensureInitialized(); err != nil {
 			return err
@@ -181,6 +182,11 @@ func applyProfile(cfg *git.Config, p *storage.Profile) error {
 // prompt and `gitswitch current` agree with what git will really write.
 func effectiveProfile(dir string) (*storage.Profile, git.Scope, error) {
 	if scope, email := git.ResolveIdentity(dir); scope == git.ScopeRepo || scope == git.ScopeSession {
+		if scope == git.ScopeRepo && !shell.IsGHWrapperInstalled(shell.RCFile(shell.DetectShell())) {
+			// Session Isolation is off — the repo-local override doesn't count as active.
+			p, err := store.GetActive()
+			return p, git.ScopeGlobal, err
+		}
 		if p := store.GetByEmail(email); p != nil {
 			return p, scope, nil
 		}
@@ -213,7 +219,7 @@ func quickSwitch(nickname string) error {
 	if err := store.SetActive(p.Nickname); err != nil {
 		return err
 	}
-	fmt.Printf("✓ Switched to '%s' — %s <%s>\n", p.Nickname, p.UserName, p.Email)
+	fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
 	return nil
 }
 
@@ -241,7 +247,7 @@ var addCmd = &cobra.Command{
 		if err := store.Add(args[0], args[1], args[2], signKey, sshKey, ghUser); err != nil {
 			return err
 		}
-		fmt.Printf("Profile '%s' added\n", args[0])
+		fmt.Printf("%s Profile '%s' added\n", styleOK("✓"), args[0])
 		return nil
 	},
 }
@@ -261,7 +267,7 @@ var switchCmd = &cobra.Command{
 		if err := store.SetActive(p.Nickname); err != nil {
 			return err
 		}
-		fmt.Printf("Switched to '%s' — %s <%s>\n", p.Nickname, p.UserName, p.Email)
+		fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
 		return nil
 	},
 }
@@ -274,6 +280,26 @@ var listCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		if jsonOut {
+			type profileJSON struct {
+				Nickname string `json:"nickname"`
+				UserName string `json:"user_name"`
+				Email    string `json:"email"`
+				GHUser   string `json:"gh_user,omitempty"`
+				Active   bool   `json:"active"`
+			}
+			out := make([]profileJSON, len(profiles))
+			for i, p := range profiles {
+				out[i] = profileJSON{Nickname: p.Nickname, UserName: p.UserName, Email: p.Email, GHUser: p.GHUser, Active: p.Active}
+			}
+			b, err := json.MarshalIndent(out, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%s\n", b)
+			return nil
+		}
 		if len(profiles) == 0 {
 			fmt.Println("No profiles")
 			return nil
@@ -281,7 +307,7 @@ var listCmd = &cobra.Command{
 		for _, p := range profiles {
 			prefix := " "
 			if p.Active {
-				prefix = "✓"
+				prefix = styleOK("✓")
 			}
 			fmt.Printf("%s  %-14s  %s <%s>\n", prefix, p.Nickname, p.UserName, p.Email)
 		}
@@ -312,6 +338,34 @@ var currentCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		jsonOut, _ := cmd.Flags().GetBool("json")
+		if jsonOut {
+			scopeStr := "global"
+			switch scope {
+			case git.ScopeRepo:
+				scopeStr = "repo"
+			case git.ScopeSession:
+				scopeStr = "session"
+			}
+			out := struct {
+				Nickname               string `json:"nickname,omitempty"`
+				UserName               string `json:"user_name,omitempty"`
+				Email                  string `json:"email,omitempty"`
+				Scope                  string `json:"scope"`
+				GHUser                 string `json:"gh_user,omitempty"`
+				SSHKey                 string `json:"ssh_key,omitempty"`
+				CredentialHelperActive bool   `json:"credential_helper_active"`
+			}{Scope: scopeStr, CredentialHelperActive: git.IsCredentialHelperInstalled()}
+			if p != nil {
+				out.Nickname, out.UserName, out.Email, out.GHUser, out.SSHKey = p.Nickname, p.UserName, p.Email, p.GHUser, p.SSHKey
+			}
+			b, err := json.MarshalIndent(out, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Printf("%s\n", b)
+			return nil
+		}
 		if p == nil {
 			if !short {
 				fmt.Println("No active profile")
@@ -333,13 +387,19 @@ var currentCmd = &cobra.Command{
 			fmt.Printf("%s\t%s\t%s\n", p.Nickname, color, marker)
 			return nil
 		}
+		nick := styleOK(p.Nickname)
 		switch scope {
 		case git.ScopeRepo:
-			fmt.Printf("%s — %s <%s>  (pinned to this repo)\n", p.Nickname, p.UserName, p.Email)
+			fmt.Printf("%s — %s <%s>  (pinned to this repo)\n", nick, p.UserName, p.Email)
 		case git.ScopeSession:
-			fmt.Printf("%s — %s <%s>  (this terminal's session)\n", p.Nickname, p.UserName, p.Email)
+			fmt.Printf("%s — %s <%s>  (this terminal's session)\n", nick, p.UserName, p.Email)
 		default:
-			fmt.Printf("%s — %s <%s>\n", p.Nickname, p.UserName, p.Email)
+			fmt.Printf("%s — %s <%s>\n", nick, p.UserName, p.Email)
+		}
+		if scope != git.ScopeRepo {
+			if pinned := history.GetPinned(history.GetRepoKeyForPath(cwd)); pinned != "" {
+				fmt.Println(styleDim(fmt.Sprintf("  (pinned to '%s' — inactive, Session Isolation is off)", pinned)))
+			}
 		}
 		if git.IsCredentialHelperInstalled() {
 			fmt.Println("HTTPS credential helper: active")
@@ -383,12 +443,24 @@ var versionCmd = &cobra.Command{
 
 var pacmanCmd = &cobra.Command{
 	Use:   "pacman",
-	Short: "Launch Git-Switcher with arcade intro animation",
+	Short: "Toggle arcade mode — on turns it on for every launch, off turns it back to normal",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := ensureInitialized(); err != nil {
 			return err
 		}
-		m, err := tui.New(store, version, tui.WithArcadeMode())
+		prefs, err := store.LoadPrefs()
+		if err != nil {
+			prefs = storage.Prefs{}
+		}
+		prefs.ArcadeMode = !prefs.ArcadeMode
+		if err := store.SavePrefs(prefs); err != nil {
+			return err
+		}
+		var opts []tui.Option
+		if prefs.ArcadeMode {
+			opts = append(opts, tui.WithArcadeMode()) // intro animation only when turning ON
+		}
+		m, err := tui.New(store, version, opts...)
 		if err != nil {
 			return err
 		}
@@ -459,7 +531,7 @@ var upgradeCmd = &cobra.Command{
 				if herr := git.InstallCredentialHelper(); herr != nil {
 					fmt.Printf("  warning: could not register HTTPS credential helper: %v\n", herr)
 				} else {
-					wizard.PrintSummary(os.Stdout, "", false, true, nil)
+					wizard.PrintSummary(os.Stdout, "", false, true, false, nil)
 				}
 			}
 		} else {
@@ -549,12 +621,19 @@ var pinCmd = &cobra.Command{
 	Long: "Pin an identity to this repo — writes it to the repo's local git config and\n" +
 		"switches the gh CLI to the matching account.\n\n" +
 		"With no nickname, adopts the identity the repo already has in its local git\n" +
-		"config (useful for repos configured by hand before gitswitch).",
+		"config (useful for repos configured by hand before gitswitch).\n\n" +
+		"Requires Session Isolation — turned on automatically if it's off.",
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repoKey := history.GetRepoKey()
 		if repoKey == "" {
 			return fmt.Errorf("not inside a git repo")
+		}
+		if rcFile := shell.RCFile(shell.DetectShell()); !shell.IsGHWrapperInstalled(rcFile) {
+			if _, err := shell.InstallGHWrapper(shell.DetectShell()); err != nil {
+				return err
+			}
+			fmt.Println("Session Isolation was off — turning it on (pins need it)")
 		}
 		cwd, _ := os.Getwd()
 		existing := git.LocalEmail(cwd)
@@ -567,7 +646,7 @@ var pinCmd = &cobra.Command{
 			}
 			// Never silently replace a per-repo identity the user set themselves.
 			if existing != "" && !strings.EqualFold(existing, p.Email) {
-				fmt.Printf("Replacing this repo's existing local identity <%s>\n", existing)
+				fmt.Printf("%s Replacing this repo's existing local identity <%s>\n", styleWarn("⚠"), existing)
 			}
 		} else {
 			// Adopt what the repo already declares.
@@ -586,8 +665,8 @@ var pinCmd = &cobra.Command{
 		if err := history.Pin(repoKey, p.Nickname); err != nil {
 			return err
 		}
-		fmt.Printf("Pinned '%s' to this repo — %s <%s> (local git config; global identity unchanged)\n",
-			p.Nickname, p.UserName, p.Email)
+		fmt.Printf("%s Pinned '%s' to this repo — %s <%s> (local git config; global identity unchanged)\n",
+			styleOK("✓"), p.Nickname, p.UserName, p.Email)
 		return nil
 	},
 }
@@ -606,7 +685,7 @@ var unpinCmd = &cobra.Command{
 		if err := history.Unpin(repoKey); err != nil {
 			return err
 		}
-		fmt.Println("Unpinned — this repo now uses the global identity")
+		fmt.Printf("%s Unpinned — this repo now uses the global identity\n", styleOK("✓"))
 		return nil
 	},
 }
@@ -771,7 +850,13 @@ prompts (for scripts and CI).`,
 			httpsErr = git.InstallCredentialHelper()
 		}
 
-		wizard.PrintSummary(os.Stdout, shellResult, opts.InstallShell, opts.InstallHTTPS && httpsErr == nil, httpsErr)
+		var ghWrapperErr error
+		if opts.InstallGHWrapper && !shell.IsGHWrapperInstalled(shell.RCFile(opts.Shell)) {
+			_, ghWrapperErr = shell.InstallGHWrapper(opts.Shell)
+		}
+
+		wizard.PrintSummary(os.Stdout, shellResult, opts.InstallShell, opts.InstallHTTPS && httpsErr == nil,
+			opts.InstallGHWrapper && ghWrapperErr == nil, httpsErr)
 		return nil
 	},
 }
@@ -953,21 +1038,22 @@ var uninstallCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("uninstall failed: %w", err)
 		}
-		fmt.Printf("✓ %s\n", result)
+		ok, warn := styleOK("✓"), styleWarn("warning:")
+		fmt.Printf("%s %s\n", ok, result)
 
 		if git.IsCredentialHelperInstalled() {
 			if err := git.UninstallCredentialHelper(); err != nil {
-				fmt.Printf("  warning: could not remove HTTPS credential helper: %v\n", err)
+				fmt.Printf("  %s could not remove HTTPS credential helper: %v\n", warn, err)
 			} else {
-				fmt.Println("✓ HTTPS credential helper removed")
+				fmt.Printf("%s HTTPS credential helper removed\n", ok)
 			}
 		}
 
 		if shell.IsGHWrapperInstalled(shell.RCFile(sh)) {
 			if _, err := shell.UninstallGHWrapper(sh); err != nil {
-				fmt.Printf("  warning: could not remove gh wrapper: %v\n", err)
+				fmt.Printf("  %s could not remove gh wrapper: %v\n", warn, err)
 			} else {
-				fmt.Println("✓ gh wrapper removed")
+				fmt.Printf("%s gh wrapper removed\n", ok)
 			}
 		}
 
@@ -1004,27 +1090,29 @@ var doctorCmd = &cobra.Command{
 			fmt.Printf("%s\n", b)
 			return nil
 		}
+		ok, warn, bad := styleOK("✓"), styleWarn("⚠"), styleErr("✗")
+
 		fmt.Println()
 		if r.Git.Installed {
-			fmt.Printf("  ✓  git %s\n", r.Git.Version)
+			fmt.Printf("  %s  git %s\n", ok, r.Git.Version)
 		} else {
-			fmt.Println("  ✗  git  not found")
+			fmt.Printf("  %s  git  not found\n", bad)
 		}
 		if r.GH.Installed {
-			fmt.Printf("  ✓  gh  %s\n", r.GH.Version)
+			fmt.Printf("  %s  gh  %s\n", ok, r.GH.Version)
 		} else {
-			fmt.Println("  ⚠  gh   not found (optional)")
+			fmt.Printf("  %s  gh   not found (optional)\n", warn)
 		}
 
 		// HTTPS routing: being registered is not enough — another tool's per-host
 		// helper can be asked first, and then gitswitch never sees the request.
 		switch {
 		case len(conflicts) == 0:
-			fmt.Println("  ✓  HTTPS pushes routed by gitswitch")
+			fmt.Printf("  %s  HTTPS pushes routed by gitswitch\n", ok)
 		case conflicts[0].Winner == "" && len(conflicts) == 1:
-			fmt.Println("  ⚠  HTTPS pushes not routed by gitswitch — run: gitswitch install")
+			fmt.Printf("  %s  HTTPS pushes not routed by gitswitch — run: gitswitch install\n", warn)
 		default:
-			fmt.Println("  ✗  HTTPS pushes answered by another helper before gitswitch:")
+			fmt.Printf("  %s  HTTPS pushes answered by another helper before gitswitch:\n", bad)
 			for _, c := range conflicts {
 				if c.Winner == "" {
 					continue
@@ -1035,9 +1123,9 @@ var doctorCmd = &cobra.Command{
 		}
 
 		if ghWrapperInstalled {
-			fmt.Println("  ✓  gh CLI isolation active (bare `gh` commands resolve per-repo)")
+			fmt.Printf("  %s  Session Isolation active (bare `gh` commands resolve per-repo)\n", ok)
 		} else {
-			fmt.Println("  ⚠  gh CLI isolation off — bare `gh` commands use gh's single global account")
+			fmt.Printf("  %s  Session Isolation off — bare `gh` commands use gh's single global account, and `gitswitch pin` has no effect\n", warn)
 		}
 
 		fmt.Println()
@@ -1101,11 +1189,32 @@ var setupCmd = &cobra.Command{
 
 func main() {
 	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, setupCmd, loginCmd, betaCmd, stableCmd, reauthorCmd)
+
+	rootCmd.AddGroup(
+		&cobra.Group{ID: "identity", Title: "Identity:"},
+		&cobra.Group{ID: "isolation", Title: "Session Isolation:"},
+		&cobra.Group{ID: "channels", Title: "Channels:"},
+		&cobra.Group{ID: "extras", Title: "Extras:"},
+	)
+	for _, c := range []*cobra.Command{addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd} {
+		c.GroupID = "identity"
+	}
+	for _, c := range []*cobra.Command{pinCmd, unpinCmd, installCmd, uninstallCmd, doctorCmd} {
+		c.GroupID = "isolation"
+	}
+	for _, c := range []*cobra.Command{versionCmd, upgradeCmd, betaCmd, stableCmd} {
+		c.GroupID = "channels"
+	}
+	for _, c := range []*cobra.Command{pacmanCmd, claudeCmd, setupCmd, loginCmd, reauthorCmd} {
+		c.GroupID = "extras"
+	}
 	addCmd.Flags().String("sign-key", "", "Signing key: GPG key ID, or SSH key path for gpg.format=ssh")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")
 	currentCmd.Flags().Bool("short", false, "Output nickname and email tab-separated (for Starship and scripts)")
 	currentCmd.Flags().Bool("prompt", false, "Output nickname and theme color tab-separated (for shell prompt functions)")
+	currentCmd.Flags().Bool("json", false, "Output machine-readable JSON")
+	listCmd.Flags().Bool("json", false, "Output machine-readable JSON")
 	recordCmd.Flags().String("path", "", "Directory to record for (default: current working directory)")
 	recommendCmd.Flags().String("path", "", "Directory to check (default: current working directory)")
 	installCmd.Flags().String("shell", "", "Shell to target: zsh, bash, or fish (default: auto-detect; also skips interactive wizard)")
@@ -1124,6 +1233,9 @@ func main() {
 	reauthorCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompts (for scripts and agents)")
 
 	if err := rootCmd.Execute(); err != nil {
+		if err.Error() != "" {
+			fmt.Fprintln(os.Stderr, styleErr("✗ "+err.Error()))
+		}
 		os.Exit(1)
 	}
 }

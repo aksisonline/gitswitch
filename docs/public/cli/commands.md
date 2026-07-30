@@ -252,6 +252,8 @@ gitswitch pin <nickname>
 
 Marks the given profile as the permanent recommended identity for the current repo. The pin is stored in `~/.config/gitswitch/history.json` under the repo's remote URL key — no files are written to the repo itself.
 
+Requires [Session Isolation](../features/shell.md#session-isolation) — turned on automatically if it was off.
+
 Must be run from inside a git repo. Validates that the nickname exists.
 
 ---

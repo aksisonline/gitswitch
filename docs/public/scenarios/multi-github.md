@@ -1,56 +1,26 @@
 ---
 title: Multi-account GitHub
-description: Cloning, pushing, and switching between two GitHub accounts on one machine
+description: Cloning, pushing, and switching between two GitHub accounts on one machine, no manual setup
 ---
 
-Setup: 2 GitHub accounts on one machine — `alice` (personal) and `alice-corp` (work). Each needs its own SSH key so GitHub can identify which account is making the request.
+Setup: 2 GitHub accounts on one machine — `alice` (personal) and `alice-corp` (work). No SSH keys to generate, no keys to paste into GitHub, no manual git config.
 
-## 1. Generate SSH keys
-
-```bash
-ssh-keygen -t ed25519 -f ~/.ssh/id_personal -C "alice@gmail.com"
-ssh-keygen -t ed25519 -f ~/.ssh/id_work     -C "alice@company.com"
-```
-
-## 2. Add keys to GitHub
-
-**Personal account (alice):**
+## 1. One-time setup
 
 ```bash
-cat ~/.ssh/id_personal.pub
-# Add to: github.com/settings/keys (logged in as alice)
+gitswitch install   # shell integration, HTTPS routing, Session Isolation — all on by default
 ```
 
-**Work account (alice-corp):**
+## 2. Connect both accounts
 
 ```bash
-cat ~/.ssh/id_work.pub
-# Add to: github.com/settings/keys (logged in as alice-corp)
+gitswitch login   # log in as alice in the browser
+gitswitch login   # run again, log in as alice-corp
 ```
 
-Test both:
+Each login creates a profile with the right name, email, and account automatically — nothing to type, nothing to test.
 
-```bash
-ssh -i ~/.ssh/id_personal -T git@github.com
-# Hi alice! You've successfully authenticated...
-
-ssh -i ~/.ssh/id_work -T git@github.com
-# Hi alice-corp! You've successfully authenticated...
-```
-
-## 3. Create gitswitch profiles
-
-```bash
-gitswitch add personal "Alice" alice@gmail.com \
-  --ssh-key ~/.ssh/id_personal \
-  --gh-user alice
-
-gitswitch add work "Alice" alice@company.com \
-  --ssh-key ~/.ssh/id_work \
-  --gh-user alice-corp
-```
-
-## 4. Pin your repos
+## 3. Pin your repos
 
 ```bash
 cd ~/projects/my-library
@@ -62,54 +32,34 @@ gitswitch pin work
 
 ## Cloning from each account
 
-Always switch before cloning so `core.sshCommand` points to the right key:
-
 ```bash
-# Clone a personal repo
 gitswitch personal
 git clone git@github.com:alice/my-project.git
+# or the https:// URL — gitswitch routes the right token either way
 
-# Clone a work repo
 gitswitch work
 git clone git@github.com:alice-corp/company-service.git
 ```
 
 ## Daily workflow
 
-### Personal project
-
 ```bash
 cd ~/projects/my-library
-# nudge: "this repo usually uses personal — switch? [y/N]"
-y
-
 git commit -m "Add feature"
-# Committed as alice@gmail.com using ~/.ssh/id_personal
-
-git push  # Pushes as alice account
+git push
+# committed and pushed as alice, automatically
 ```
-
-### Work project
 
 ```bash
 cd ~/work/internal-api
-# nudge: "this repo usually uses work — switch? [y/N]"
-y
-
 git commit -m "Fix bug"
-# Committed as alice@company.com using ~/.ssh/id_work
-
-git push  # Pushes as alice-corp account
+git push
+# committed and pushed as alice-corp, automatically
 ```
-
-### Check which account will push
 
 ```bash
 gitswitch current
-# work — Alice <alice@company.com>
-
-ssh -T git@github.com
-# Hi alice-corp! You've successfully authenticated...
+# work — Alice <alice@company.com>  (pinned to this repo)
 ```
 
 ## Managing notifications across both accounts
@@ -122,59 +72,31 @@ gitswitch work
 gh notification list   # work account notifications
 ```
 
-## Handling repos owned by one account that the other contributes to
+With [Session Isolation](/docs/features/shell#session-isolation) on (the default), bare `gh` commands already resolve to whichever account owns the repo you're in — no switching needed for `gh` calls made from inside a pinned repo.
 
-If `alice-corp` wants to contribute to `alice`'s repo:
+## Contributing to someone else's repo from the "wrong" account
 
 ```bash
 git clone git@github.com:alice/open-project.git
 cd open-project
-gitswitch work           # use work identity
-gitswitch pin work       # pin so nudge reminds you
-
+gitswitch work           # use the work identity for this contribution
+gitswitch pin work        # pin it so the repo never asks again
 git commit -m "Add contribution"
-git push                 # pushes as alice-corp
+git push
 ```
 
-The contribution will be attributed to `alice-corp`. If you want it attributed to `alice`, switch to personal first.
+## Fixed a push from the wrong account?
 
-## Fix a wrong-account push (before others pull)
+Not pulled by anyone else yet — safe to rewrite:
 
 ```bash
-# Pushed from wrong account
-gitswitch personal
-git commit --amend --reset-author --no-edit
-git push --force-with-lease  # safe if no one else has pulled
+gitswitch reauthor 1 --to personal --push
+# rewrites the last commit to the 'personal' identity and force-pushes safely
 ```
 
-After `--force-with-lease`, the commit is now attributed to the personal account.
+## Too many repos to manage individually?
 
-## Troubleshooting
-
-**`Permission denied (publickey)`**
-
-```bash
-gitswitch current
-# Check which profile is active
-
-git config --global core.sshCommand
-# Verify it points to the expected key
-
-ssh -i ~/.ssh/id_personal -T git@github.com
-# Should show: Hi alice!
-```
-
-**Unsure which GitHub account owns a repo**
-
-```bash
-git remote -v
-# origin  git@github.com:alice/my-project.git → personal account
-# origin  git@github.com:alice-corp/service.git → work account
-```
-
-**Too many repos to manage individually**
-
-Organize repos by account in a directory structure:
+Organize repos by account in a directory structure, then pin each one as you go — the identity awareness system tracks the rest:
 
 ```
 ~/github/
@@ -184,7 +106,13 @@ Organize repos by account in a directory structure:
     └── service/
 ```
 
-Pin once per directory as you set them up, and the identity awareness system tracks the rest.
+## Prefer SSH keys you already manage yourself?
+
+Optional — HTTPS (the default) needs nothing from you. Point a profile at an existing key instead:
+
+```bash
+gitswitch add personal "Alice" alice@gmail.com --ssh-key ~/.ssh/id_personal --gh-user alice
+```
 
 ## Next steps
 

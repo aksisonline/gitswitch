@@ -1,42 +1,25 @@
 ---
 title: Multi-client Freelancer
-description: Managing separate git identities and SSH keys for multiple clients
+description: Managing separate git identities for multiple clients, no manual setup
 ---
 
-Setup: 3 clients, 3 separate git identities, 3 separate SSH keys. Each client uses a different git host account.
+Setup: 3 clients, 3 separate identities. No SSH keys to generate, no keys to paste into anyone's settings page — gitswitch handles the whole thing.
 
-## 1. Generate SSH keys
-
-One key per client:
+## 1. One-time setup
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/id_clienta -C "you@clienta.com"
-ssh-keygen -t ed25519 -f ~/.ssh/id_clientb -C "you@clientb.com"
-ssh-keygen -t ed25519 -f ~/.ssh/id_personal -C "you@personal.com"
+gitswitch install   # shell integration, HTTPS routing, Session Isolation — all on by default
 ```
 
-## 2. Add public keys to each client's git service
-
-For each client:
+## 2. Connect each account
 
 ```bash
-cat ~/.ssh/id_clienta.pub
-# Paste into their GitHub/GitLab/Bitbucket SSH keys page
-
-# Test
-ssh -i ~/.ssh/id_clienta -T git@github.com
-# Hi client-a-account! You've successfully authenticated...
+gitswitch login   # log in as client A's account in the browser
+gitswitch login   # run again for client B
+gitswitch login   # and again for your personal account
 ```
 
-## 3. Create gitswitch profiles
-
-```bash
-gitswitch add clienta "Your Name" you@clienta.com --ssh-key ~/.ssh/id_clienta
-gitswitch add clientb "Your Name" you@clientb.com --ssh-key ~/.ssh/id_clientb
-gitswitch add personal "Your Name" you@personal.com --ssh-key ~/.ssh/id_personal
-```
-
-Verify:
+Each login creates a profile automatically. Check them:
 
 ```bash
 gitswitch list
@@ -48,9 +31,7 @@ gitswitch list
    personal        you@personal.com
 ```
 
-## 4. Pin each repo
-
-Navigate to each client repo and pin it:
+## 3. Pin each repo
 
 ```bash
 cd ~/clients/clienta/main-repo
@@ -63,85 +44,60 @@ cd ~/personal/side-project
 gitswitch pin personal
 ```
 
-With [shell integration](/docs/features/shell) installed, entering any of these repos will show a nudge:
-
-```
-gitswitch: this repo usually uses clienta — switch? [y/N]
-```
+Done. Every commit and push from here on uses the right identity automatically — no nudges, no remembering which key goes with which client.
 
 ## Daily workflow
 
-### Starting work on a client project
-
 ```bash
 cd ~/clients/clienta/main-repo
-# nudge fires if identity is wrong
-y  # switch immediately
-
-gitswitch current
-# clienta — Your Name <you@clienta.com>
-
 git commit -m "Fix bug"
-# committed as you@clienta.com using ~/.ssh/id_clienta
+git push
+# committed and pushed as you@clienta.com, automatically
 ```
-
-### Switching between clients
 
 ```bash
 cd ~/clients/clientb/project-x
-y  # accept nudge to switch to clientb
+git commit -m "Ship feature"
+git push
+# committed and pushed as you@clientb.com — no switching required
+```
 
+Check which identity is active any time:
+
+```bash
 gitswitch current
-# clientb — Your Name <you@clientb.com>
+# clienta — Your Name <you@clienta.com>  (pinned to this repo)
 ```
 
-### Verify before pushing to a client repo
+## Fixed a commit with the wrong identity?
+
+Not pushed yet:
 
 ```bash
-git log -1 --format="%an <%ae>"
-# Your Name <you@clienta.com>
-
-ssh -i ~/.ssh/id_clienta -T git@github.com
-# Hi client-a-account! You've successfully authenticated...
-```
-
-## Fix a wrong-identity commit before pushing
-
-If you committed with the wrong identity and haven't pushed yet:
-
-```bash
-gitswitch clienta       # switch to correct identity
+gitswitch clienta
 git commit --amend --reset-author --no-edit
-git log -1 --format="%an <%ae>"
-# Your Name <you@clienta.com>
 ```
 
-Once pushed, attribution is permanent.
-
-## Troubleshooting
-
-**`Permission denied (publickey)` when pushing**
+Already pushed:
 
 ```bash
-# Check which identity is active
-gitswitch current
-
-# Check what SSH key is configured
-git config --global core.sshCommand
-# ssh -i /Users/you/.ssh/id_clienta -o IdentitiesOnly=yes
-
-# Test the key directly
-ssh -i ~/.ssh/id_clienta -T git@github.com
+gitswitch reauthor 1 --to clienta --push
+# rewrites the last commit to the 'clienta' identity and force-pushes safely
 ```
 
-**Not sure which client owns a repo**
+## Not sure which client owns a repo?
 
 ```bash
 git remote -v
-# origin  git@github.com:client-a-account/repo.git (fetch)
-
 git log -3 --format="%an <%ae>"
-# Shows which identities were used in recent commits
+```
+
+## Prefer SSH keys you already manage yourself?
+
+Optional — HTTPS (the default) needs nothing from you. Point a profile at an existing key instead:
+
+```bash
+gitswitch add clienta "Your Name" you@clienta.com --ssh-key ~/.ssh/id_clienta
 ```
 
 ## Next steps

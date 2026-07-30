@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/aksisonline/gitswitch/internal/git"
+	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -118,6 +119,10 @@ func TestNewDetectsRepoPin(t *testing.T) {
 	}
 	t.Setenv("GIT_CONFIG_GLOBAL", gitconfig)
 	if err := exec.Command("git", "config", "--global", "user.email", "alice@personal.dev").Run(); err != nil {
+		t.Fatal(err)
+	}
+	// A repo pin only counts as active when Session Isolation is on.
+	if _, err := shell.InstallGHWrapper(shell.DetectShell()); err != nil {
 		t.Fatal(err)
 	}
 

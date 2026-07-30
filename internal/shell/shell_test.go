@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -468,8 +469,9 @@ func TestWriteHookVersion_CreatesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading hook-version: %v", err)
 	}
-	if string(data) != "v1.2.3" {
-		t.Errorf("hook-version content: got %q, want %q", string(data), "v1.2.3")
+	want := fmt.Sprintf("v1.2.3|%d", shellHookRevision)
+	if string(data) != want {
+		t.Errorf("hook-version content: got %q, want %q", string(data), want)
 	}
 }
 
@@ -480,8 +482,9 @@ func TestWriteHookVersion_Overwrites(t *testing.T) {
 		t.Fatalf("WriteHookVersion overwrite: %v", err)
 	}
 	data, _ := os.ReadFile(dir + "/hook-version")
-	if string(data) != "v1.1.0" {
-		t.Errorf("expected overwritten version v1.1.0, got %q", string(data))
+	want := fmt.Sprintf("v1.1.0|%d", shellHookRevision)
+	if string(data) != want {
+		t.Errorf("expected overwritten version %q, got %q", want, string(data))
 	}
 }
 
@@ -493,15 +496,45 @@ func TestHookUpdateMessage_UpToDate(t *testing.T) {
 	}
 }
 
-func TestHookUpdateMessage_Stale(t *testing.T) {
+func TestHookUpdateMessage_OldFormatRevisionBumped(t *testing.T) {
+	// Pre-existing installs wrote a bare version with no "|revision" — treat as revision 0.
 	dir := t.TempDir()
-	_ = WriteHookVersion(dir, "v1.2.3")
+	_ = os.WriteFile(dir+"/hook-version", []byte("v1.2.3"), 0644)
 	msg := HookUpdateMessage(dir, "", "v1.3.0")
 	if msg == "" {
-		t.Error("expected update hint when binary version is newer")
+		t.Error("expected update hint for an old-format hook-version file")
 	}
 	if !strings.Contains(msg, "v1.2.3") || !strings.Contains(msg, "v1.3.0") {
 		t.Errorf("update hint missing versions: %q", msg)
+	}
+	if !strings.Contains(msg, "gitswitch install") {
+		t.Errorf("update hint missing install command: %q", msg)
+	}
+}
+
+func TestHookUpdateMessage_CurrentRevisionNoNudgeOnPatchBump(t *testing.T) {
+	// A patch bump that doesn't touch the shell snippets shouldn't nag, even
+	// though the version string on disk differs from currentVersion.
+	dir := t.TempDir()
+	_ = WriteHookVersion(dir, "v1.2.3")
+	if msg := HookUpdateMessage(dir, "", "v1.3.0"); msg != "" {
+		t.Errorf("expected no update hint when hook revision is current, got %q", msg)
+	}
+}
+
+func TestHookUpdateMessage_IsolationNeeded(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "rc-*.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(marker + " begin\nsome content\n" + marker + " end\n")
+	f.Close()
+
+	dir := t.TempDir()
+	_ = WriteHookVersion(dir, "v1.2.3")
+	msg := HookUpdateMessage(dir, f.Name(), "v1.2.3")
+	if msg == "" {
+		t.Error("expected update hint when Session Isolation is available but not installed")
 	}
 	if !strings.Contains(msg, "gitswitch install") {
 		t.Errorf("update hint missing install command: %q", msg)

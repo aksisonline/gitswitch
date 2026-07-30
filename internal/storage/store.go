@@ -90,6 +90,7 @@ type Prefs struct {
 	ShellAlias         string `json:"shell_alias"`
 	ShellAliasDisabled bool   `json:"shell_alias_disabled"` // zero value = enabled (default on)
 	ArcadeHiScore      int    `json:"arcade_hi_score,omitempty"`
+	ArcadeMode         bool   `json:"arcade_mode,omitempty"`
 }
 
 func (s *Store) prefsPath() string {
