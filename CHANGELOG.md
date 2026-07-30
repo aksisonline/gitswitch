@@ -5,7 +5,7 @@ Format: `[version] — date — summary`
 
 ---
 
-## [Unreleased]
+## [v0.3.0] — 2026-07-30
 
 ### Fixed
 - **The "What's New" screen never showed up after switching to a canary release** — canary versions only ever change by their last number (like `v0.2.2-beta.1` → `v0.2.2-beta.2`), and the screen used to only appear for bigger version jumps. `gitswitch beta`/`gitswitch stable` now schedule it for every canary switch, and canary installs show it for any version change, not just big ones.
