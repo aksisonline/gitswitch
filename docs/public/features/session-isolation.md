@@ -1,64 +1,100 @@
 ---
 title: Session Isolation
-description: Give every terminal its own GitHub CLI account and working repo pins, without fighting over gh's single global active account
+description: Two terminals, two GitHub accounts, no fighting
 ---
 
 ## The problem
 
-`gh` (the GitHub CLI) only tracks one "active" account for your whole machine. Switching your gitswitch identity in one terminal silently flips which account every other open terminal's bare `gh` commands (`gh pr create`, `gh issue list`, `gh repo view`, ...) use too — even in a completely unrelated repo.
-
-## What it does
-
-Turning on Session Isolation installs a `gh` shell function that wraps the real `gh` binary. Before every `gh` invocation, the wrapper resolves the right GitHub account for the repo you're in — the same resolution the HTTPS credential helper uses for pushes — and passes that account's token via `GH_TOKEN` for just that one command. gh's own global "active account" file is never read or written, so concurrent terminals never fight over it.
-
-Session Isolation also gates [repo pins](/docs/features/identity-awareness#pin-a-repo): a pin only takes effect while it's on, since that's what actually keeps a pinned repo's identity separate from the rest of your machine.
-
-## Enable it
-
-`gitswitch install` offers Session Isolation as a setup step, on by default for new installs. To turn it on later, open the TUI's **Utilities** tab:
+`gh` remembers exactly one "active" account for your whole machine. So this happens:
 
 ```bash
-gitswitch
+# terminal 1 — work repo
+gitswitch work          # gh's active account is now alice-corp
+
+# terminal 2 — personal repo, same moment
+gh pr create            # ...opens the PR as alice-corp
 ```
 
-Toggle **Session Isolation** on, then reload your shell (or open a new terminal) to pick up the wrapper.
+Nothing warned you. Nothing was misconfigured. `gh` simply doesn't have a concept of "this terminal" or "this repo".
 
-Pinning a repo turns Session Isolation on automatically if it was off — `gitswitch pin work` just works, even before you've visited the Utilities tab.
+## What Session Isolation does
 
-## How account resolution works
+It installs a small `gh` shell function that wraps the real `gh`. Before each call it asks gitswitch which account applies to the directory you're in, gets that account's token, and passes it as `GH_TOKEN` for that one command:
 
-For each `gh` call, the wrapper works out which profile applies to the current repo — your global identity, a [pinned repo](/docs/features/identity-awareness#pin-a-repo), or a session override — and fetches that profile's stored token. If no account resolves (no gh-linked profile, or you're outside a git repo), the wrapper falls through to plain `gh` using your existing global account — no change in behavior.
+```bash
+cd ~/work/api      && gh pr create      # acts as alice-corp
+cd ~/personal/blog && gh issue list     # acts as alice
+```
 
-## If it's off
+gh's global active-account file is never read or written, so any number of terminals can work as different accounts simultaneously without stepping on each other.
 
-A pin set while Session Isolation is off doesn't disappear, but it doesn't apply either. `gitswitch current`, the TUI, and the shell prompt all show your global identity is active and note that the pin is present but inactive, instead of quietly trusting a local git config override that no longer means what it used to.
+It's also the thing that makes [repo pins](/docs/features/identity-awareness#pin-a-repo) real — a pin only takes effect while Session Isolation is on, because this is the machinery that keeps a repo's account separate from the rest of your machine.
 
-## Turn it off
+## Turn it on
 
-Toggle Session Isolation off in the Utilities tab, or run `gitswitch uninstall` to remove all shell integration at once. Either way the wrapper function is removed immediately, bare `gh` behaves exactly like it did before, and any repo pins go inactive as described above.
+It's a step in `gitswitch install`, on by default. Later:
 
-## Troubleshooting
+```bash
+gitswitch          # Utilities tab → toggle Session Isolation
+```
 
-**`gh` commands still use the wrong account after enabling**
-
-The wrapper is a shell function — a terminal opened before you turned the toggle on won't have it until its rc file is re-sourced:
+Then reload your shell — it's a shell function, so terminals opened before you flipped the toggle won't have it:
 
 ```bash
 source ~/.zshrc    # zsh
 source ~/.bashrc   # bash
-# or open a new terminal
 ```
 
-**Isolation seems to do nothing**
+Pinning a repo turns it on for you if it was off, so `gitswitch pin work` just works whether or not you've ever visited the Utilities tab.
 
-The wrapper overrides the *token* used for a given call — it doesn't change what `gh auth status` reports, since that command reads gh's own global account list, which isolation intentionally never touches. Judge it by which account a `gh` command actually acted as, not by `gh auth status`.
+Check it:
 
-**A repo pin isn't being used**
+```bash
+gitswitch doctor
+# ✓  Session Isolation active (bare `gh` commands resolve per-repo)
+```
 
-Check whether Session Isolation is on — a pin set while it's off is stored but inactive. Re-run `gitswitch pin <nickname>` to turn isolation on and re-apply the pin.
+> **Needs `gh`.** The wrapper gets its tokens from `gh auth token --user <account>`, so the account has to be logged in to `gh`. Without that, the wrapper installs but falls straight through to plain `gh` — no change in behavior, nothing broken.
 
-## Next steps
+## How the account is chosen
 
-- [GitHub Account Sync](/docs/features/github-sync) — the `--gh-user` flag and `gh auth switch` on profile switch
-- [Identity Awareness](/docs/features/identity-awareness) — pins and per-repo identity resolution
-- [Shell Integration](/docs/features/shell) — everything else `gitswitch install` sets up
+Exactly the same resolution [HTTPS push routing](/docs/features/https) uses, so `git push` and `gh` can never disagree about who you are:
+
+1. Repo pin or terminal session override → that account
+2. Otherwise, a learned/pinned recommendation for this repo → that account
+3. Otherwise, your globally active account
+
+If nothing resolves — outside a git repo, or no account with a GitHub username — the wrapper does nothing and plain `gh` runs as normal.
+
+## If you turn it off
+
+Pins don't disappear, but they stop applying. gitswitch says so plainly rather than pretending a local git config override still means what it used to:
+
+```
+work — Alice Smith <alice@company.com>
+  (pinned to 'acme' — inactive, Session Isolation is off)
+```
+
+`gitswitch current`, the TUI, and your prompt all agree on this.
+
+To turn it off: toggle it in the Utilities tab, or `gitswitch uninstall` to remove all shell integration at once. Either way the wrapper is removed immediately and bare `gh` behaves exactly as before.
+
+## Troubleshooting
+
+**`gh` still uses the wrong account**
+
+Reload the shell. Terminals opened before you enabled it don't have the function.
+
+**It looks like it's doing nothing**
+
+`gh auth status` will still show your old global account — deliberately. Isolation overrides the *token* for individual calls and never touches gh's account list. Judge it by which account a `gh` command actually acted as.
+
+**My pin isn't being used**
+
+Check `gitswitch doctor`. A pin set while isolation was off is stored but inactive; re-run `gitswitch pin <name>` to switch isolation on and reapply it.
+
+## Next
+
+- **[HTTPS Push Routing](/docs/features/https)** — the same resolution, for `git push`
+- **[Identity Awareness](/docs/features/identity-awareness)** — pins and learned habits
+- **[Scopes](/docs/concepts/scopes)** — why a repo can outrank your global identity

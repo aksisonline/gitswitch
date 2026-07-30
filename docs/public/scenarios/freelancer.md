@@ -1,75 +1,91 @@
 ---
 title: Multi-client Freelancer
-description: Managing separate git identities for multiple clients, no manual setup
+description: Three clients, three identities, zero mental overhead
 ---
 
-Setup: 3 clients, 3 separate identities. No SSH keys to generate, no keys to paste into anyone's settings page — gitswitch handles the whole thing.
+Three clients, each expecting commits from a different email, plus your own personal account. This is the setup that goes wrong most often — and the one pins solve most completely.
 
-## 1. One-time setup
-
-```bash
-gitswitch install   # shell integration, HTTPS routing, Session Isolation — all on by default
-```
-
-## 2. Connect each account
+## Set up
 
 ```bash
-gitswitch login   # log in as client A's account in the browser
-gitswitch login   # run again for client B
-gitswitch login   # and again for your personal account
+gitswitch install
 ```
 
-Each login creates a profile automatically. Check them:
+Then one login per client:
+
+```bash
+gitswitch login --profile clienta
+gitswitch login --profile clientb
+gitswitch login --profile personal
+```
 
 ```bash
 gitswitch list
 ```
 
 ```
-   clienta         you@clienta.com
-   clientb         you@clientb.com
-   personal        you@personal.com
+✓  clienta         Your Name <you@clienta.com>
+   clientb         Your Name <you@clientb.com>
+   personal        Your Name <you@personal.com>
 ```
 
-## 3. Pin each repo
+> Client accounts should also be logged in to `gh` (`gh auth login`) — that's where gitswitch gets push tokens from. If a client only gave you an email and repo access (no GitHub org account), skip that; commits will still be attributed correctly.
+
+## Claim every repo, once
 
 ```bash
-cd ~/clients/clienta/main-repo
-gitswitch pin clienta
-
-cd ~/clients/clientb/project-x
-gitswitch pin clientb
-
-cd ~/personal/side-project
-gitswitch pin personal
+cd ~/clients/clienta/main-repo && gitswitch pin clienta
+cd ~/clients/clientb/project-x && gitswitch pin clientb
+cd ~/personal/side-project     && gitswitch pin personal
 ```
 
-Done. Every commit and push from here on uses the right identity automatically — no nudges, no remembering which key goes with which client.
+Done. That's the last time you think about this.
 
-## Daily workflow
+## Every day
 
 ```bash
 cd ~/clients/clienta/main-repo
 git commit -m "Fix bug"
 git push
-# committed and pushed as you@clienta.com, automatically
+# you@clienta.com, automatically
 ```
 
 ```bash
 cd ~/clients/clientb/project-x
 git commit -m "Ship feature"
 git push
-# committed and pushed as you@clientb.com — no switching required
+# you@clientb.com, no switching
 ```
 
-Check which identity is active any time:
+Your prompt shows which client you're billing:
+
+```
+~/clients/clienta/main-repo  [clienta●] ❯
+~/clients/clientb/project-x  [clientb●] ❯
+```
+
+## New client, new repo
 
 ```bash
-gitswitch current
-# clienta — Your Name <you@clienta.com>  (pinned to this repo)
+gitswitch login --profile clientc
+cd ~/clients/clientc/repo && gitswitch pin clientc
 ```
 
-## Fixed a commit with the wrong identity?
+Two commands and the new client is handled forever.
+
+## Client repo you didn't clone yourself?
+
+If they set up the repo with a local `user.email` already:
+
+```bash
+gitswitch pin
+```
+
+No nickname needed — gitswitch reads the existing email, matches it to one of your accounts, and fills in the rest.
+
+## Wrong identity on a client's repo
+
+The one that actually matters, because clients read commit logs.
 
 Not pushed yet:
 
@@ -82,26 +98,34 @@ Already pushed:
 
 ```bash
 gitswitch reauthor 1 --to clienta --push
-# rewrites the last commit to the 'clienta' identity and force-pushes safely
 ```
 
-## Not sure which client owns a repo?
+A whole batch of commits under the wrong email:
 
 ```bash
-git remote -v
-git log -3 --format="%an <%ae>"
+gitswitch reauthor 20 --to clienta --from you@personal.com --push
 ```
 
-## Prefer SSH keys you already manage yourself?
+`--from` scopes it — only the commits currently authored by your personal email get rewritten, everything else is left alone. Coordinate with anyone else on the repo first; this rewrites history.
 
-Optional — HTTPS (the default) needs nothing from you. Point a profile at an existing key instead:
+## Which client owns this repo again?
+
+```bash
+gitswitch current      # who am I here, and why
+git remote -v          # whose repo is this
+git log -3 --format="%an <%ae>"    # what have I been committing as
+```
+
+## Prefer your own SSH keys?
+
+Optional — HTTPS needs nothing from you. But if a client handed you a deploy key:
 
 ```bash
 gitswitch add clienta "Your Name" you@clienta.com --ssh-key ~/.ssh/id_clienta
 ```
 
-## Next steps
+## Next
 
-- [Multi-account GitHub](/docs/scenarios/multi-github)
-- [Open Source + Work](/docs/scenarios/oss)
-- [Identity Awareness](/docs/features/identity-awareness)
+- **[Two GitHub Accounts](/docs/scenarios/multi-github)** — the two-account version
+- **[Pins & Identity Awareness](/docs/features/identity-awareness)**
+- **[Troubleshooting](/docs/troubleshooting)**

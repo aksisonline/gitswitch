@@ -1,33 +1,49 @@
 ---
-title: CLI Commands
-description: Complete reference for every gitswitch command and flag
+title: Commands
+description: Every gitswitch command and flag
 ---
 
-This page is the exhaustive reference for all `gitswitch` commands, flags, and exit codes.
+`gitswitch --help` groups commands the same way this page does.
+
+| | |
+|---|---|
+| **[Identity](#identity)** | `add` `switch` `list` `remove` `current` `init` |
+| **[Session Isolation](#session-isolation)** | `pin` `unpin` `install` `uninstall` `doctor` |
+| **[Channels](#channels)** | `version` `upgrade` `beta` `stable` |
+| **[Extras](#extras)** | `login` `claude` `reauthor` `setup` `pacman` |
+
+Plus [`gitswitch`](#gitswitch--the-interactive-ui) with no arguments, and [`gitswitch <nickname>`](#gitswitch-nickname--quick-switch) as a shortcut.
 
 ---
 
-## `gitswitch` — open the TUI
+## `gitswitch` — the interactive UI
 
 ```bash
 gitswitch
 ```
 
-Opens the interactive TUI. On first run with no existing profiles, imports current `git config --global user.name` and `git config --global user.email` as a profile named `default`.
+Three tabs — **Accounts**, **Utilities**, **Settings** — reachable with `1` `2` `3`, `tab` / `shift+tab`, or a mouse click.
 
-**TUI keybindings**
-
-| Key | Action |
-|-----|--------|
-| `↑` / `↓` or `k` / `j` | Move cursor |
-| `Enter` | Switch to selected profile |
-| `a` | Open add-profile form |
-| `e` | Open edit-profile form |
-| `ctrl+d` (in edit form) | Delete profile |
-| `c` | Cycle color theme (12 themes) |
-| `?` | Show CLI quick-reference screen |
-| `u` | Upgrade (shown only when a newer version is available) |
+| Key | |
+|---|---|
+| `↑` `↓` / `k` `j` | Move |
+| `enter` | Switch to this account (globally) |
+| `p` | Pin/unpin this account to the current repo — only shown inside a repo |
+| `a` | Add an account |
+| `e` | Edit — `ctrl+d` inside the form deletes |
+| `v` | Toggle the second column between email and GitHub username |
+| `c` | Cycle color theme (12 of them) |
+| `u` | Upgrade — only appears when a newer version exists |
+| `?` | CLI cheat sheet |
+| `1` `2` `3` / `tab` | Switch tab |
 | `q` / `ctrl+c` | Quit |
+
+The mouse works throughout: hover moves focus, clicks select and toggle, the scroll wheel moves through lists.
+
+**Utilities tab** — three toggles: Shell Integration, Session Isolation, HTTPS Credential Helper.
+**Settings tab** — theme, config file location (opens it in `$EDITOR`), and the `gs` shell alias (rename with `e`, toggle with `enter`).
+
+First launch with no accounts runs a short onboarding wizard, which scans your `gh` logins and `~/.ssh/` keys and offers to import them.
 
 ---
 
@@ -37,388 +53,289 @@ Opens the interactive TUI. On first run with no existing profiles, imports curre
 gitswitch work
 ```
 
-Switches to the named profile immediately and exits. Equivalent to `gitswitch switch <nickname>`. Useful in scripts and shell aliases.
-
-**Output:**
-
 ```
 ✓ Switched to 'work' — Alice Smith <alice@company.com>
 ```
 
-Exits non-zero if the nickname does not exist.
+Identical to `gitswitch switch work`. Exits non-zero if the nickname doesn't exist.
 
 ---
 
-## `gitswitch add` — add a profile
+# Identity
+
+## `add`
 
 ```bash
 gitswitch add <nickname> <user-name> <email> [flags]
 ```
 
-**Arguments**
+| Argument | |
+|---|---|
+| `nickname` | Short label — `work`, `oss`, `client-a`. Must be unique. Never written to git config. |
+| `user-name` | Value for `user.name`. Quote it if it has spaces. |
+| `email` | Value for `user.email`. |
 
-| Argument | Description |
-|----------|-------------|
-| `nickname` | Short label for the profile (e.g. `work`, `oss`). Not written to git config. Must be unique. |
-| `user-name` | Value for `git config user.name`. Quote names with spaces. |
-| `email` | Value for `git config user.email`. |
-
-**Flags**
-
-| Flag | Description |
-|------|-------------|
-| `--sign-key <key>` | GPG key ID **or** SSH key path (`~/.ssh/id_ed25519.pub`). Sets `user.signingkey` on switch, and `gpg.format=ssh` for SSH keys. |
-| `--ssh-key <path>` | Path to SSH private key. Sets `core.sshCommand` to `ssh -i <path> -o IdentitiesOnly=yes` on switch. |
-| `--gh-user <username>` | GitHub CLI username. Runs `gh auth switch --user <username>` on switch. Best-effort — fails gracefully if `gh` is not installed or the account is not logged in. |
-
-**Examples**
+| Flag | |
+|---|---|
+| `--ssh-key <path>` | Private key path. Sets `core.sshCommand` to `ssh -i <path> -o IdentitiesOnly=yes` on switch. |
+| `--sign-key <key>` | GPG key ID **or** an SSH key. Sets `user.signingkey`, plus `gpg.format=ssh` for SSH keys. |
+| `--gh-user <username>` | GitHub username. Runs `gh auth switch --user <username>` on switch (best-effort). |
 
 ```bash
-# Git identity only
 gitswitch add personal "Alice Smith" alice@gmail.com
 
-# With SSH key
 gitswitch add work "Alice Smith" alice@company.com \
-  --ssh-key ~/.ssh/id_work
-
-# Full profile
-gitswitch add corp "Alice Smith" alice@corp.com \
+  --ssh-key  ~/.ssh/id_work \
   --sign-key ABCD1234EF567890 \
-  --ssh-key ~/.ssh/id_corp \
-  --gh-user alice-corp
+  --gh-user  alice-corp
 ```
 
----
+Prefer not typing all that? [`gitswitch login`](#login) fills it in from GitHub.
 
-## `gitswitch switch` — switch by name
+## `switch`
 
 ```bash
 gitswitch switch <nickname>
 ```
 
-Identical to `gitswitch <nickname>`. Both forms apply changes in the same order.
+Same as `gitswitch <nickname>`. See [Commit Identity](/docs/features/commit-identity) for exactly what gets written.
 
----
-
-## `gitswitch list` — list profiles
+## `list`
 
 ```bash
-gitswitch list
+gitswitch list [--json]
 ```
-
-Prints all saved profiles. A `✓` marks the active one.
 
 ```
 ✓  personal        Alice Smith <alice@gmail.com>
    work            Alice Smith <alice@company.com>
-   corp            Alice Smith <alice@corp.com>
 ```
 
----
+`✓` marks your active global account.
 
-## `gitswitch current` — show active profile
+## `current`
 
 ```bash
-gitswitch current [flags]
+gitswitch current [--json | --short | --prompt]
 ```
 
-Prints the nickname, name, and email of the currently active profile.
-
 ```
-work — Alice Smith <alice@company.com>
-```
-
-When the repo or your terminal overrides the global identity, the source is named:
-
-```bash
-gitswitch current
-# work — Alice W <alice@work.com>  (pinned to this repo)
+work — Alice Smith <alice@company.com>  (pinned to this repo)
+HTTPS credential helper: active
 ```
 
-Prints `No active profile` if none has been applied yet.
+The suffix names the [scope](/docs/concepts/scopes): nothing for global, `(pinned to this repo)`, or `(this terminal's session)`. If a pin exists but Session Isolation is off, it says so.
 
-**Flags**
+Prints `No active profile` if nothing has been applied yet.
 
-| Flag | Description |
-|------|-------------|
-| `--short` | Outputs `nickname\temail` tab-separated. Used by the Starship prompt block. The nickname carries the scope marker (`work●`) since Starship renders the output verbatim. |
-| `--prompt` | Outputs `nickname\tcolor\tmarker` tab-separated: the ANSI 256-color index for the current theme's primary color, then the scope marker (`●` pinned repo, `◆` session, empty when global). Used by shell prompt functions. |
+| Flag | |
+|---|---|
+| `--json` | `{nickname, user_name, email, scope, gh_user, ssh_key, credential_helper_active}` |
+| `--short` | `nickname<TAB>email`, with the scope marker on the nickname (`work●`). For Starship. |
+| `--prompt` | `nickname<TAB>color<TAB>marker` — theme color as an ANSI 256 index. For prompt functions. |
 
----
-
-## `gitswitch remove` — delete a profile
+## `remove`
 
 ```bash
 gitswitch remove <nickname>
 ```
 
-Permanently removes the profile from `~/.config/gitswitch/profiles.json`. Does not revert any git config that was applied when it was last active.
+Deletes the account. Does **not** revert git config that was applied while it was active, and doesn't revoke anything on GitHub. Any history entries under that nickname stay behind harmlessly.
 
----
-
-## `gitswitch init` — import current git config
+## `init`
 
 ```bash
 gitswitch init
 ```
 
-Reads `git config --global user.name` and `git config --global user.email` and saves them as a profile named `default`. Runs automatically on first launch if no profiles exist.
+Imports your current `--global` `user.name` / `user.email` as an account named `default`. Runs automatically on first use if you have no accounts.
 
 ---
 
-## `gitswitch install` — set up shell integration
+# Session Isolation
+
+## `pin`
 
 ```bash
-gitswitch install [flags]
+gitswitch pin [nickname]
 ```
 
-Runs an interactive wizard that installs:
+Writes the account's full identity into **this repo's** local git config — `user.name`, `user.email`, `user.signingkey`/`gpg.format`, `core.sshCommand`. Your global identity is untouched.
 
-- Shell prompt segment (shows active identity in the prompt when inside a git repo)
-- Identity nudge hook (triggers `gitswitch recommend` on `cd` into a repo)
-- Tab completion
-- HTTPS credential helper (optional — routes HTTPS git operations through the active profile's `gh` account)
+With no nickname, it adopts the repo's existing local `user.email` and matches it to a stored account.
 
-**Shell framework detection**
+Turns [Session Isolation](/docs/features/session-isolation) on automatically if it was off, since a pin can't take effect without it. Must be run inside a git repo.
 
-| Framework | Strategy |
-|-----------|----------|
-| Starship | Appends `[custom.gitswitch]` block to `~/.config/starship.toml` |
-| oh-my-zsh | Creates plugin at `~/.oh-my-zsh/custom/plugins/gitswitch/gitswitch.plugin.zsh` |
-| Powerlevel10k | Drops segment function to rc file; prints manual step |
-| Raw zsh / bash / fish | Appends prompt + nudge + completion snippet to rc file |
-
-Safe to re-run: everything gitswitch writes lives between `# gitswitch shell integration` markers, and re-running replaces that block in place rather than appending a second copy. Re-run it after upgrading to pick up an improved prompt, or to repair the credential helper order (see below).
-
-**Flags**
-
-| Flag | Description |
-|------|-------------|
-| `--shell <shell>` | Override shell detection. Values: `zsh`, `bash`, `fish`. Also skips the interactive wizard. |
-| `--yes` / `-y` | Accept all defaults without prompts. For scripts and CI. |
-| `--https` | Register the HTTPS credential helper (default: `true` when using `--yes`). |
-
----
-
-## `gitswitch doctor` — check the setup
-
-```bash
-gitswitch doctor [--json]
-```
-
-Reports whether `git` and `gh` are installed and current, and whether HTTPS pushes are actually routed through gitswitch.
-
-That last check matters because git asks credential helpers in config order and takes the first answer, so another tool's helper can be registered ahead of gitswitch and gitswitch never gets asked — pushes then use whichever account that helper prefers:
-
-```
-  ✓  git 2.50.1
-  ✓  gh  2.95.0
-  ✗  HTTPS pushes answered by another helper before gitswitch:
-       credential.https://github.com.helper → !/opt/homebrew/bin/gh auth git-credential
-       pushes may use the wrong account — run: gitswitch install
-```
-
-`gitswitch install` repairs the order without removing the other helper. See [how the helper is registered](/docs/features/shell#how-the-https-credential-helper-is-registered).
-
-**Flags**
-
-| Flag | Description |
-|------|-------------|
-| `--json` | Machine-readable output, for scripts and agents. |
-
----
-
-## `gitswitch uninstall` — remove shell integration
-
-```bash
-gitswitch uninstall [flags]
-```
-
-Removes the shell integration block written by `gitswitch install` from the rc file (or oh-my-zsh plugin directory) and unregisters the HTTPS credential helper if installed.
-
-**Flags**
-
-| Flag | Description |
-|------|-------------|
-| `--shell <shell>` | Target shell. Values: `zsh`, `bash`, `fish`. Default: auto-detect. |
-
----
-
-## `gitswitch pin` — pin an identity to a repo
-
-```bash
-gitswitch pin <nickname>
-```
-
-Marks the given profile as the permanent recommended identity for the current repo. The pin is stored in `~/.config/gitswitch/history.json` under the repo's remote URL key — no files are written to the repo itself.
-
-Requires [Session Isolation](../features/shell.md#session-isolation) — turned on automatically if it was off.
-
-Must be run from inside a git repo. Validates that the nickname exists.
-
----
-
-## `gitswitch unpin` — remove a repo pin
+## `unpin`
 
 ```bash
 gitswitch unpin
 ```
 
-Clears the pinned identity for the current repo. `gitswitch recommend` falls back to usage-count-based recommendations.
+Removes those keys from the repo's local config; the repo falls back to your global identity. Must be run inside a git repo.
 
-Must be run from inside a git repo.
-
----
-
-## `gitswitch record` — record identity for a repo
+## `install`
 
 ```bash
-gitswitch record [flags]
+gitswitch install [flags]
 ```
 
-Increments the usage counter for the currently active profile under the current repo's key. Called automatically by the shell nudge hook on every `cd` into a repo — you rarely need to run this manually.
+Interactive wizard with three steps, each skippable:
 
-**Flags**
+1. **Shell integration** — prompt segment, nudge on `cd`, tab completion, `gs` alias
+2. **HTTPS credential routing** — right token per repo on push
+3. **Session Isolation** — right `gh` account per repo, and working pins
 
-| Flag | Description |
-|------|-------------|
-| `--path <dir>` | Directory to record for. Default: current working directory. |
+| Flag | |
+|---|---|
+| `--shell <zsh\|bash\|fish>` | Override shell detection. Also skips the wizard. |
+| `--yes` / `-y` | Accept all defaults, no prompts. For scripts and CI. |
+| `--https` | Register the HTTPS credential helper. Default `true`; prompted interactively when omitted. |
 
----
+Safe to re-run — everything lives between `# gitswitch` markers and gets replaced in place, never duplicated. Re-run it after an upgrade to pick up an improved hook, or to repair credential-helper ordering.
 
-## `gitswitch recommend` — print recommendation for current repo
+## `uninstall`
 
 ```bash
-gitswitch recommend [flags]
+gitswitch uninstall [--shell <zsh|bash|fish>]
 ```
 
-Checks usage history and any pin for the current repo and prints the recommended identity.
+Removes the shell integration block (or oh-my-zsh plugin), unregisters the HTTPS credential helper, and removes the `gh` wrapper — whichever were installed. Your accounts are left alone. Reload your shell to finish.
 
-**Exit behavior**
-
-- Exits `0` and prints `nickname\tname\temail` when a recommendation is warranted
-- Exits `1` silently when already on the right identity, no history exists, or the threshold is not met
-
-**Recommendation threshold (no pin):** top identity has ≥ 3 entries and ≥ 60% share and differs from the current identity.
-
-**Flags**
-
-| Flag | Description |
-|------|-------------|
-| `--path <dir>` | Directory to check. Default: current working directory. |
-
----
-
-## `gitswitch claude` — install the Claude Code skill
+## `doctor`
 
 ```bash
-gitswitch claude [flags]
+gitswitch doctor [--json]
 ```
 
-Installs the embedded gitswitch skill into Claude Code. The SKILL.md is embedded in the binary — no network request.
+```
+  ✓  git 2.50.1
+  ✓  gh  2.95.0
+  ✓  HTTPS pushes routed by gitswitch
+  ✓  Session Isolation active (bare `gh` commands resolve per-repo)
+```
 
-**Flags**
+The HTTPS check is the interesting one — git asks credential helpers in config order and takes the first answer, so another tool's helper registered ahead of gitswitch means gitswitch never gets asked:
 
-| Flag | Description |
-|------|-------------|
-| `--scope user` | Install to `~/.claude/skills/gitswitch/` — active for all projects (default) |
-| `--scope project` | Install to `.claude/skills/gitswitch/` — active for this project only |
+```
+  ✗  HTTPS pushes answered by another helper before gitswitch:
+       credential.https://github.com.helper → !/opt/homebrew/bin/gh auth git-credential
+       pushes may use the wrong account — run: gitswitch install
+```
 
-After installing, reload Claude Code or open a new session.
+`gitswitch install` fixes the order without removing the other helper. See [HTTPS Push Routing](/docs/features/https).
 
 ---
 
-## `gitswitch reauthor` — fix commits an agent already made
+# Channels
 
-```bash
-gitswitch reauthor <base> --to <nickname> [--from <old-email>] [--push] [--yes]
-```
-
-Rewrites the author and committer on every commit between `<base>` and `HEAD` to a stored profile's identity, in one call. `<base>` is a commit-ish (`HEAD~3`, a SHA) or a bare number `N` meaning "the last N commits".
-
-**Flags**
-
-| Flag | Description |
-|------|-------------|
-| `--to <nickname>` | Profile to attribute commits to (required) |
-| `--from <old-email>` | Only rewrite commits currently authored by this email |
-| `--push` | Force-push (`--force-with-lease`) after rewriting |
-| `--yes` / `-y` | Skip confirmation prompts — for scripts and agents |
-
-This rewrites history — see [AI Coding Agents](/docs/features/ai-agents) for the full workflow.
-
----
-
-## `gitswitch version` — show version info
+## `version`
 
 ```bash
 gitswitch version
 ```
 
-Prints the installed version and checks for a newer release (cached for 24 hours).
+Prints your version and checks for a newer one (cached 24h).
 
-```
-gitswitch v0.1.11
-New version available: v0.1.12
-Run: gitswitch upgrade
-```
-
----
-
-## `gitswitch upgrade` — upgrade to latest
+## `upgrade`
 
 ```bash
 gitswitch upgrade
 ```
 
-Downloads and runs the install script for the latest release. Exits early if already on the latest version.
+Installs the latest release. On a Homebrew install it tells you to run `brew upgrade gitswitch` instead.
 
-If installed via Homebrew, prints the correct command instead:
+## `beta` / `stable`
 
+```bash
+gitswitch beta      # canary pre-releases
+gitswitch stable    # back to normal
 ```
-gitswitch was installed via Homebrew.
-Run: brew upgrade gitswitch
-```
+
+Both confirm first and never touch `~/.config/gitswitch/`. See [Versions & Release Channels](/docs/cli/channels).
 
 ---
 
-## `gitswitch pacman` — arcade mode
+# Extras
+
+## `login`
+
+```bash
+gitswitch login [--profile <nickname>] [--host <hostname>] [--client-id <id>]
+```
+
+GitHub device flow in your browser. Creates an account with your name, email, and username filled in, and stores the token in your OS keychain. Re-running it on an existing account refreshes the token and keeps your SSH/signing keys. See [Connecting Accounts](/docs/features/accounts).
+
+## `claude`
+
+```bash
+gitswitch claude [--scope user|project]
+```
+
+Installs the gitswitch skill into Claude Code, embedded in the binary. `user` → `~/.claude/skills/` (default), `project` → `.claude/skills/`.
+
+## `reauthor`
+
+```bash
+gitswitch reauthor <base> --to <nickname> [--from <email>] [--push] [--yes]
+```
+
+Rewrites author and committer on commits between `<base>` and `HEAD`. `<base>` is a commit-ish or a bare number meaning "the last N commits".
+
+| Flag | |
+|---|---|
+| `--to <nickname>` | Required. The account to attribute to. |
+| `--from <email>` | Only rewrite commits currently authored by this email. |
+| `--push` | Force-push (`--force-with-lease`) afterwards. |
+| `--yes` / `-y` | No confirmations — for scripts and agents. |
+
+This rewrites history. Full context in [AI Coding Agents](/docs/features/ai-agents).
+
+## `setup`
+
+```bash
+gitswitch setup [--agent]
+```
+
+Checks `git` and `gh` and tells you what to do next. `--agent` emits a JSON manifest (version, account count, git/gh state) for AI agents.
+
+## `pacman`
 
 ```bash
 gitswitch pacman
 ```
 
-Opens the TUI with the arcade intro animation and double-border style. All normal TUI functionality works — this is a cosmetic variant.
+Toggles [arcade mode](/docs/features/arcade) on or off for every future launch. No, we won't explain it here.
 
----
+## `record` / `recommend`
 
-## What switching does
+Used by the shell hook. You rarely run these by hand.
 
-Every switch (CLI or TUI) applies changes in this order:
+```bash
+gitswitch record    [--path <dir>]    # count the active account for this repo
+gitswitch recommend [--path <dir>]    # print the recommended account, if any
+```
 
-1. `git config --global user.name "<name>"`
-2. `git config --global user.email "<email>"`
-3. `git config --global user.signingkey "<key>"` — only if the profile has a GPG key
-4. `git config --global core.sshCommand "ssh -i <path> -o IdentitiesOnly=yes"` — only if the profile has an SSH key
-5. `gh auth switch --user <username>` — only if the profile has a GitHub username; warning only on failure
+`recommend` exits `0` and prints `nickname<TAB>name<TAB>email` when there's a recommendation, `1` silently when there isn't. See [Pins & Identity Awareness](/docs/features/identity-awareness).
 
 ---
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
+| | |
+|---|---|
 | `0` | Success |
-| `1` | General error (profile not found, git not installed, etc.) |
+| `1` | Something went wrong — account not found, git missing, not in a repo |
 
-`gitswitch recommend` exits `1` silently when no recommendation is available — this is expected behavior used by the shell hook.
+`gitswitch recommend` exiting `1` is normal and expected: it means "nothing to suggest".
 
----
+## Where things are stored
 
-## Storage files
+| | |
+|---|---|
+| `~/.config/gitswitch/config.yaml` | Your accounts |
+| `~/.config/gitswitch/config.json` | UI preferences — theme, alias, arcade high score |
+| `~/.config/gitswitch/history.json` | Per-repo usage counts and pin records |
+| OS keychain | Tokens from `gitswitch login` |
 
-| File | Contents |
-|------|----------|
-| `~/.config/gitswitch/profiles.json` | All profiles |
-| `~/.config/gitswitch/config.json` | UI preferences (color theme index) |
-| `~/.config/gitswitch/history.json` | Per-repo identity usage counts and pins |
+Full detail in [Configuration](/docs/cli/config).

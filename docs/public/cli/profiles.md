@@ -1,165 +1,110 @@
 ---
-title: Profiles
-description: Profile structure, field constraints, and storage format
+title: Account Fields
+description: What an account contains, what each field does, and the file it lives in
 ---
 
-This page covers what a profile contains, how each field is used, and what the storage format looks like.
+An account (also called a profile) is a nickname plus the git settings that go with it.
 
-## Profile structure
+| Field | YAML key | Required | Example |
+|---|---|---|---|
+| Nickname | `nickname` | yes | `work` |
+| Full name | `user_name` | yes | `Alice Smith` |
+| Email | `email` | yes | `alice@company.com` |
+| SSH key path | `ssh_key` | no | `~/.ssh/id_work` |
+| Signing key | `sign_key` | no | `ABCD1234EF567890` or `~/.ssh/id_work.pub` |
+| GitHub username | `gh_user` | no | `alice-corp` |
+| Keychain reference | `token_ref` | auto | `gitswitch:work:github.com` |
 
-A profile is a named set of git identity fields:
+## Field by field
 
-| Field | JSON key | Required | Example |
-|-------|----------|----------|---------|
-| Nickname | `nickname` | Yes | `work` |
-| Full name | `user_name` | Yes | `Alice Smith` |
-| Email | `email` | Yes | `alice@company.com` |
-| SSH key path | `ssh_key` | No | `~/.ssh/id_work` |
-| GPG key ID | `sign_key` | No | `ABCD1234EF567890` |
-| GitHub username | `gh_user` | No | `alice-work` |
+### `nickname`
 
-The `nickname` is used to identify the profile in CLI commands. It is never written to git config.
+Your label for the account. No spaces, lowercase reads best, must be unique. It's what you type — `gitswitch work`, `gitswitch pin work` — and it is **never** written to git config.
 
-## Create a profile
+### `user_name` and `email`
 
-### CLI
+Become `user.name` and `user.email` on switch, and appear on every commit you make. The email needs to be verified on the git host if you want commits linked to your account there.
 
-```bash
-# Minimal
-gitswitch add personal "Alice Smith" alice@gmail.com
+### `ssh_key`
 
-# With all optional fields
-gitswitch add work "Alice Smith" alice@company.com \
-  --ssh-key ~/.ssh/id_work \
-  --sign-key ABCD1234EF567890 \
-  --gh-user alice-work
-```
-
-### TUI
+Path to the **private** key (not the `.pub`). On switch:
 
 ```bash
-gitswitch
-# Press 'a' to open the add-profile form
-# Tab between fields; Enter to save
+git config --global core.sshCommand "ssh -i <expanded-path> -o IdentitiesOnly=yes"
 ```
 
-## Field details
+`~` and `$HOME` are expanded when applied. If an account has **no** SSH key, switching to it *unsets* `core.sshCommand` — so the previous account's key can't linger. See [SSH Keys](/docs/features/ssh-keys).
 
-### Nickname
+### `sign_key`
 
-- No spaces. Lowercase recommended.
-- Must be unique across all profiles.
-- Used in: `gitswitch <nickname>`, `gitswitch switch <nickname>`, `gitswitch pin <nickname>`, `gitswitch remove <nickname>`
-- Examples: `work`, `personal`, `client-a`, `oss`
+Either a GPG key ID or an SSH key — gitswitch tells them apart by the value:
 
-### Full name (`user_name`)
+- Hex key ID → sets `user.signingkey`, clears `gpg.format` (OpenPGP)
+- A path or an inline `ssh-…` key → sets `gpg.format=ssh` and `user.signingkey`
 
-- Becomes `git config user.name` on switch.
-- Quote in the CLI if it contains spaces: `"Alice Smith"`
-- Appears on every commit as the author name.
+No signing key clears **both**, so a stale `gpg.format=ssh` never breaks the next account. See [Commit Signing](/docs/features/gpg).
 
-### Email
+### `gh_user`
 
-- Becomes `git config user.email` on switch.
-- Appears on every commit as the author email.
-- Must match the email registered with the git host for commit verification.
+Your GitHub username — not your email, not your display name. On switch it runs `gh auth switch --user <username>` (best-effort), and it's what [HTTPS routing](/docs/features/https) and [Session Isolation](/docs/features/session-isolation) use to find the right token. See [GitHub CLI Sync](/docs/features/github-sync).
 
-### SSH key (`ssh_key`)
+### `token_ref`
 
-- Path to the SSH **private** key (not the `.pub` file).
-- On switch: sets `git config --global core.sshCommand "ssh -i <expanded-path> -o IdentitiesOnly=yes"`
-- Tilde (`~`) and `$HOME` expand to your home directory.
-- If omitted, SSH key routing is not changed when switching.
+Set for you by `gitswitch login`. It's a *reference* to a keychain entry, never the token itself. Editing an account keeps it, so fixing a typo won't log you out.
 
-### Signing key (`sign_key`)
-
-- A 16-character GPG key ID from `gpg --list-secret-keys --keyid-format LONG`, **or** an SSH key (`~/.ssh/id_ed25519.pub`, or an inline `ssh-…` key) if you sign with SSH instead of GPG.
-- On switch: sets `git config --global user.signingkey <key>`, plus `gpg.format=ssh` when the value is an SSH key. GPG key IDs clear `gpg.format` so git signs with OpenPGP.
-- If omitted, both settings are cleared when switching, so another profile's signing setup never leaks into this one.
-- See [Commit Signing](/docs/features/gpg) for key setup.
-
-### GitHub username (`gh_user`)
-
-- Your GitHub username (not email, not display name).
-- On switch: runs `gh auth switch --user <username>` (best-effort).
-- If omitted, the `gh` CLI account is not changed when switching.
-- See [GitHub Account Sync](/docs/features/github-sync) for setup.
-
-## Storage format
-
-Profiles are stored as a JSON array in `~/.config/gitswitch/profiles.json`:
-
-```json
-[
-  {
-    "nickname": "personal",
-    "user_name": "Alice Smith",
-    "email": "alice@gmail.com",
-    "active": false
-  },
-  {
-    "nickname": "work",
-    "user_name": "Alice Smith",
-    "email": "alice@company.com",
-    "ssh_key": "~/.ssh/id_work",
-    "sign_key": "ABCD1234EF567890",
-    "gh_user": "alice-work",
-    "active": true
-  }
-]
-```
-
-Fields with empty values are omitted. The `active: true` field marks the last-switched profile.
-
-You can edit this file manually, but prefer the CLI — a JSON syntax error will prevent gitswitch from loading any profiles.
-
-## Edit a profile
-
-Editing is done via the TUI:
+## Creating
 
 ```bash
-gitswitch
-# Select profile, press 'e' to open the edit form
-# ctrl+d in the edit form to delete
+gitswitch login                             # let GitHub fill it in
+gitswitch add work "Alice Smith" alice@company.com --gh-user alice-corp   # or type it
+gitswitch                                    # or press `a` in the UI
 ```
 
-## Remove a profile
+## Editing and deleting
+
+In the UI — `e` on the account, `ctrl+d` inside the form to delete. Or:
 
 ```bash
 gitswitch remove work
 ```
 
-```
-Profile 'work' removed
+## On disk
+
+`~/.config/gitswitch/config.yaml`:
+
+```yaml
+version: 2
+profiles:
+  - nickname: personal
+    user_name: Alice Smith
+    email: alice@gmail.com
+    active: false
+  - nickname: work
+    user_name: Alice Smith
+    email: alice@company.com
+    ssh_key: ~/.ssh/id_work
+    sign_key: ABCD1234EF567890
+    gh_user: alice-corp
+    token_ref: gitswitch:work:github.com
+    active: true
 ```
 
-Removal is immediate and permanent. Any history entries for this nickname remain in `history.json` but are harmless.
+Empty fields are omitted. `active: true` marks the last account you switched to. Written atomically with mode `0600`.
 
-## List profiles
+You can hand-edit it — the Settings tab even opens it in your `$EDITOR` and reloads when you're done — but a YAML syntax error means gitswitch can load *nothing*, so prefer the CLI or UI for anything routine.
+
+> **Upgrading from an older version?** gitswitch migrates `profiles.json` → `config.yaml` on first run and leaves `profiles.json.v1.bak` behind as a safety net. Nothing to do.
+
+## Backup
 
 ```bash
-gitswitch list
-```
-
-```
-✓  personal        Alice Smith <alice@gmail.com>
-   work            Alice Smith <alice@company.com>
-```
-
-## Backup and restore
-
-All gitswitch data is in `~/.config/gitswitch/`:
-
-```bash
-# Backup
 cp -r ~/.config/gitswitch ~/backups/gitswitch-$(date +%Y%m%d)
-
-# Restore
-cp -r ~/backups/gitswitch-20240115 ~/.config/gitswitch
 ```
 
-## Next steps
+Note that tokens are in your OS keychain, not in that folder — a restore on a new machine means re-running `gitswitch login`, which takes about ten seconds per account.
 
-- [Configuration](/docs/cli/config)
-- [CLI Reference](/docs/cli/commands)
-- [Quick Start](/docs/quick-start)
+## Next
+
+- **[Configuration](/docs/cli/config)** — every file and environment variable
+- **[Commands](/docs/cli/commands)** — the full CLI
+- **[Connecting Accounts](/docs/features/accounts)** — `gitswitch login`

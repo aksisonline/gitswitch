@@ -1,128 +1,81 @@
 ---
 title: Quick Start
-description: Add profiles and switch identities in under five minutes
+description: From zero to "I never think about this again" in about two minutes
 ---
 
-This page covers adding your first profiles and switching between them.
-
-## 1. First run
+Three commands. That's the whole thing.
 
 ```bash
-gitswitch
+gitswitch install    # 1. set up
+gitswitch login      # 2. connect an account
+gitswitch pin work   # 3. claim a repo
 ```
 
-On first launch with no existing profiles, gitswitch reads your current `git config --global user.name` and `git config --global user.email` and saves them as a profile named `default`. Then it opens the TUI.
+Below is what each one actually does, in case you like knowing.
 
-## 2. Add profiles
-
-### Via CLI
-
-```bash
-# Git identity only
-gitswitch add personal "Alice Smith" alice@gmail.com
-
-# With SSH key
-gitswitch add work "Alice Smith" alice@company.com \
-  --ssh-key ~/.ssh/id_work
-
-# Full setup: SSH key + GPG signing + GitHub CLI
-gitswitch add corp "Alice Smith" alice@corp.com \
-  --ssh-key ~/.ssh/id_corp \
-  --sign-key ABCD1234EF567890 \
-  --gh-user alice-corp
-```
-
-### Via TUI
-
-Press `a` in the TUI to open the add-profile form. Navigate fields with `Tab`. Press `Enter` to save.
-
-## 3. Switch profiles
-
-### Quick switch (no UI)
-
-```bash
-gitswitch work
-```
-
-Output:
-
-```
-✓ Switched to 'work' — Alice Smith <alice@company.com>
-```
-
-### Interactive TUI
-
-```bash
-gitswitch
-```
-
-| Key | Action |
-|-----|--------|
-| `↑` / `↓` or `k` / `j` | Move cursor |
-| `Enter` | Switch to selected profile |
-| `a` | Add profile |
-| `e` | Edit profile |
-| `ctrl+d` (in edit form) | Delete profile |
-| `c` | Cycle color theme |
-| `?` | Show CLI quick reference |
-| `q` / `ctrl+c` | Quit |
-
-## 4. Check current identity
-
-```bash
-gitswitch current
-```
-
-```
-work — Alice Smith <alice@company.com>
-```
-
-## 5. Set up shell integration
+## 1. Set up
 
 ```bash
 gitswitch install
 ```
 
-This runs an interactive wizard that installs:
+A short wizard with three steps, each one explaining itself and each one skippable:
 
-- **Prompt segment** — shows active identity when inside a git repo
-- **Identity nudge** — on `cd` into a repo, prompts you to switch if a different identity is usually used there
-- **Tab completion** — completes `gitswitch` commands and profile nicknames
+| Step | What you get |
+|---|---|
+| **Shell integration** | Your prompt shows which account is active, you get nudged if a repo looks wrong, and tab-completion works. |
+| **HTTPS credential routing** | `git push` over HTTPS uses the right account's token instead of whatever your keychain hands over. |
+| **Session Isolation** | Each terminal's `gh` commands resolve the account for the repo *you're in* — and it's what makes repo pins work. |
 
-After running, reload your shell:
-
-```bash
-source ~/.zshrc   # zsh
-source ~/.bashrc  # bash
-# or open a new terminal
-```
-
-## 6. Pin a repo to an identity
-
-Pinning requires Session Isolation, which is on by default from step 5 above (it turns on automatically the first time you pin, too). If you always want a specific profile in a repo, pin it:
+Then reload your shell:
 
 ```bash
-cd ~/work/my-project
-gitswitch pin work
+source ~/.zshrc    # zsh
+source ~/.bashrc   # bash
+# or just open a new terminal
 ```
 
-```
-Pinned 'work' to this repo
-```
+> Everything gitswitch writes lives between `# gitswitch` markers in your rc file. Re-running `install` replaces that block in place — it never appends a second copy.
 
-From now on, `gitswitch recommend` (used by the shell nudge hook) always returns `work` for that repo, regardless of usage history.
-
-Remove the pin:
+## 2. Connect an account
 
 ```bash
-gitswitch unpin
+gitswitch login
 ```
 
+Opens a GitHub login in your browser (device flow — you paste a short code, GitHub does the rest):
+
 ```
-Unpinned — identity recommendation now based on usage history
+  Open this URL in your browser:
+
+    https://github.com/login/device
+
+  Then enter the code:
+
+    A1B2-C3D4
+
+  Waiting for authorization...
+
+  ✓  Logged in as alice-corp (github.com)
+  ✓  Profile "alice-corp" created
+  ✓  Token stored in keychain
 ```
 
-## List all profiles
+Your name, email, and GitHub username are filled in for you. Run it again for each account you have:
+
+```bash
+gitswitch login                      # personal
+gitswitch login --profile work       # work, with a nicer nickname
+gitswitch login --host github.acme.com   # GitHub Enterprise
+```
+
+No SSH keys to generate, nothing to paste into a settings page. If you'd rather bring your own keys, see [SSH Keys](/docs/features/ssh-keys) — or type a profile in by hand:
+
+```bash
+gitswitch add work "Alice Smith" alice@company.com --gh-user alice-corp
+```
+
+See them all:
 
 ```bash
 gitswitch list
@@ -131,14 +84,75 @@ gitswitch list
 ```
 ✓  personal        Alice Smith <alice@gmail.com>
    work            Alice Smith <alice@company.com>
-   corp            Alice Smith <alice@corp.com>
 ```
 
-The `✓` marks the currently active profile.
+The `✓` is your current global identity.
 
-## Next steps
+## 3. Claim your repos
 
-- [Commit Identity](/docs/features/commit-identity)
-- [SSH Keys](/docs/features/ssh-keys)
-- [Shell Integration](/docs/features/shell)
-- [CLI Reference](/docs/cli/commands)
+```bash
+cd ~/work/api
+gitswitch pin work
+```
+
+```
+✓ Pinned 'work' to this repo — Alice Smith <alice@company.com> (local git config; global identity unchanged)
+```
+
+Every commit in that repo now uses `work`. Every push uses `work`'s token. Every `gh pr create` acts as `work`. Your global identity — and every other repo — is left exactly as it was.
+
+Do it once per repo and you are finished thinking about this:
+
+```bash
+cd ~/personal/blog     && gitswitch pin personal
+cd ~/clients/acme/api  && gitswitch pin acme
+```
+
+Changed your mind? `gitswitch unpin`.
+
+> **Already configured a repo by hand years ago?** Run `gitswitch pin` with no name. gitswitch reads the repo's existing `user.email`, matches it to one of your accounts, and fills in the rest.
+
+## Switching by hand
+
+Pins cover the repos you own. For everything else:
+
+```bash
+gitswitch work        # switch global identity, right now
+gitswitch current     # who am I in here?
+```
+
+```
+work — Alice Smith <alice@company.com>  (pinned to this repo)
+```
+
+That parenthetical matters — it tells you *why* you're that person. See [Scopes](/docs/concepts/scopes).
+
+## The interactive UI
+
+```bash
+gitswitch
+```
+
+Three tabs — **Accounts**, **Utilities**, **Settings** — switched with `1` `2` `3`, `tab`, or a mouse click. Yes, the mouse works.
+
+| Key | Does |
+|---|---|
+| `↑` `↓` / `k` `j` | Move |
+| `enter` | Switch to this account (globally) |
+| `p` | Pin this account to the current repo — press again to unpin |
+| `a` | Add an account |
+| `e` | Edit — `ctrl+d` inside the form deletes |
+| `v` | Show GitHub usernames instead of emails |
+| `c` | Next color theme (there are 12) |
+| `u` | Upgrade — only appears when there's something to upgrade to |
+| `?` | CLI cheat sheet |
+| `q` | Out |
+
+First launch with no accounts runs a short onboarding wizard — it scans your `gh` logins and `~/.ssh/` keys and offers to import what it finds.
+
+## Where next
+
+- **[Scopes](/docs/concepts/scopes)** — global, repo, and terminal identities, and who wins
+- **[Multi-account GitHub](/docs/scenarios/multi-github)** — the full two-account walkthrough
+- **[Identity Awareness](/docs/features/identity-awareness)** — the nudges, and how they're learned
+- **[Troubleshooting](/docs/troubleshooting)** — when a push still goes out wrong

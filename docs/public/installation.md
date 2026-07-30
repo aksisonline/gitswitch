@@ -1,9 +1,9 @@
 ---
 title: Installation
-description: Install gitswitch on macOS and Linux
+description: Install gitswitch on macOS or Linux
 ---
 
-gitswitch runs on macOS and Linux. Choose any of the methods below.
+gitswitch is a single Go binary. macOS and Linux, Intel and Apple Silicon/ARM.
 
 ## Homebrew
 
@@ -11,39 +11,29 @@ gitswitch runs on macOS and Linux. Choose any of the methods below.
 brew install aksisonline/tap/gitswitch
 ```
 
-Update with:
+Recommended — it handles `PATH`, updates, and uninstall cleanly.
 
 ```bash
-brew upgrade gitswitch
+brew upgrade gitswitch   # later
 ```
 
-> **Tip:** Homebrew is the recommended method — it handles PATH, updates, and uninstallation cleanly.
-
-## curl installer
-
-Works on macOS and Linux:
+## curl
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh | bash
 ```
 
-The script downloads the appropriate binary for your OS and architecture to `/usr/local/bin`.
+Downloads the right binary for your OS and architecture into `/usr/local/bin`. Upgrade later with `gitswitch upgrade`.
 
-To upgrade later:
-
-```bash
-gitswitch upgrade
-```
-
-## Go install
-
-Requires Go 1.21 or later:
+## Go
 
 ```bash
 go install github.com/aksisonline/gitswitch@latest
 ```
 
-## Build from source
+Requires Go 1.21+.
+
+## From source
 
 ```bash
 git clone https://github.com/aksisonline/gitswitch
@@ -51,44 +41,53 @@ cd gitswitch
 make install
 ```
 
-## Verify
+## Check it worked
 
 ```bash
 gitswitch version
 ```
 
-Expected output:
-
 ```
-gitswitch v0.1.11
+gitswitch v0.3.0
 Already on latest version.
 ```
 
-If a newer release is available:
+## What you need installed
 
+| | |
+|---|---|
+| **`git`** | Required. gitswitch checks for it at startup and exits if it's missing. |
+| **`gh`** ([GitHub CLI](https://cli.github.com)) | Optional, but recommended. gitswitch works fine without it — but [HTTPS push routing](/docs/features/https) and [Session Isolation](/docs/features/session-isolation) get their tokens from `gh`, so those two features install but stay inert until `gh` is set up. |
+
+Check both at any time:
+
+```bash
+gitswitch doctor
 ```
-gitswitch v0.1.11
-New version available: v0.1.12
-Run: gitswitch upgrade
-```
 
-## Prerequisites
-
-- `git` must be installed and on `PATH` — gitswitch checks this at startup and exits with an error if not found
-- `gh` (GitHub CLI) is optional — required only if you use the `--gh-user` flag on profiles
-
-## Shell integration
-
-After installing the binary, set up the shell prompt and identity nudges:
+## Then set it up
 
 ```bash
 gitswitch install
 ```
 
-See [Shell Integration](/docs/features/shell) for details.
+A short wizard: shell prompt + nudges, HTTPS push routing, and Session Isolation. Everything is opt-out, defaults are sensible, and it's safe to re-run. See [Shell Integration](/docs/features/shell).
 
-## Next steps
+Then head to the [Quick Start](/docs/quick-start).
 
-- [Quick Start](/docs/quick-start)
-- [Shell Integration](/docs/features/shell)
-- [CLI Reference](/docs/cli/commands)
+## Staying up to date
+
+```bash
+gitswitch version    # what am I on? is there anything newer?
+gitswitch upgrade    # get it
+```
+
+gitswitch also tells you inside the TUI when a new release lands, and shows a "What's New" screen after a feature release. Want the pre-release builds? See [Release Channels](/docs/cli/channels).
+
+## Uninstall
+
+```bash
+gitswitch uninstall            # remove shell integration, HTTPS routing, gh wrapper
+brew uninstall gitswitch       # then remove the binary
+rm -rf ~/.config/gitswitch     # and your profiles, if you're sure
+```
