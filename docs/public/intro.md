@@ -46,6 +46,7 @@ When you switch to a profile, gitswitch runs in this order:
 - **SSH key routing** — forces `IdentitiesOnly=yes` so no accidental agent fallback
 - **GPG signing** — switches `user.signingkey` alongside your identity
 - **GitHub CLI sync** — optionally calls `gh auth switch` on every profile switch
+- **Session isolation** (canary) — every terminal's `gh` commands resolve the right account for their repo, and repo pins actually stick, so multiple terminals never fight over gh's one shared global account
 - **Identity awareness** — learns which identity you use per-repo and nudges you when something looks wrong
 - **Shell integration** — prompt segments, automatic nudges on `cd`, tab completion
 - **AI coding agent setup** — installs a Claude Code skill (`gitswitch claude`) and fixes commits an agent already made under the wrong identity (`gitswitch reauthor`)
