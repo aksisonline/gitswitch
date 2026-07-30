@@ -135,11 +135,13 @@ gitswitch uninstall
 
 This removes the marker block from your rc file (or the oh-my-zsh plugin file), unregisters the HTTPS credential helper, and removes the `gh` CLI wrapper — all if they were installed. Reload your shell to complete removal.
 
-## gh CLI isolation
+## Session Isolation
 
 `gh` (the GitHub CLI) only tracks one "active" account for your whole machine. If you switch identities in one terminal, every other terminal's bare `gh` commands (`gh pr create`, `gh issue list`, ...) silently start using that account too.
 
-Toggle "gh CLI Isolation" on in the TUI's Utilities tab to fix this: it adds a `gh` shell function (its own marker block, independent of the rest of shell integration) that resolves the right account for your current repo before every `gh` call and passes it via `GH_TOKEN` for just that one command — the same resolution the HTTPS credential helper uses, so pushes and `gh` commands always agree. gh's global active-account file is never touched, so concurrent terminals never fight over it.
+Toggle "Session Isolation" on in the TUI's Utilities tab to fix this: it adds a `gh` shell function (its own marker block, independent of the rest of shell integration) that resolves the right account for your current repo before every `gh` call and passes it via `GH_TOKEN` for just that one command — the same resolution the HTTPS credential helper uses, so pushes and `gh` commands always agree. gh's global active-account file is never touched, so concurrent terminals never fight over it.
+
+Session Isolation also gates [repo pins](identity-awareness.md#pin-a-repo) — a pin only takes effect while it's on. `gitswitch install` turns it on by default; `gitswitch pin` turns it on automatically the first time you pin a repo if it was off.
 
 `gitswitch doctor` reports whether it's active. Reload your shell (or open a new terminal) after toggling.
 

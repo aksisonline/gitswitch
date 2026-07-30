@@ -5,10 +5,9 @@ import (
 )
 
 // Utility items (indices match utilityFocus and the 5-relY mouse grid):
-//   0 = Shell Integration   (toggleable)
-//   1 = Pre-commit Safety   (disabled, coming soon)
-//   2 = Credential Helper   (toggleable)
-//   3 = gh CLI Isolation    (toggleable)
+//   0 = Shell Integration     (toggleable)
+//   1 = Session Isolation     (toggleable)
+//   2 = HTTPS Credential Helper (toggleable)
 
 func (m Model) viewUtilitiesTab(pw int) string {
 	var top string
@@ -20,7 +19,7 @@ func (m Model) viewUtilitiesTab(pw int) string {
 	iw := itemInnerW(pw)
 
 	// Build each item box
-	items := m.utilItem(pw, iw, 0) + m.utilItem(pw, iw, 1) + m.utilItem(pw, iw, 2) + m.utilItem(pw, iw, 3)
+	items := m.utilItem(pw, iw, 0) + m.utilItem(pw, iw, 1) + m.utilItem(pw, iw, 2)
 
 	sep := "\n\n"
 	footer := sep + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
@@ -49,20 +48,18 @@ func (m Model) utilItem(pw, iw, idx int) string {
 		line2 = padTo(line2, iw)
 		return renderItemBox(pw, focused, false, line1, line2)
 
-	case 1: // Pre-commit Safety Net
-		title := "Pre-commit Safety Net"
-		desc := "Warn before committing as the wrong identity in a pinned repo."
-		chip := "soon"
+	case 1: // Session Isolation
+		title := "Session Isolation"
+		desc := "Isolates this repo's git identity + gh account. Required for pins to take effect."
 		if m.arcadeMode {
-			title = "PRE-COMMIT SAFETY NET"
-			desc = "Stops wrong-player commits. Bonus stage."
-			chip = "SOON"
+			title = "GH CO-OP MODE"
+			desc = "No more fighting over one shared gh account. Every terminal plays its own."
 		}
-		chipStr := styleChipBox().Render(chip)
-		line1 := titleWithRight(styleItemDim.Render(title), chipStr, iw)
+		toggle := renderToggle(m.ghWrapperEnabled)
+		line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)
 		line2 := lipgloss.NewStyle().Foreground(colorDim).Render(truncate(desc, iw))
 		line2 = padTo(line2, iw)
-		return renderItemBox(pw, focused, true, line1, line2)
+		return renderItemBox(pw, focused, false, line1, line2)
 
 	case 2: // HTTPS Credential Helper
 		title := "HTTPS Credential Helper"
@@ -72,19 +69,6 @@ func (m Model) utilItem(pw, iw, idx int) string {
 			desc = "HTTPS auth. Automatic. No 401 game-overs."
 		}
 		toggle := renderToggle(m.credentialHelperEnabled)
-		line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)
-		line2 := lipgloss.NewStyle().Foreground(colorDim).Render(truncate(desc, iw))
-		line2 = padTo(line2, iw)
-		return renderItemBox(pw, focused, false, line1, line2)
-
-	case 3: // gh CLI Isolation
-		title := "gh CLI Isolation"
-		desc := "Bare gh commands resolve the account per-repo instead of gh's one global account."
-		if m.arcadeMode {
-			title = "GH CO-OP MODE"
-			desc = "No more fighting over one shared gh account. Every terminal plays its own."
-		}
-		toggle := renderToggle(m.ghWrapperEnabled)
 		line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)
 		line2 := lipgloss.NewStyle().Foreground(colorDim).Render(truncate(desc, iw))
 		line2 = padTo(line2, iw)

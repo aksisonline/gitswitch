@@ -52,6 +52,8 @@ Press `y` to switch, `n` or `Enter` to skip. The nudge is non-blocking.
 
 ## Pin a repo
 
+Pinning requires [Session Isolation](shell.md#session-isolation) (on by default via `gitswitch install`) — a pin only takes effect while it's on, and pinning turns it on automatically if it was off.
+
 Pinning sets the identity for one repo permanently, instead of asking you to switch globally every time you enter it:
 
 ```bash

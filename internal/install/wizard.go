@@ -38,10 +38,11 @@ var (
 
 // Options carries the resolved choices after a wizard run.
 type Options struct {
-	Shell        shell.Shell
-	Framework    shell.Framework
-	InstallShell bool
-	InstallHTTPS bool
+	Shell            shell.Shell
+	Framework        shell.Framework
+	InstallShell     bool
+	InstallHTTPS     bool
+	InstallGHWrapper bool
 }
 
 // Config controls wizard behaviour.
@@ -56,7 +57,7 @@ type Config struct {
 // Run runs the wizard and returns the user's choices.
 func Run(cfg Config, _ io.Writer) (Options, error) {
 	sh, fw := resolveShell(cfg.ShellOverride)
-	opts := Options{Shell: sh, Framework: fw, InstallShell: true, InstallHTTPS: cfg.HTTPSDefault}
+	opts := Options{Shell: sh, Framework: fw, InstallShell: true, InstallHTTPS: cfg.HTTPSDefault, InstallGHWrapper: true}
 
 	interactive := isatty.IsTerminal(os.Stdin.Fd()) && !cfg.Yes && cfg.ShellOverride == ""
 	if !interactive {
@@ -71,18 +72,19 @@ func Run(cfg Config, _ io.Writer) (Options, error) {
 	}
 	final, ok := result.(model)
 	if !ok || final.cancelled {
-		return Options{Shell: sh, Framework: fw, InstallShell: false, InstallHTTPS: false}, nil
+		return Options{Shell: sh, Framework: fw, InstallShell: false, InstallHTTPS: false, InstallGHWrapper: false}, nil
 	}
 	return Options{
-		Shell:        sh,
-		Framework:    fw,
-		InstallShell: final.wantShell,
-		InstallHTTPS: final.wantHTTPS,
+		Shell:            sh,
+		Framework:        fw,
+		InstallShell:     final.wantShell,
+		InstallHTTPS:     final.wantHTTPS,
+		InstallGHWrapper: final.wantGHWrapper,
 	}, nil
 }
 
 // PrintSummary prints the post-install result (plain text, outside TUI).
-func PrintSummary(w io.Writer, shellResult string, shellDone, httpsDone bool, httpsErr error) {
+func PrintSummary(w io.Writer, shellResult string, shellDone, httpsDone, ghWrapperDone bool, httpsErr error) {
 	check := lipgloss.NewStyle().Foreground(cAccent).Render("✓")
 	skip := lipgloss.NewStyle().Foreground(cDim).Render("–")
 	warn := lipgloss.NewStyle().Foreground(cHighlight).Render("⚠")
@@ -108,8 +110,14 @@ func PrintSummary(w io.Writer, shellResult string, shellDone, httpsDone bool, ht
 		fmt.Fprintf(w, "  %s  HTTPS routing        %s\n", skip, dim("skipped"))
 	}
 
+	if ghWrapperDone {
+		fmt.Fprintf(w, "  %s  Session Isolation    %s\n", check, dim("enabled"))
+	} else {
+		fmt.Fprintf(w, "  %s  Session Isolation    %s\n", skip, dim("skipped"))
+	}
+
 	fmt.Fprintln(w)
-	if shellDone || httpsDone {
+	if shellDone || httpsDone || ghWrapperDone {
 		fmt.Fprintln(w, dim("  Reload your shell (or open a new terminal) to activate."))
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, lipgloss.NewStyle().Foreground(cWhite).Render("  Next:"))
@@ -127,6 +135,7 @@ type wizStep int
 const (
 	stepShell wizStep = iota
 	stepHTTPS
+	stepGHWrapper
 	stepDone
 )
 
@@ -138,39 +147,48 @@ type model struct {
 	cursor        int // 0 = YES, 1 = NO
 	wantShell     bool
 	wantHTTPS     bool
+	wantGHWrapper bool
 	cancelled     bool
 	blink         bool
 
-	sh           shell.Shell
-	fw           shell.Framework
-	httpsDefault bool
-	alreadyShell bool
-	alreadyHTTPS bool
-	ghInstalled  bool
+	sh               shell.Shell
+	fw               shell.Framework
+	httpsDefault     bool
+	alreadyShell     bool
+	alreadyHTTPS     bool
+	alreadyGHWrapper bool
+	ghInstalled      bool
 }
 
 func newModel(sh shell.Shell, fw shell.Framework, httpsDefault bool) model {
 	alreadyShell := shell.IsInstalled(shell.RCFile(sh))
 	alreadyHTTPS := git.IsCredentialHelperInstalled()
+	alreadyGHWrapper := shell.IsGHWrapperInstalled(shell.RCFile(sh))
 
 	start := stepShell
-	if alreadyShell && !alreadyHTTPS {
+	if alreadyShell {
 		start = stepHTTPS
-	} else if alreadyShell && alreadyHTTPS {
+	}
+	if alreadyShell && alreadyHTTPS {
+		start = stepGHWrapper
+	}
+	if alreadyShell && alreadyHTTPS && alreadyGHWrapper {
 		start = stepDone
 	}
 
 	return model{
-		step:         start,
-		cursor:       0,
-		wantShell:    true,
-		wantHTTPS:    httpsDefault,
-		sh:           sh,
-		fw:           fw,
-		httpsDefault: httpsDefault,
-		alreadyShell: alreadyShell,
-		alreadyHTTPS: alreadyHTTPS,
-		ghInstalled:  git.IsGHInstalled(),
+		step:             start,
+		cursor:           0,
+		wantShell:        true,
+		wantHTTPS:        httpsDefault,
+		wantGHWrapper:    true,
+		sh:               sh,
+		fw:               fw,
+		httpsDefault:     httpsDefault,
+		alreadyShell:     alreadyShell,
+		alreadyHTTPS:     alreadyHTTPS,
+		alreadyGHWrapper: alreadyGHWrapper,
+		ghInstalled:      git.IsGHInstalled(),
 	}
 }
 
@@ -220,6 +238,10 @@ func (m model) commit() (tea.Model, tea.Cmd) {
 		m.cursor = 0
 	case stepHTTPS:
 		m.wantHTTPS = yes
+		m.step = stepGHWrapper
+		m.cursor = 0
+	case stepGHWrapper:
+		m.wantGHWrapper = yes
 		return m, tea.Quit
 	case stepDone:
 		return m, tea.Quit
@@ -255,6 +277,8 @@ func (m model) View() string {
 		sections = append(sections, m.viewShell(pw))
 	case stepHTTPS:
 		sections = append(sections, m.viewHTTPS(pw))
+	case stepGHWrapper:
+		sections = append(sections, m.viewGHWrapper(pw))
 	case stepDone:
 		sections = append(sections, m.viewAlreadyDone(pw))
 	}
@@ -394,6 +418,54 @@ func (m model) viewHTTPS(pw int) string {
 		Render(body)
 }
 
+// ── Session Isolation step ───────────────────────────────────────────────────
+
+func (m model) viewGHWrapper(pw int) string {
+	inner := pw - 4
+	stepN := 3
+	if m.alreadyShell {
+		stepN--
+	}
+	if m.alreadyHTTPS {
+		stepN--
+	}
+
+	stepLine := m.stepBadge(stepN, m.totalSteps()) + "  " +
+		lipgloss.NewStyle().Bold(true).Foreground(cWhite).Render("Session Isolation")
+
+	bullets := m.bullets([]string{
+		"Isolates this repo's git identity and gh account from whatever's global",
+		"Required for `gitswitch pin` to take effect",
+		"Wraps the `gh` shell function — bare `gh` commands resolve per-repo",
+	})
+
+	ghStatus := ""
+	if m.ghInstalled {
+		ghStatus = lipgloss.NewStyle().Foreground(cAccent).Render("✓") +
+			lipgloss.NewStyle().Foreground(cDim).Render("  gh CLI found")
+	} else {
+		ghStatus = lipgloss.NewStyle().Foreground(cHighlight).Render("⚠") +
+			lipgloss.NewStyle().Foreground(cDim).Render("  gh CLI not found — installs but stays inert until gh is set up")
+	}
+
+	ba := m.beforeAfter(inner,
+		"gh pr view  →  always your single global gh account",
+		"gh pr view  →  "+lipgloss.NewStyle().Foreground(cAccent).Bold(true).Render("this repo's own gh account"),
+		"",
+	)
+
+	prompt := m.choicePrompt("Enable Session Isolation?")
+
+	body := strings.Join([]string{stepLine, "", bullets, "", ghStatus, "", ba, "", prompt}, "\n")
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(cPrimary).
+		Width(pw).
+		PaddingLeft(1).PaddingRight(1).PaddingTop(1).PaddingBottom(1).
+		Render(body)
+}
+
 // ── already done ──────────────────────────────────────────────────────────────
 
 func (m model) viewAlreadyDone(pw int) string {
@@ -419,10 +491,20 @@ func (m model) stepBadge(n, total int) string {
 }
 
 func (m model) totalSteps() int {
-	if m.alreadyShell && !m.alreadyHTTPS {
-		return 1
+	n := 0
+	if !m.alreadyShell {
+		n++
 	}
-	return 2
+	if !m.alreadyHTTPS {
+		n++
+	}
+	if !m.alreadyGHWrapper {
+		n++
+	}
+	if n == 0 {
+		n = 1
+	}
+	return n
 }
 
 func (m model) bullets(items []string) string {

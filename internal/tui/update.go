@@ -44,9 +44,10 @@ type ghWrapperDoneMsg struct {
 // pinDoneMsg reports the result of pinning or releasing this repo's identity.
 // A nil profile means the pin was removed.
 type pinDoneMsg struct {
-	profile  *storage.Profile
-	warnings []string
-	err      error
+	profile          *storage.Profile
+	warnings         []string
+	isolationEnabled bool
+	err              error
 }
 
 type upgradeDoneMsg struct {
@@ -156,10 +157,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ghWrapperEnabled = gd.installed
 			if gd.installed {
 				rc := shell.RCFile(shell.DetectShell())
-				m.statusMsg = fmt.Sprintf("gh CLI isolation enabled — run: source %s", rc)
+				m.statusMsg = fmt.Sprintf("Session Isolation enabled — run: source %s", rc)
 				m.PendingReloadCmd = fmt.Sprintf("source %s", rc)
 			} else {
-				m.statusMsg = "gh CLI isolation removed — restart your shell to apply"
+				m.statusMsg = "Session Isolation removed — restart your shell to apply"
 				m.PendingReloadCmd = ""
 			}
 			m.statusIsErr = false
@@ -291,15 +292,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor--
 				}
 			case 1:
-				// Pre-commit safety (index 1) is still a disabled placeholder — skip it.
-				switch m.utilityFocus {
-				case 0:
-					m.utilityFocus = 3
-				case 2:
-					m.utilityFocus = 0
-				case 3:
-					m.utilityFocus = 2
-				}
+				m.utilityFocus = (m.utilityFocus + 2) % 3
 			case 2:
 				if m.settingsFocus > 0 {
 					m.settingsFocus--
@@ -314,15 +307,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor++
 				}
 			case 1:
-				// Pre-commit safety (index 1) is still a disabled placeholder — skip it.
-				switch m.utilityFocus {
-				case 0:
-					m.utilityFocus = 2
-				case 2:
-					m.utilityFocus = 3
-				case 3:
-					m.utilityFocus = 0
-				}
+				m.utilityFocus = (m.utilityFocus + 1) % 3
 			case 2:
 				if m.settingsFocus < 2 {
 					m.settingsFocus++
@@ -347,11 +332,11 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.openShellConfirm(!m.shellEnabled)
 					return m, nil
 				}
+				if m.utilityFocus == 1 {
+					return m, m.toggleGHWrapperCmd()
+				}
 				if m.utilityFocus == 2 {
 					return m, m.toggleCredentialHelperCmd()
-				}
-				if m.utilityFocus == 3 {
-					return m, m.toggleGHWrapperCmd()
 				}
 			case 2: // Settings
 				if m.settingsFocus == 0 {
@@ -527,17 +512,22 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusIsErr = true
 			break
 		}
+		if msg.isolationEnabled {
+			m.ghWrapperEnabled = true
+		}
 		m.refreshRepoScope()
 		m.statusIsErr = false
 		if msg.profile == nil {
 			m.statusMsg = "unpinned — this repo now uses the global identity"
 			break
 		}
+		suffix := ""
 		if len(msg.warnings) > 0 {
-			m.statusMsg = fmt.Sprintf("pinned %s to this repo (warning: %s)", msg.profile.Nickname, msg.warnings[0])
-		} else {
-			m.statusMsg = fmt.Sprintf("pinned %s to this repo", msg.profile.Nickname)
+			suffix = fmt.Sprintf(" (warning: %s)", msg.warnings[0])
+		} else if msg.isolationEnabled {
+			suffix = " (Session Isolation turned on)"
 		}
+		m.statusMsg = fmt.Sprintf("pinned %s to this repo%s", msg.profile.Nickname, suffix)
 	}
 	return m, nil
 }
@@ -819,7 +809,13 @@ func (m Model) toggleGHWrapperCmd() tea.Cmd {
 // pinProfileCmd writes a profile into this repo's own git config and records the
 // pin, leaving the global identity alone — the same two writes as `gitswitch pin`.
 func (m Model) pinProfileCmd(p storage.Profile) tea.Cmd {
+	wasEnabled := m.ghWrapperEnabled
 	return func() tea.Msg {
+		if !wasEnabled {
+			if _, err := shell.InstallGHWrapper(shell.DetectShell()); err != nil {
+				return pinDoneMsg{err: err}
+			}
+		}
 		cfg := git.New(false)
 		if err := cfg.SetUser(p.UserName, p.Email); err != nil {
 			return pinDoneMsg{err: err}
@@ -837,7 +833,7 @@ func (m Model) pinProfileCmd(p storage.Profile) tea.Cmd {
 		if err := history.Pin(m.repoKey, p.Nickname); err != nil {
 			return pinDoneMsg{err: err}
 		}
-		return pinDoneMsg{profile: &p, warnings: warnings}
+		return pinDoneMsg{profile: &p, warnings: warnings, isolationEnabled: !wasEnabled}
 	}
 }
 
@@ -1094,7 +1090,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				m.cursor = idx
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff, 3); ok && idx != 1 {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 2); ok {
 				m.utilityFocus = idx
 			}
 		case 2:
@@ -1275,15 +1271,15 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				return m, m.switchProfileCmd(m.profiles[idx])
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff, 3); ok {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 2); ok {
 				m.utilityFocus = idx
 				switch idx {
 				case 0:
 					m.openShellConfirm(!m.shellEnabled)
+				case 1:
+					return m, m.toggleGHWrapperCmd()
 				case 2:
 					return m, m.toggleCredentialHelperCmd()
-				case 3:
-					return m, m.toggleGHWrapperCmd()
 				}
 			}
 		case 2:

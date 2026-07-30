@@ -63,10 +63,11 @@ type Model struct {
 	// Repo awareness: which identity the repo we were launched from actually uses,
 	// and where it comes from. repoKey == "" means "not inside a git repo" and is
 	// the guard for every pin action.
-	repoDir      string
-	repoKey      string
-	scope        git.Scope
-	scopeProfile *storage.Profile // profile the repo/session resolves to, nil when global
+	repoDir        string
+	repoKey        string
+	scope          git.Scope
+	scopeProfile   *storage.Profile // profile the repo/session resolves to, nil when global
+	pinnedInactive string           // nickname pinned to this repo while Session Isolation is off
 
 	formFields  [6]string // seed values when entering the add/edit form
 	formFocus   int
@@ -108,7 +109,7 @@ type Model struct {
 	// Tab navigation (used when state == StateList)
 	tabIndex int // 0=Accounts 1=Utilities 2=Settings
 
-	// Utilities tab focus (0=shell, 1=precommit, 2=credential, 3=gh wrapper)
+	// Utilities tab focus (0=shell, 1=gh wrapper/Session Isolation, 2=credential)
 	utilityFocus int
 	// Settings tab focus (0=config, 1=theme)
 	settingsFocus int
@@ -195,11 +196,15 @@ func WithWhatsNew(body string) Option {
 func (m *Model) refreshRepoScope() {
 	m.repoDir, _ = os.Getwd()
 	m.repoKey = history.GetRepoKeyForPath(m.repoDir)
-	m.scope, m.scopeProfile = git.ScopeGlobal, nil
+	m.scope, m.scopeProfile, m.pinnedInactive = git.ScopeGlobal, nil, ""
 	if m.repoKey == "" {
 		return
 	}
 	scope, email := git.ResolveIdentity(m.repoDir)
+	if scope == git.ScopeRepo && !m.ghWrapperEnabled {
+		m.pinnedInactive = history.GetPinned(m.repoKey)
+		return
+	}
 	if scope == git.ScopeRepo || scope == git.ScopeSession {
 		if p := m.store.GetByEmail(email); p != nil {
 			m.scope, m.scopeProfile = scope, p
@@ -275,6 +280,7 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		shellAlias:              shellAlias,
 		shellAliasDisabled:      prefs.ShellAliasDisabled,
 		aliasInput:              aliasInput,
+		arcadeMode:              prefs.ArcadeMode,
 	}
 	m.refreshRepoScope()
 	for _, opt := range opts {
@@ -321,6 +327,7 @@ func (m *Model) savePrefs() error {
 		ShellAlias:         m.shellAlias,
 		ShellAliasDisabled: m.shellAliasDisabled,
 		ArcadeHiScore:      m.hiScore,
+		ArcadeMode:         m.arcadeMode,
 	})
 }
 
