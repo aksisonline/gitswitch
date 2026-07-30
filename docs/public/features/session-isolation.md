@@ -3,8 +3,6 @@ title: Session Isolation
 description: Give every terminal its own GitHub CLI account and working repo pins, without fighting over gh's single global active account
 ---
 
-> **Canary channel.** This feature ships in gitswitch's canary builds. Run `gitswitch beta` to switch your install to canary (`gitswitch stable` switches back at any time).
-
 ## The problem
 
 `gh` (the GitHub CLI) only tracks one "active" account for your whole machine. Switching your gitswitch identity in one terminal silently flips which account every other open terminal's bare `gh` commands (`gh pr create`, `gh issue list`, `gh repo view`, ...) use too — even in a completely unrelated repo.
