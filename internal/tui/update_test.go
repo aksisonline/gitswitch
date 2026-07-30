@@ -164,6 +164,23 @@ func TestNewDetectsRepoPin(t *testing.T) {
 	}
 }
 
+// Arcade mode persists across launches via `gitswitch pacman`, so the intro must
+// trigger from the saved pref on every launch, not just the one-shot toggle.
+func TestNewPersistedArcadeModeShowsIntro(t *testing.T) {
+	st := storage.NewAt(t.TempDir())
+	if err := st.SavePrefs(storage.Prefs{ArcadeMode: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := New(st, "v0.0.0-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.state != StateIntro {
+		t.Errorf("state = %v, want StateIntro", m.state)
+	}
+}
+
 // Pressing p outside a git repo must say so rather than silently doing nothing —
 // there is no repo to pin to and no local config to write.
 func TestPinKeyOutsideRepo(t *testing.T) {

@@ -456,11 +456,9 @@ var pacmanCmd = &cobra.Command{
 		if err := store.SavePrefs(prefs); err != nil {
 			return err
 		}
-		var opts []tui.Option
-		if prefs.ArcadeMode {
-			opts = append(opts, tui.WithArcadeMode()) // intro animation only when turning ON
-		}
-		m, err := tui.New(store, version, opts...)
+		// tui.New reads prefs.ArcadeMode straight off disk, including the intro
+		// trigger, so no option is needed here.
+		m, err := tui.New(store, version)
 		if err != nil {
 			return err
 		}

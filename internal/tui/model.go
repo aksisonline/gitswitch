@@ -171,18 +171,6 @@ var formSubtitles = [6]string{
 
 type Option func(*Model)
 
-func WithArcadeMode() Option {
-	return func(m *Model) {
-		m.arcadeMode = true
-		m.state = StateIntro
-		m.introMouthOpen = true
-		// Beatable factory high score — real high scores persist via prefs.
-		if m.hiScore < 5000 {
-			m.hiScore = 5000
-		}
-	}
-}
-
 func WithWhatsNew(body string) Option {
 	return func(m *Model) {
 		m.whatsNewBody = body
@@ -285,6 +273,17 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 	m.refreshRepoScope()
 	for _, opt := range opts {
 		opt(m)
+	}
+	// Arcade mode persists across launches (via `gitswitch pacman`), so the intro
+	// must trigger from the persisted flag, not just the one-shot toggle option —
+	// otherwise every launch after the first skips straight to the list.
+	if m.arcadeMode && m.state == StateList {
+		m.state = StateIntro
+		m.introMouthOpen = true
+		// Beatable factory high score — real high scores persist via prefs.
+		if m.hiScore < 5000 {
+			m.hiScore = 5000
+		}
 	}
 	if store.WasMigrated() {
 		if store.BakCreated() {
