@@ -133,7 +133,15 @@ To remove all shell integration written by `gitswitch install`:
 gitswitch uninstall
 ```
 
-This removes the marker block from your rc file (or the oh-my-zsh plugin file) and unregisters the HTTPS credential helper if it was installed. Reload your shell to complete removal.
+This removes the marker block from your rc file (or the oh-my-zsh plugin file), unregisters the HTTPS credential helper, and removes the `gh` CLI wrapper — all if they were installed. Reload your shell to complete removal.
+
+## gh CLI isolation
+
+`gh` (the GitHub CLI) only tracks one "active" account for your whole machine. If you switch identities in one terminal, every other terminal's bare `gh` commands (`gh pr create`, `gh issue list`, ...) silently start using that account too.
+
+Toggle "gh CLI Isolation" on in the TUI's Utilities tab to fix this: it adds a `gh` shell function (its own marker block, independent of the rest of shell integration) that resolves the right account for your current repo before every `gh` call and passes it via `GH_TOKEN` for just that one command — the same resolution the HTTPS credential helper uses, so pushes and `gh` commands always agree. gh's global active-account file is never touched, so concurrent terminals never fight over it.
+
+`gitswitch doctor` reports whether it's active. Reload your shell (or open a new terminal) after toggling.
 
 ## How the HTTPS credential helper is registered
 

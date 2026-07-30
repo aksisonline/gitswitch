@@ -825,6 +825,24 @@ var credentialCmd = &cobra.Command{
 	},
 }
 
+// ghUserCmd backs the `gh` shell wrapper installed by the gh-wrapper toggle
+// (see internal/shell InstallGHWrapper): it prints the gh login that applies
+// to the calling directory, sharing resolution with the credential helper so
+// bare `gh` commands and HTTPS pushes always agree on identity. Prints
+// nothing (exit 0) when no profile applies, so the wrapper falls back to gh's
+// own active account.
+var ghUserCmd = &cobra.Command{
+	Use:    "ghuser",
+	Hidden: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cwd, _ := os.Getwd()
+		if login := credential.ResolveGHUser(store, history.GetRepoKey(), cwd); login != "" {
+			fmt.Println(login)
+		}
+		return nil
+	},
+}
+
 var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Connect a GitHub account",
@@ -945,6 +963,14 @@ var uninstallCmd = &cobra.Command{
 			}
 		}
 
+		if shell.IsGHWrapperInstalled(shell.RCFile(sh)) {
+			if _, err := shell.UninstallGHWrapper(sh); err != nil {
+				fmt.Printf("  warning: could not remove gh wrapper: %v\n", err)
+			} else {
+				fmt.Println("✓ gh wrapper removed")
+			}
+		}
+
 		fmt.Println("  Reload your shell (or open a new terminal) to complete removal.")
 		return nil
 	},
@@ -957,6 +983,7 @@ var doctorCmd = &cobra.Command{
 		jsonOut, _ := cmd.Flags().GetBool("json")
 		r := prereqs.Check()
 		conflicts := git.CredentialHelperConflicts()
+		ghWrapperInstalled := shell.IsGHWrapperInstalled(shell.RCFile(shell.DetectShell()))
 		if jsonOut {
 			// Embedded so git/gh stay top-level, matching the pre-existing shape.
 			report := struct {
@@ -965,9 +992,11 @@ var doctorCmd = &cobra.Command{
 					RoutedByGitswitch bool                 `json:"routed_by_gitswitch"`
 					Conflicts         []git.HelperConflict `json:"conflicts,omitempty"`
 				} `json:"https"`
+				GHWrapperInstalled bool `json:"gh_wrapper_installed"`
 			}{CheckResult: r}
 			report.HTTPS.RoutedByGitswitch = len(conflicts) == 0
 			report.HTTPS.Conflicts = conflicts
+			report.GHWrapperInstalled = ghWrapperInstalled
 			b, err := json.MarshalIndent(report, "", "  ")
 			if err != nil {
 				return err
@@ -1003,6 +1032,12 @@ var doctorCmd = &cobra.Command{
 				fmt.Printf("       %s → %s\n", c.Key, c.Winner)
 			}
 			fmt.Println("       pushes may use the wrong account — run: gitswitch install")
+		}
+
+		if ghWrapperInstalled {
+			fmt.Println("  ✓  gh CLI isolation active (bare `gh` commands resolve per-repo)")
+		} else {
+			fmt.Println("  ⚠  gh CLI isolation off — bare `gh` commands use gh's single global account")
 		}
 
 		fmt.Println()
@@ -1065,7 +1100,7 @@ var setupCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, doctorCmd, setupCmd, loginCmd, betaCmd, stableCmd, reauthorCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, setupCmd, loginCmd, betaCmd, stableCmd, reauthorCmd)
 	addCmd.Flags().String("sign-key", "", "Signing key: GPG key ID, or SSH key path for gpg.format=ssh")
 	addCmd.Flags().String("ssh-key", "", "SSH private key path, e.g. ~/.ssh/id_work (sets core.sshCommand)")
 	addCmd.Flags().String("gh-user", "", "GitHub CLI username (for gh auth switch)")

@@ -108,7 +108,7 @@ type Model struct {
 	// Tab navigation (used when state == StateList)
 	tabIndex int // 0=Accounts 1=Utilities 2=Settings
 
-	// Utilities tab focus (0=shell, 1=precommit, 2=credential)
+	// Utilities tab focus (0=shell, 1=precommit, 2=credential, 3=gh wrapper)
 	utilityFocus int
 	// Settings tab focus (0=config, 1=theme)
 	settingsFocus int
@@ -117,6 +117,10 @@ type Model struct {
 	// HTTPS credential helper toggle — true means gitswitch will actually be
 	// asked first (git.IsCredentialHelperInstalled), not just "registered".
 	credentialHelperEnabled bool
+	// gh CLI wrapper toggle — true means bare `gh` commands resolve the
+	// account per-repo instead of relying on gh's single global active
+	// account (shell.IsGHWrapperInstalled).
+	ghWrapperEnabled bool
 	// Accounts secondary column: false=email (default), true=GitHub username
 	showUsername bool
 
@@ -264,6 +268,7 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		colorTheme:              prefs.ColorTheme,
 		shellEnabled:            shell.IsInstalled(shell.RCFile(shell.DetectShell())),
 		credentialHelperEnabled: git.IsCredentialHelperInstalled(),
+		ghWrapperEnabled:        shell.IsGHWrapperInstalled(shell.RCFile(shell.DetectShell())),
 		showUsername:            prefs.ShowUsername,
 		splashSeen020:           prefs.SplashSeen020,
 		hiScore:                 prefs.ArcadeHiScore,

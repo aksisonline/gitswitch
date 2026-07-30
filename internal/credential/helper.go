@@ -105,7 +105,7 @@ func ghAuthToken(host, ghUser string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// resolveGHUser picks which profile's gh_user to use for this request.
+// ResolveGHUser picks which profile's gh_user applies to repoDir/repoKey.
 //
 //  1. If the repo or this terminal's session overrides the global identity, that
 //     wins outright — commits here are authored as that profile, so pushes must
@@ -116,8 +116,10 @@ func ghAuthToken(host, ghUser string) (string, error) {
 //     equals the active nickname, so the active profile is the natural
 //     fallback and the two branches converge on the same result.
 //
-// Returns "" if no profile applies (the caller then stays silent).
-func resolveGHUser(req Request, st *storage.Store, repoKey, repoDir string) string {
+// Returns "" if no profile applies (callers then stay silent). Shared by the
+// git credential helper (Get, below) and the `gh` CLI wrapper (cmd/gitswitch
+// ghuser), so HTTPS pushes and bare `gh` commands always resolve identically.
+func ResolveGHUser(st *storage.Store, repoKey, repoDir string) string {
 	if scope, email := git.ResolveIdentity(repoDir); scope == git.ScopeRepo || scope == git.ScopeSession {
 		if p := st.GetByEmail(email); p != nil {
 			return p.GHUser
@@ -148,7 +150,7 @@ func resolveGHUser(req Request, st *storage.Store, repoKey, repoDir string) stri
 // On any miss (no profile, gh unavailable, account not authed for host) it writes
 // nothing so git falls through to the next helper. Always returns nil (exit 0).
 func Get(req Request, st *storage.Store, repoKey, repoDir string, w io.Writer) error {
-	ghUser := resolveGHUser(req, st, repoKey, repoDir)
+	ghUser := ResolveGHUser(st, repoKey, repoDir)
 	if ghUser == "" {
 		return nil
 	}

@@ -33,6 +33,14 @@ type credentialHelperDoneMsg struct {
 	err     error
 }
 
+// ghWrapperDoneMsg reports the result of toggling the `gh` CLI wrapper.
+// installed reflects shell.IsGHWrapperInstalled() after the toggle, same
+// pattern as shellDoneMsg — it touches an rc file so needs a shell reload.
+type ghWrapperDoneMsg struct {
+	installed bool
+	err       error
+}
+
 // pinDoneMsg reports the result of pinning or releasing this repo's identity.
 // A nil profile means the pin was removed.
 type pinDoneMsg struct {
@@ -135,6 +143,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = "HTTPS credential helper enabled"
 			} else {
 				m.statusMsg = "HTTPS credential helper removed"
+			}
+			m.statusIsErr = false
+		}
+		return m, nil
+	}
+	if gd, ok := msg.(ghWrapperDoneMsg); ok {
+		if gd.err != nil {
+			m.statusMsg = fmt.Sprintf("gh wrapper: %v", gd.err)
+			m.statusIsErr = true
+		} else {
+			m.ghWrapperEnabled = gd.installed
+			if gd.installed {
+				rc := shell.RCFile(shell.DetectShell())
+				m.statusMsg = fmt.Sprintf("gh CLI isolation enabled — run: source %s", rc)
+				m.PendingReloadCmd = fmt.Sprintf("source %s", rc)
+			} else {
+				m.statusMsg = "gh CLI isolation removed — restart your shell to apply"
+				m.PendingReloadCmd = ""
 			}
 			m.statusIsErr = false
 		}
@@ -266,8 +292,13 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case 1:
 				// Pre-commit safety (index 1) is still a disabled placeholder — skip it.
-				if m.utilityFocus == 2 {
+				switch m.utilityFocus {
+				case 0:
+					m.utilityFocus = 3
+				case 2:
 					m.utilityFocus = 0
+				case 3:
+					m.utilityFocus = 2
 				}
 			case 2:
 				if m.settingsFocus > 0 {
@@ -284,8 +315,13 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case 1:
 				// Pre-commit safety (index 1) is still a disabled placeholder — skip it.
-				if m.utilityFocus == 0 {
+				switch m.utilityFocus {
+				case 0:
 					m.utilityFocus = 2
+				case 2:
+					m.utilityFocus = 3
+				case 3:
+					m.utilityFocus = 0
 				}
 			case 2:
 				if m.settingsFocus < 2 {
@@ -313,6 +349,9 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				if m.utilityFocus == 2 {
 					return m, m.toggleCredentialHelperCmd()
+				}
+				if m.utilityFocus == 3 {
+					return m, m.toggleGHWrapperCmd()
 				}
 			case 2: // Settings
 				if m.settingsFocus == 0 {
@@ -756,6 +795,27 @@ func (m Model) toggleCredentialHelperCmd() tea.Cmd {
 	}
 }
 
+// toggleGHWrapperCmd installs or removes the `gh` CLI wrapper function,
+// mirroring `gitswitch install`/`uninstall`'s gh-wrapper handling. Unlike the
+// credential helper, this writes to the shell rc file, so — like shell
+// integration — it needs a reload to take effect.
+func (m Model) toggleGHWrapperCmd() tea.Cmd {
+	wasEnabled := m.ghWrapperEnabled
+	sh := shell.DetectShell()
+	return func() tea.Msg {
+		var err error
+		if wasEnabled {
+			_, err = shell.UninstallGHWrapper(sh)
+		} else {
+			_, err = shell.InstallGHWrapper(sh)
+		}
+		if err != nil {
+			return ghWrapperDoneMsg{installed: wasEnabled, err: err}
+		}
+		return ghWrapperDoneMsg{installed: shell.IsGHWrapperInstalled(shell.RCFile(sh))}
+	}
+}
+
 // pinProfileCmd writes a profile into this repo's own git config and records the
 // pin, leaving the global identity alone — the same two writes as `gitswitch pin`.
 func (m Model) pinProfileCmd(p storage.Profile) tea.Cmd {
@@ -922,14 +982,15 @@ func (m Model) profileRowStart(arcadeOff int) int {
 
 // itemBoxAt maps a relY to a Utilities/Settings item-box index. Each
 // renderItemBox occupies exactly 4 rows, the first box starting right
-// under the tab strip.
-func itemBoxAt(relY, arcadeOff int) (int, bool) {
+// under the tab strip. maxIdx is the highest valid index for the tab being
+// hit-tested (3 for Utilities' 4 boxes, 2 for Settings' 3).
+func itemBoxAt(relY, arcadeOff, maxIdx int) (int, bool) {
 	start := 4 + arcadeOff
 	if relY < start {
 		return 0, false
 	}
 	idx := (relY - start) / 4
-	if idx > 2 {
+	if idx > maxIdx {
 		return 0, false
 	}
 	return idx, true
@@ -1033,11 +1094,11 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				m.cursor = idx
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff); ok && idx != 1 {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 3); ok && idx != 1 {
 				m.utilityFocus = idx
 			}
 		case 2:
-			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 2); ok {
 				m.settingsFocus = idx
 			}
 		}
@@ -1214,17 +1275,19 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				return m, m.switchProfileCmd(m.profiles[idx])
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 3); ok {
 				m.utilityFocus = idx
 				switch idx {
 				case 0:
 					m.openShellConfirm(!m.shellEnabled)
 				case 2:
 					return m, m.toggleCredentialHelperCmd()
+				case 3:
+					return m, m.toggleGHWrapperCmd()
 				}
 			}
 		case 2:
-			if idx, ok := itemBoxAt(relY, arcadeOff); ok {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 2); ok {
 				m.settingsFocus = idx
 				switch idx {
 				case 0: // config location — only the edit chip launches $EDITOR
