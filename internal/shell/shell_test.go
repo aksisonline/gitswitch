@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -32,6 +33,26 @@ func TestPromptSnippetsUsePromptFlag(t *testing.T) {
 		}
 		if strings.Contains(c.snippet, "gitswitch current --short") && c.name != "starship" {
 			t.Errorf("%s: prompt must not use --short (reserved for Starship/scripts)", c.name)
+		}
+	}
+}
+
+// The scope marker (● pinned / ◆ session) is field 3 of `current --prompt`, and
+// every prompt renderer must read it and print it next to the nickname —
+// otherwise a user in a pinned repo sees a prompt indistinguishable from global.
+func TestPromptSnippetsRenderScopeMarker(t *testing.T) {
+	for _, c := range []struct{ name, snippet, reads, prints string }{
+		{"zsh", nudgeSnippetZsh("gs"), "cut -f3", "${nick}${mark}"},
+		{"bash", nudgeSnippetBash("gs"), "cut -f3", `[%s%s]`},
+		{"fish", nudgeSnippetFish("gs"), "$parts[3..-1]", `[%s%s]`},
+		{"omz", omzPluginContent(), "cut -f3", "${nick}${mark}"},
+		{"p10k", p10kSnippet("gs"), "cut -f3", "[$nick$mark]"},
+	} {
+		if !strings.Contains(c.snippet, c.reads) {
+			t.Errorf("%s: prompt must read the marker field with %q", c.name, c.reads)
+		}
+		if !strings.Contains(c.snippet, c.prints) {
+			t.Errorf("%s: prompt must render the marker next to the nickname (%q)", c.name, c.prints)
 		}
 	}
 }
@@ -230,6 +251,78 @@ func TestIsInstalled_MissingFile(t *testing.T) {
 	}
 }
 
+// ── gh wrapper ───────────────────────────────────────────────────────────────
+
+func TestGHWrapperSnippetPosix_ResolvesPerRepoAndScopesToken(t *testing.T) {
+	s := ghWrapperSnippetPosix()
+	if !strings.Contains(s, "gitswitch ghuser") {
+		t.Error("expected snippet to resolve identity via `gitswitch ghuser`")
+	}
+	if !strings.Contains(s, "GH_TOKEN=") {
+		t.Error("expected snippet to scope the token via GH_TOKEN for a single invocation")
+	}
+	if !strings.Contains(s, "command gh") {
+		t.Error("expected snippet to fall through to the real gh via `command gh`")
+	}
+}
+
+func TestGHWrapperSnippetFish_ResolvesPerRepoAndScopesToken(t *testing.T) {
+	s := ghWrapperSnippetFish()
+	if !strings.Contains(s, "gitswitch ghuser") {
+		t.Error("expected snippet to resolve identity via `gitswitch ghuser`")
+	}
+	if !strings.Contains(s, "GH_TOKEN=") {
+		t.Error("expected snippet to scope the token via GH_TOKEN for a single invocation")
+	}
+	if !strings.Contains(s, "command gh") {
+		t.Error("expected snippet to fall through to the real gh via `command gh`")
+	}
+}
+
+func TestIsGHWrapperInstalled_True(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "rc-*.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(ghWrapperSnippetPosix())
+	f.Close()
+	if !IsGHWrapperInstalled(f.Name()) {
+		t.Error("expected IsGHWrapperInstalled=true when marker present")
+	}
+}
+
+func TestIsGHWrapperInstalled_False(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "rc-*.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(nudgeSnippetZsh("gs")) // main hook block, not the gh wrapper
+	f.Close()
+	if IsGHWrapperInstalled(f.Name()) {
+		t.Error("expected IsGHWrapperInstalled=false when gh wrapper marker absent")
+	}
+}
+
+func TestRemoveMarkerBlock_GHWrapperOnly(t *testing.T) {
+	tmp := t.TempDir()
+	rc := tmp + "/rc.sh"
+	// Both blocks installed side by side, independent toggles.
+	content := nudgeSnippetZsh("gs") + ghWrapperSnippetPosix()
+	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeMarkerBlock(rc, ghWrapperMarker); err != nil {
+		t.Fatalf("removeMarkerBlock: %v", err)
+	}
+	got, _ := os.ReadFile(rc)
+	if strings.Contains(string(got), ghWrapperMarker) {
+		t.Error("gh wrapper block still present after removal")
+	}
+	if !strings.Contains(string(got), marker) {
+		t.Error("main shell-integration block should be untouched")
+	}
+}
+
 // ── DetectShell ──────────────────────────────────────────────────────────────
 
 func TestDetectShell_Zsh(t *testing.T) {
@@ -287,7 +380,7 @@ func TestRemoveMarkerBlock_RemovesBlock(t *testing.T) {
 	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeMarkerBlock(rc); err != nil {
+	if err := removeMarkerBlock(rc, marker); err != nil {
 		t.Fatalf("removeMarkerBlock: %v", err)
 	}
 	got, _ := os.ReadFile(rc)
@@ -306,11 +399,11 @@ func TestRemoveMarkerBlock_Idempotent(t *testing.T) {
 	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeMarkerBlock(rc); err != nil {
+	if err := removeMarkerBlock(rc, marker); err != nil {
 		t.Fatal(err)
 	}
 	// second call on file with no markers should be a no-op
-	if err := removeMarkerBlock(rc); err != nil {
+	if err := removeMarkerBlock(rc, marker); err != nil {
 		t.Errorf("second removeMarkerBlock should be no-op, got: %v", err)
 	}
 }
@@ -322,7 +415,7 @@ func TestRemoveMarkerBlock_PreservesMode(t *testing.T) {
 	if err := os.WriteFile(rc, []byte(content), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeMarkerBlock(rc); err != nil {
+	if err := removeMarkerBlock(rc, marker); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(rc)
@@ -341,7 +434,7 @@ func TestRemoveMarkerBlock_UnbalancedBegin(t *testing.T) {
 	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeMarkerBlock(rc); err == nil {
+	if err := removeMarkerBlock(rc, marker); err == nil {
 		t.Error("expected error for begin-without-end marker")
 	}
 }
@@ -353,7 +446,7 @@ func TestRemoveMarkerBlock_StarshipBlock(t *testing.T) {
 	if err := os.WriteFile(toml, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeMarkerBlock(toml); err != nil {
+	if err := removeMarkerBlock(toml, marker); err != nil {
 		t.Fatalf("removeMarkerBlock on starship.toml: %v", err)
 	}
 	got, _ := os.ReadFile(toml)
@@ -376,8 +469,9 @@ func TestWriteHookVersion_CreatesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading hook-version: %v", err)
 	}
-	if string(data) != "v1.2.3" {
-		t.Errorf("hook-version content: got %q, want %q", string(data), "v1.2.3")
+	want := fmt.Sprintf("v1.2.3|%d", shellHookRevision)
+	if string(data) != want {
+		t.Errorf("hook-version content: got %q, want %q", string(data), want)
 	}
 }
 
@@ -388,8 +482,9 @@ func TestWriteHookVersion_Overwrites(t *testing.T) {
 		t.Fatalf("WriteHookVersion overwrite: %v", err)
 	}
 	data, _ := os.ReadFile(dir + "/hook-version")
-	if string(data) != "v1.1.0" {
-		t.Errorf("expected overwritten version v1.1.0, got %q", string(data))
+	want := fmt.Sprintf("v1.1.0|%d", shellHookRevision)
+	if string(data) != want {
+		t.Errorf("expected overwritten version %q, got %q", want, string(data))
 	}
 }
 
@@ -401,15 +496,45 @@ func TestHookUpdateMessage_UpToDate(t *testing.T) {
 	}
 }
 
-func TestHookUpdateMessage_Stale(t *testing.T) {
+func TestHookUpdateMessage_OldFormatRevisionBumped(t *testing.T) {
+	// Pre-existing installs wrote a bare version with no "|revision" — treat as revision 0.
 	dir := t.TempDir()
-	_ = WriteHookVersion(dir, "v1.2.3")
+	_ = os.WriteFile(dir+"/hook-version", []byte("v1.2.3"), 0644)
 	msg := HookUpdateMessage(dir, "", "v1.3.0")
 	if msg == "" {
-		t.Error("expected update hint when binary version is newer")
+		t.Error("expected update hint for an old-format hook-version file")
 	}
 	if !strings.Contains(msg, "v1.2.3") || !strings.Contains(msg, "v1.3.0") {
 		t.Errorf("update hint missing versions: %q", msg)
+	}
+	if !strings.Contains(msg, "gitswitch install") {
+		t.Errorf("update hint missing install command: %q", msg)
+	}
+}
+
+func TestHookUpdateMessage_CurrentRevisionNoNudgeOnPatchBump(t *testing.T) {
+	// A patch bump that doesn't touch the shell snippets shouldn't nag, even
+	// though the version string on disk differs from currentVersion.
+	dir := t.TempDir()
+	_ = WriteHookVersion(dir, "v1.2.3")
+	if msg := HookUpdateMessage(dir, "", "v1.3.0"); msg != "" {
+		t.Errorf("expected no update hint when hook revision is current, got %q", msg)
+	}
+}
+
+func TestHookUpdateMessage_IsolationNeeded(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "rc-*.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(marker + " begin\nsome content\n" + marker + " end\n")
+	f.Close()
+
+	dir := t.TempDir()
+	_ = WriteHookVersion(dir, "v1.2.3")
+	msg := HookUpdateMessage(dir, f.Name(), "v1.2.3")
+	if msg == "" {
+		t.Error("expected update hint when Session Isolation is available but not installed")
 	}
 	if !strings.Contains(msg, "gitswitch install") {
 		t.Errorf("update hint missing install command: %q", msg)

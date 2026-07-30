@@ -13,10 +13,11 @@ Every profile switch — whether via `gitswitch <nickname>`, `gitswitch switch <
 git config --global user.name "<name>"
 git config --global user.email "<email>"
 git config --global user.signingkey "<key>"     # only if profile has sign-key
+git config --global gpg.format ssh              # only if that key is an SSH key
 git config --global core.sshCommand "ssh -i <path> -o IdentitiesOnly=yes"  # only if profile has ssh-key
 ```
 
-These are `--global` writes to `~/.gitconfig`. They apply to every repo on your machine until you switch again.
+These are `--global` writes to `~/.gitconfig`. They apply to every repo on your machine until you switch again — except repos you [pinned](/docs/features/identity-awareness#pin-a-repo), which keep their own identity in their local config and ignore the global one.
 
 ## Quick switch
 

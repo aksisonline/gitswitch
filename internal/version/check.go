@@ -401,11 +401,20 @@ func ShouldShowWhatsNew(configDir, currentVersion string) (bool, string) {
 	if err == nil {
 		lastSeen := strings.TrimSpace(string(data))
 		if semverRe.MatchString(lastSeen) {
-			cur := parseSemver(currentVersion)
-			seen := parseSemver(lastSeen)
-			// Only show for minor/major bumps on auto-detection.
-			if cur[0] <= seen[0] && cur[1] <= seen[1] {
-				return false, ""
+			if IsBeta(currentVersion) {
+				// Canary builds only ever bump PATCH by construction, so the
+				// minor/major-only gate below would never trip — treat any
+				// distinct canary tag as notable instead.
+				if currentVersion == lastSeen {
+					return false, ""
+				}
+			} else {
+				cur := parseSemver(currentVersion)
+				seen := parseSemver(lastSeen)
+				// Only show for minor/major bumps on auto-detection.
+				if cur[0] <= seen[0] && cur[1] <= seen[1] {
+					return false, ""
+				}
 			}
 		}
 		// Invalid lastSeen → fall through as first time.

@@ -226,6 +226,15 @@ func Unpin(repoKey string) error {
 	return Save(h)
 }
 
+// GetPinned returns the pinned nickname for repoKey, or "" if none.
+func GetPinned(repoKey string) string {
+	h, err := Load()
+	if err != nil {
+		return ""
+	}
+	return h.Repos[repoKey].Pinned
+}
+
 // GetRepoKey resolves the repo key for the current working directory.
 // Tries git remote URL first, falls back to absolute repo root path.
 func GetRepoKey() string {

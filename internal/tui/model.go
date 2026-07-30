@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"os"
+
 	"github.com/aksisonline/gitswitch/internal/git"
+	"github.com/aksisonline/gitswitch/internal/history"
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	ver "github.com/aksisonline/gitswitch/internal/version"
@@ -52,10 +55,19 @@ type Model struct {
 	store    *storage.Store
 	profiles []storage.Profile
 	cursor   int
-	active   *storage.Profile
+	active   *storage.Profile // the *global* identity, from git.DetectActive
 	state    State
 	width    int
 	height   int
+
+	// Repo awareness: which identity the repo we were launched from actually uses,
+	// and where it comes from. repoKey == "" means "not inside a git repo" and is
+	// the guard for every pin action.
+	repoDir        string
+	repoKey        string
+	scope          git.Scope
+	scopeProfile   *storage.Profile // profile the repo/session resolves to, nil when global
+	pinnedInactive string           // nickname pinned to this repo while Session Isolation is off
 
 	formFields  [6]string // seed values when entering the add/edit form
 	formFocus   int
@@ -97,12 +109,19 @@ type Model struct {
 	// Tab navigation (used when state == StateList)
 	tabIndex int // 0=Accounts 1=Utilities 2=Settings
 
-	// Utilities tab focus (0=shell, 1=precommit, 2=credential)
+	// Utilities tab focus (0=shell, 1=gh wrapper/Session Isolation, 2=credential)
 	utilityFocus int
 	// Settings tab focus (0=config, 1=theme)
 	settingsFocus int
 	// Shell integration toggle
 	shellEnabled bool
+	// HTTPS credential helper toggle — true means gitswitch will actually be
+	// asked first (git.IsCredentialHelperInstalled), not just "registered".
+	credentialHelperEnabled bool
+	// gh CLI wrapper toggle — true means bare `gh` commands resolve the
+	// account per-repo instead of relying on gh's single global active
+	// account (shell.IsGHWrapperInstalled).
+	ghWrapperEnabled bool
 	// Accounts secondary column: false=email (default), true=GitHub username
 	showUsername bool
 
@@ -136,7 +155,7 @@ var formLabels = [6]string{
 	"Nickname",
 	"User Name",
 	"Email",
-	"GPG Signing Key",
+	"Signing Key",
 	"SSH Key Path",
 	"GitHub Username",
 }
@@ -145,7 +164,7 @@ var formSubtitles = [6]string{
 	"label shown in this list — not written to git config",
 	"git user.name — author name on commits",
 	"git user.email — author email on commits",
-	"git user.signingkey — optional, leave blank to skip",
+	"GPG key ID or SSH key path — optional, leave blank to skip",
 	"sets core.sshCommand, e.g. ~/.ssh/id_work — optional",
 	"for gh auth switch — optional, leave blank to skip",
 }
@@ -171,6 +190,60 @@ func WithWhatsNew(body string) Option {
 	}
 }
 
+// refreshRepoScope re-reads the repo gitswitch was launched from: its key, and
+// which identity git will actually author with there. Called at startup and after
+// anything that writes git config, so the glyphs never go stale.
+func (m *Model) refreshRepoScope() {
+	m.repoDir, _ = os.Getwd()
+	m.repoKey = history.GetRepoKeyForPath(m.repoDir)
+	m.scope, m.scopeProfile, m.pinnedInactive = git.ScopeGlobal, nil, ""
+	if m.repoKey == "" {
+		return
+	}
+	scope, email := git.ResolveIdentity(m.repoDir)
+	if scope == git.ScopeRepo && !m.ghWrapperEnabled {
+		m.pinnedInactive = history.GetPinned(m.repoKey)
+		return
+	}
+	if scope == git.ScopeRepo || scope == git.ScopeSession {
+		if p := m.store.GetByEmail(email); p != nil {
+			m.scope, m.scopeProfile = scope, p
+		}
+	}
+}
+
+// scopeGlyph returns the state-column glyph for a profile row: how this profile
+// relates to the repo we're in and to the global identity. Single-width glyphs
+// only — the column budget in panelWidth assumes one cell.
+func (m Model) scopeGlyph(p storage.Profile) string {
+	isGlobal := m.active != nil && p.Nickname == m.active.Nickname
+	isScoped := m.scopeProfile != nil && p.Nickname == m.scopeProfile.Nickname
+
+	switch {
+	case isScoped && m.scope == git.ScopeSession:
+		if m.arcadeMode {
+			return "▲"
+		}
+		return "◆"
+	case isScoped && isGlobal:
+		if m.arcadeMode {
+			return "✦"
+		}
+		return "◉"
+	case isScoped:
+		if m.arcadeMode {
+			return "◆"
+		}
+		return "●"
+	case isGlobal:
+		if m.arcadeMode {
+			return "★"
+		}
+		return "✓"
+	}
+	return "·"
+}
+
 func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, error) {
 	profiles, err := store.Load()
 	if err != nil {
@@ -192,20 +265,24 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 	aliasInput.CharLimit = 32
 	aliasInput.Width = 20
 	m := &Model{
-		store:              store,
-		profiles:           profiles,
-		active:             active,
-		state:              StateList,
-		currentVersion:     currentVersion,
-		colorTheme:         prefs.ColorTheme,
-		shellEnabled:       shell.IsInstalled(shell.RCFile(shell.DetectShell())),
-		showUsername:       prefs.ShowUsername,
-		splashSeen020:      prefs.SplashSeen020,
-		hiScore:            prefs.ArcadeHiScore,
-		shellAlias:         shellAlias,
-		shellAliasDisabled: prefs.ShellAliasDisabled,
-		aliasInput:         aliasInput,
+		store:                   store,
+		profiles:                profiles,
+		active:                  active,
+		state:                   StateList,
+		currentVersion:          currentVersion,
+		colorTheme:              prefs.ColorTheme,
+		shellEnabled:            shell.IsInstalled(shell.RCFile(shell.DetectShell())),
+		credentialHelperEnabled: git.IsCredentialHelperInstalled(),
+		ghWrapperEnabled:        shell.IsGHWrapperInstalled(shell.RCFile(shell.DetectShell())),
+		showUsername:            prefs.ShowUsername,
+		splashSeen020:           prefs.SplashSeen020,
+		hiScore:                 prefs.ArcadeHiScore,
+		shellAlias:              shellAlias,
+		shellAliasDisabled:      prefs.ShellAliasDisabled,
+		aliasInput:              aliasInput,
+		arcadeMode:              prefs.ArcadeMode,
 	}
+	m.refreshRepoScope()
 	for _, opt := range opts {
 		opt(m)
 	}
@@ -250,6 +327,7 @@ func (m *Model) savePrefs() error {
 		ShellAlias:         m.shellAlias,
 		ShellAliasDisabled: m.shellAliasDisabled,
 		ArcadeHiScore:      m.hiScore,
+		ArcadeMode:         m.arcadeMode,
 	})
 }
 

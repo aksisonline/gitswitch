@@ -88,6 +88,9 @@ func switchToCanary() error {
 
 	fmt.Println()
 	fmt.Printf("Installing canary %s...\n", canaryVersion)
+	if configDir, err := gitswitchConfigDir(); err == nil {
+		ver.ScheduleWhatsNew(configDir, canaryVersion)
+	}
 	if err := runInstallScript(canaryVersion); err != nil {
 		return fmt.Errorf("canary install failed: %w", err)
 	}
@@ -123,6 +126,9 @@ func switchToStable() error {
 
 	fmt.Println()
 	fmt.Printf("Installing stable %s...\n", stableVersion)
+	if configDir, err := gitswitchConfigDir(); err == nil {
+		ver.ScheduleWhatsNew(configDir, stableVersion)
+	}
 	if err := runInstallScript(stableVersion); err != nil {
 		return fmt.Errorf("stable install failed: %w", err)
 	}

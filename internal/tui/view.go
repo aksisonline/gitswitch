@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aksisonline/gitswitch/internal/git"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -132,13 +133,28 @@ func (m Model) viewCurrentLine(compact bool) string {
 	if compact {
 		sep = "\n"
 	}
-	if m.active != nil {
+	// Report the identity git will actually use here: a repo pin or a session
+	// identity overrides the global profile, and saying otherwise would be a lie.
+	cur, nameStyle := m.active, styleCheckmark
+	if m.scopeProfile != nil {
+		cur, nameStyle = m.scopeProfile, styleScopeMark
+	}
+	if cur != nil {
 		tags := ""
-		if m.active.SSHKey != "" {
+		switch m.scope {
+		case git.ScopeRepo:
+			tags += "  " + styleScopeMark.Render("pinned")
+		case git.ScopeSession:
+			tags += "  " + styleScopeMark.Render("session")
+		}
+		if m.pinnedInactive != "" {
+			tags += "  " + styleItemDim.Render("pin: "+m.pinnedInactive+" (isolation off)")
+		}
+		if cur.SSHKey != "" {
 			tags += "  " + styleItemDim.Render("ssh")
 		}
-		if m.active.GHUser != "" {
-			tags += "  " + styleItemDim.Render("gh:"+m.active.GHUser)
+		if cur.GHUser != "" {
+			tags += "  " + styleItemDim.Render("gh:"+cur.GHUser)
 		}
 		label := "Current  "
 		if m.arcadeMode {
@@ -146,14 +162,14 @@ func (m Model) viewCurrentLine(compact bool) string {
 		}
 		iw := m.panelWidth() - 2
 		// budget for the secondary value = inner − label − nick − separator − tags
-		secMax := iw - lipgloss.Width(label) - lipgloss.Width(m.active.Nickname) - 5 - lipgloss.Width(tags) - 2
+		secMax := iw - lipgloss.Width(label) - lipgloss.Width(cur.Nickname) - 5 - lipgloss.Width(tags) - 2
 		if secMax < 8 {
 			secMax = 8
 		}
-		secondary := truncate(m.profileSecondary(m.active.Email, m.active.GHUser), secMax)
+		secondary := truncate(m.profileSecondary(cur.Email, cur.GHUser), secMax)
 		return sep + "  " +
 			styleCurrent.Render(label) +
-			styleCheckmark.Render(m.active.Nickname) +
+			nameStyle.Render(cur.Nickname) +
 			styleCurrent.Render("  ·  ") +
 			styleCurrentVal.Render(secondary) +
 			tags
@@ -210,14 +226,9 @@ func (m Model) viewProfileItems(pw, nickColW int) string {
 	for i, p := range m.profiles {
 		isCursor := i == m.cursor
 		isActive := m.active != nil && p.Nickname == m.active.Nickname
+		isScoped := m.scopeProfile != nil && p.Nickname == m.scopeProfile.Nickname
 
-		stateGlyph := "·"
-		if isActive {
-			stateGlyph = "✓"
-			if m.arcadeMode {
-				stateGlyph = "★"
-			}
-		}
+		stateGlyph := m.scopeGlyph(p)
 
 		nick := truncate(p.Nickname, nickColW)
 		nick += strings.Repeat(" ", max(0, nickColW-lipgloss.Width(nick)))
@@ -233,9 +244,14 @@ func (m Model) viewProfileItems(pw, nickColW int) string {
 			items += "\n" + styleItemActive(iw).Render(plain)
 		} else {
 			var stateStyled string
-			if isActive {
+			switch {
+			case isScoped:
+				// The repo/session identity is the one git will actually use — call it
+				// out louder than the global one it overrides.
+				stateStyled = styleScopeMark.Render(stateGlyph)
+			case isActive:
 				stateStyled = styleCheckmark.Render(stateGlyph)
-			} else {
+			default:
 				stateStyled = styleItemDim.Render(stateGlyph)
 			}
 			row := "  " + stateStyled + " " +
@@ -380,13 +396,8 @@ func (m Model) viewIntro(pw int) string {
 
 	track := "  " + m.renderIntroTrack(pw)
 
-	var readyRow, sceneLabel string
-	switch m.introPhase {
-	case 0:
-		sceneLabel = styleBrand.Render("  scene 1: chase")
-	case 1:
-		sceneLabel = lipgloss.NewStyle().Foreground(arcadeFrightened).Bold(true).Render("  POWER PELLET! ghosts frightened")
-	case 2:
+	var readyRow string
+	if m.introPhase == 2 {
 		readyStyle := lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
 		if m.introReadyFrame%2 == 1 {
 			readyStyle = lipgloss.NewStyle().Foreground(colorDim)
@@ -395,7 +406,7 @@ func (m Model) viewIntro(pw int) string {
 	}
 
 	skipHint := styleBrand.Render("  [any key to skip]")
-	body := titleRow + "\n" + subtitleRow + "\n\n\n" + track + "\n" + sceneLabel + readyRow + "\n\n" + skipHint + "\n"
+	body := titleRow + "\n" + subtitleRow + "\n\n\n" + track + "\n" + readyRow + "\n\n" + skipHint + "\n"
 	return score + "\n" + stylePanelBorder(pw).Render(body)
 }
 
@@ -579,10 +590,15 @@ func (m Model) viewSelectFlash(pw int) string {
 			}
 			items += "\n" + flashStyle.Render(line)
 		} else {
-			isActive := m.active != nil && p.Nickname == m.active.Nickname
-			check := styleItemDim.Render("·")
-			if isActive {
-				check = styleCheckmark.Render("★")
+			// Same glyph rules as viewProfileItems — this arcade frame keeps its own
+			// copy of the row format and would otherwise drift.
+			glyph := m.scopeGlyph(p)
+			check := styleItemDim.Render(glyph)
+			switch {
+			case m.scopeProfile != nil && p.Nickname == m.scopeProfile.Nickname:
+				check = styleScopeMark.Render(glyph)
+			case m.active != nil && p.Nickname == m.active.Nickname:
+				check = styleCheckmark.Render(glyph)
 			}
 			items += "\n" + "  " + check + " " +
 				styleItemInactive.Render(nick) + "  " +
@@ -703,6 +719,10 @@ func (m Model) footerKeys(pw int, pairs [][2]string) string {
 		sep = styleFooter.Render("  ·  ")
 		sepW = 5
 	}
+	// Budget against the panel's usable inner width, not its outer width: the
+	// border adds 1 column of padding each side, so a line built to pw gets
+	// re-wrapped by lipgloss — which splits a key from its own label.
+	avail := pw - 2
 	var lines []string
 	currentLine := "  " + prefix
 	currentW := 2 + lipgloss.Width(prefix)
@@ -710,7 +730,7 @@ func (m Model) footerKeys(pw int, pairs [][2]string) string {
 		item := styleFooterKey.Render(p[0]) + styleFooter.Render(" "+p[1])
 		itemW := lipgloss.Width(p[0]) + 1 + lipgloss.Width(p[1])
 		if i > 0 {
-			if currentW+sepW+itemW > pw {
+			if currentW+sepW+itemW > avail {
 				lines = append(lines, currentLine)
 				currentLine = "  " + item
 				currentW = 2 + itemW

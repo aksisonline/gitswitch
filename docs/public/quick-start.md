@@ -99,7 +99,7 @@ source ~/.bashrc  # bash
 
 ## 6. Pin a repo to an identity
 
-If you always want a specific profile in a repo, pin it:
+Pinning requires Session Isolation, which is on by default from step 5 above (it turns on automatically the first time you pin, too). If you always want a specific profile in a repo, pin it:
 
 ```bash
 cd ~/work/my-project

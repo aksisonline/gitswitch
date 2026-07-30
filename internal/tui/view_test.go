@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -26,6 +27,8 @@ func TestNoLineOverflowsPanel(t *testing.T) {
 		StateAdd, StateEdit,
 	}
 
+	// Widest case: inside a repo pinned to a profile, so the extra "pinned" tag on
+	// the Current line and the extra `p` footer key are both in play.
 	for _, arcade := range []bool{false, true} {
 		for _, size := range [][2]int{{66, 24}, {80, 24}, {90, 12}, {120, 40}} {
 			for _, st := range states {
@@ -45,6 +48,9 @@ func TestNoLineOverflowsPanel(t *testing.T) {
 						detectedProfiles: profiles,
 						importSelected:   []bool{true, false},
 						shellAlias:       "gs",
+						repoKey:          "git@github.com:acme/widget.git",
+						scope:            git.ScopeRepo,
+						scopeProfile:     &profiles[1],
 					}
 					applyTheme(normalThemes[0], arcade)
 					pw := m.panelWidth()
