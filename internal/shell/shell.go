@@ -28,6 +28,13 @@ const (
 
 const marker = "# gitswitch shell integration"
 
+// ghWrapperMarker delimits the standalone `gh` wrapper block (see
+// InstallGHWrapper) that resolves the current repo's gh account per invocation
+// instead of relying on gh's single global "active account" — the wrapper is
+// independent of the main shell-integration block so it can be toggled on its
+// own (see internal/tui Utilities tab).
+const ghWrapperMarker = "# gitswitch gh wrapper"
+
 // DetectShell infers the current shell from $SHELL.
 func DetectShell() Shell {
 	s := filepath.Base(os.Getenv("SHELL"))
@@ -152,11 +159,20 @@ func HookUpdateMessage(configDir, rcFile, currentVersion string, credHelperInsta
 
 // IsInstalled checks whether the gitswitch marker exists in the given file.
 func IsInstalled(path string) bool {
+	return markerPresent(path, marker)
+}
+
+// IsGHWrapperInstalled checks whether the gh wrapper block exists in path.
+func IsGHWrapperInstalled(path string) bool {
+	return markerPresent(path, ghWrapperMarker)
+}
+
+func markerPresent(path, mark string) bool {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(data), marker)
+	return strings.Contains(string(data), mark)
 }
 
 // InstalledHookIsCurrent returns true when the installed hook already contains
@@ -423,6 +439,85 @@ source <(gitswitch completion zsh)
 `
 }
 
+// ghWrapperSnippetPosix returns the `gh` wrapper function for zsh/bash (both
+// support the `[ ]`/`command` builtins used here). Every invocation asks
+// gitswitch which account applies to $PWD and, if one resolves, fetches that
+// account's token and exports it for just this one call via GH_TOKEN — which
+// gh checks before its own single global "active account" file. No global
+// state is ever mutated, so concurrent terminals never fight over gh's account.
+func ghWrapperSnippetPosix() string {
+	return `
+` + ghWrapperMarker + ` begin
+gh() {
+  local __gs_login __gs_token
+  __gs_login=$(gitswitch ghuser 2>/dev/null)
+  if [ -n "$__gs_login" ]; then
+    __gs_token=$(command gh auth token --user "$__gs_login" 2>/dev/null)
+    if [ -n "$__gs_token" ]; then
+      GH_TOKEN="$__gs_token" command gh "$@"
+      return
+    fi
+  fi
+  command gh "$@"
+}
+` + ghWrapperMarker + ` end
+`
+}
+
+// ghWrapperSnippetFish is the fish-syntax equivalent of ghWrapperSnippetPosix.
+func ghWrapperSnippetFish() string {
+	return `
+` + ghWrapperMarker + ` begin
+function gh
+  set -l login (gitswitch ghuser 2>/dev/null)
+  if test -n "$login"
+    set -l token (command gh auth token --user "$login" 2>/dev/null)
+    if test -n "$token"
+      env GH_TOKEN=$token command gh $argv
+      return
+    end
+  end
+  command gh $argv
+end
+` + ghWrapperMarker + ` end
+`
+}
+
+// InstallGHWrapper writes the `gh` wrapper function to sh's rc file. It is
+// independent of the main shell-integration block (marker) so it can be
+// toggled without touching the nudge/prompt/completion setup.
+func InstallGHWrapper(sh Shell) (string, error) {
+	rcFile := RCFile(sh)
+	if markerPresent(rcFile, ghWrapperMarker) {
+		return fmt.Sprintf("already installed in %s", rcFile), nil
+	}
+	snippet := ghWrapperSnippetPosix()
+	if sh == ShellFish {
+		snippet = ghWrapperSnippetFish()
+	}
+	f, err := os.OpenFile(rcFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := f.WriteString(snippet); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("wrote gh wrapper to %s", rcFile), nil
+}
+
+// UninstallGHWrapper removes the `gh` wrapper block from sh's rc file.
+func UninstallGHWrapper(sh Shell) (string, error) {
+	rcFile := RCFile(sh)
+	if !markerPresent(rcFile, ghWrapperMarker) {
+		return "nothing to remove — gh wrapper was not installed", nil
+	}
+	if err := removeMarkerBlock(rcFile, ghWrapperMarker); err != nil {
+		return "", fmt.Errorf("could not clean %s: %w", rcFile, err)
+	}
+	return fmt.Sprintf("removed gh wrapper from %s", rcFile), nil
+}
+
 // aliasNameRe matches safe shell identifiers — the alias is written verbatim
 // into shell RC files (`alias <alias>=...`), so anything else risks injecting
 // shell code into the user's startup files.
@@ -529,7 +624,7 @@ func Uninstall(sh Shell, _ Framework) (string, error) {
 	// rc file (raw, p10k, bash)
 	rcFile := RCFile(sh)
 	if IsInstalled(rcFile) {
-		if err := removeMarkerBlock(rcFile); err != nil {
+		if err := removeMarkerBlock(rcFile, marker); err != nil {
 			return "", fmt.Errorf("could not clean %s: %w", rcFile, err)
 		}
 		removed = append(removed, rcFile)
@@ -538,7 +633,7 @@ func Uninstall(sh Shell, _ Framework) (string, error) {
 	// starship.toml
 	tomlPath := filepath.Join(home, ".config", "starship.toml")
 	if IsInstalled(tomlPath) {
-		if err := removeMarkerBlock(tomlPath); err != nil {
+		if err := removeMarkerBlock(tomlPath, marker); err != nil {
 			return "", fmt.Errorf("could not clean %s: %w", tomlPath, err)
 		}
 		removed = append(removed, tomlPath)
@@ -560,9 +655,9 @@ func Uninstall(sh Shell, _ Framework) (string, error) {
 }
 
 // removeMarkerBlock strips the lines between (and including) the begin/end
-// marker lines from path, writing the result atomically via a temp file + rename
+// mark lines from path, writing the result atomically via a temp file + rename
 // with the original file mode preserved.
-func removeMarkerBlock(path string) error {
+func removeMarkerBlock(path, mark string) error {
 	info, err := os.Stat(path)
 	if err != nil {
 		return err
@@ -576,12 +671,12 @@ func removeMarkerBlock(path string) error {
 	inside := false
 	found := false
 	for _, line := range lines {
-		if strings.Contains(line, marker+" begin") {
+		if strings.Contains(line, mark+" begin") {
 			inside = true
 			found = true
 			continue
 		}
-		if strings.Contains(line, marker+" end") {
+		if strings.Contains(line, mark+" end") {
 			if !inside {
 				return fmt.Errorf("unbalanced marker in %s: found end without begin", path)
 			}

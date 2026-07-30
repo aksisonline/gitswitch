@@ -250,6 +250,78 @@ func TestIsInstalled_MissingFile(t *testing.T) {
 	}
 }
 
+// ── gh wrapper ───────────────────────────────────────────────────────────────
+
+func TestGHWrapperSnippetPosix_ResolvesPerRepoAndScopesToken(t *testing.T) {
+	s := ghWrapperSnippetPosix()
+	if !strings.Contains(s, "gitswitch ghuser") {
+		t.Error("expected snippet to resolve identity via `gitswitch ghuser`")
+	}
+	if !strings.Contains(s, "GH_TOKEN=") {
+		t.Error("expected snippet to scope the token via GH_TOKEN for a single invocation")
+	}
+	if !strings.Contains(s, "command gh") {
+		t.Error("expected snippet to fall through to the real gh via `command gh`")
+	}
+}
+
+func TestGHWrapperSnippetFish_ResolvesPerRepoAndScopesToken(t *testing.T) {
+	s := ghWrapperSnippetFish()
+	if !strings.Contains(s, "gitswitch ghuser") {
+		t.Error("expected snippet to resolve identity via `gitswitch ghuser`")
+	}
+	if !strings.Contains(s, "GH_TOKEN=") {
+		t.Error("expected snippet to scope the token via GH_TOKEN for a single invocation")
+	}
+	if !strings.Contains(s, "command gh") {
+		t.Error("expected snippet to fall through to the real gh via `command gh`")
+	}
+}
+
+func TestIsGHWrapperInstalled_True(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "rc-*.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(ghWrapperSnippetPosix())
+	f.Close()
+	if !IsGHWrapperInstalled(f.Name()) {
+		t.Error("expected IsGHWrapperInstalled=true when marker present")
+	}
+}
+
+func TestIsGHWrapperInstalled_False(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "rc-*.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(nudgeSnippetZsh("gs")) // main hook block, not the gh wrapper
+	f.Close()
+	if IsGHWrapperInstalled(f.Name()) {
+		t.Error("expected IsGHWrapperInstalled=false when gh wrapper marker absent")
+	}
+}
+
+func TestRemoveMarkerBlock_GHWrapperOnly(t *testing.T) {
+	tmp := t.TempDir()
+	rc := tmp + "/rc.sh"
+	// Both blocks installed side by side, independent toggles.
+	content := nudgeSnippetZsh("gs") + ghWrapperSnippetPosix()
+	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeMarkerBlock(rc, ghWrapperMarker); err != nil {
+		t.Fatalf("removeMarkerBlock: %v", err)
+	}
+	got, _ := os.ReadFile(rc)
+	if strings.Contains(string(got), ghWrapperMarker) {
+		t.Error("gh wrapper block still present after removal")
+	}
+	if !strings.Contains(string(got), marker) {
+		t.Error("main shell-integration block should be untouched")
+	}
+}
+
 // ── DetectShell ──────────────────────────────────────────────────────────────
 
 func TestDetectShell_Zsh(t *testing.T) {
@@ -307,7 +379,7 @@ func TestRemoveMarkerBlock_RemovesBlock(t *testing.T) {
 	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeMarkerBlock(rc); err != nil {
+	if err := removeMarkerBlock(rc, marker); err != nil {
 		t.Fatalf("removeMarkerBlock: %v", err)
 	}
 	got, _ := os.ReadFile(rc)
@@ -326,11 +398,11 @@ func TestRemoveMarkerBlock_Idempotent(t *testing.T) {
 	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeMarkerBlock(rc); err != nil {
+	if err := removeMarkerBlock(rc, marker); err != nil {
 		t.Fatal(err)
 	}
 	// second call on file with no markers should be a no-op
-	if err := removeMarkerBlock(rc); err != nil {
+	if err := removeMarkerBlock(rc, marker); err != nil {
 		t.Errorf("second removeMarkerBlock should be no-op, got: %v", err)
 	}
 }
@@ -342,7 +414,7 @@ func TestRemoveMarkerBlock_PreservesMode(t *testing.T) {
 	if err := os.WriteFile(rc, []byte(content), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeMarkerBlock(rc); err != nil {
+	if err := removeMarkerBlock(rc, marker); err != nil {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(rc)
@@ -361,7 +433,7 @@ func TestRemoveMarkerBlock_UnbalancedBegin(t *testing.T) {
 	if err := os.WriteFile(rc, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeMarkerBlock(rc); err == nil {
+	if err := removeMarkerBlock(rc, marker); err == nil {
 		t.Error("expected error for begin-without-end marker")
 	}
 }
@@ -373,7 +445,7 @@ func TestRemoveMarkerBlock_StarshipBlock(t *testing.T) {
 	if err := os.WriteFile(toml, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := removeMarkerBlock(toml); err != nil {
+	if err := removeMarkerBlock(toml, marker); err != nil {
 		t.Fatalf("removeMarkerBlock on starship.toml: %v", err)
 	}
 	got, _ := os.ReadFile(toml)
