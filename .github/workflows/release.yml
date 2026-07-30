@@ -10,6 +10,11 @@ on:
         description: 'Force a release even if no code changed'
         type: boolean
         default: false
+      force_bump:
+        description: 'Override the auto-detected bump (use when markers were lost, e.g. to a squash merge)'
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
 
 permissions:
   contents: write
@@ -99,20 +104,33 @@ jobs:
           MINOR=$(echo "$VERSION" | cut -d. -f2)
           PATCH=$(echo "$VERSION" | cut -d. -f3)
 
-          # Check if canary beta tags exist for the next minor version.
-          # If so, promote that version to stable instead of incrementing patch.
-          NEXT_MINOR=$((MINOR + 1))
-          BETA_TARGET="v${MAJOR}.${NEXT_MINOR}.0"
-          EXISTING_BETA=$(git tag --list "${BETA_TARGET}-beta.*" --sort=-version:refname | head -n1)
-
-          if [ -n "$EXISTING_BETA" ]; then
-            NEW_TAG="$BETA_TARGET"
-            echo "Beta tags found for $BETA_TARGET — promoting to stable: $NEW_TAG"
+          FORCE_BUMP="${{ github.event.inputs.force_bump }}"
+          if [ -n "$FORCE_BUMP" ] && [ "$FORCE_BUMP" != "auto" ]; then
+            BUMP="$FORCE_BUMP"
+            echo "Bump level forced via workflow_dispatch: $BUMP"
           else
-            NEXT_PATCH=$((PATCH + 1))
-            NEW_TAG="v${MAJOR}.${MINOR}.${NEXT_PATCH}"
-            echo "No beta tags found — normal patch increment: $NEW_TAG"
+            # Bump level = highest [minor]/[major] marker on any commit since the
+            # last stable tag. Squash-merged PR commits end in " (#123)" after the
+            # marker, so allow that optional suffix. Note: a squash merge is not a
+            # descendant of the commits it squashed, so if the squash commit's own
+            # subject dropped the marker, it's unrecoverable here — use force_bump.
+            COMMITS_SINCE=$(git log "${LATEST}..HEAD" --format=%s)
+            if echo "$COMMITS_SINCE" | grep -qE '\[major\]( \(#[0-9]+\))?$'; then
+              BUMP="major"
+            elif echo "$COMMITS_SINCE" | grep -qE '\[minor\]( \(#[0-9]+\))?$'; then
+              BUMP="minor"
+            else
+              BUMP="patch"
+            fi
+            echo "Bump level since $LATEST: $BUMP"
           fi
+
+          case "$BUMP" in
+            major) NEW_TAG="v$((MAJOR + 1)).0.0" ;;
+            minor) NEW_TAG="v${MAJOR}.$((MINOR + 1)).0" ;;
+            *) NEW_TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+          esac
+          echo "New tag: $NEW_TAG"
 
           echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
           echo "version=${NEW_TAG#v}" >> "$GITHUB_OUTPUT"

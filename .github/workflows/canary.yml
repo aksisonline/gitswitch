@@ -5,6 +5,12 @@ on:
     branches:
       - canary
   workflow_dispatch:
+    inputs:
+      force_bump:
+        description: 'Override the auto-detected bump (use when markers were lost, e.g. to a squash merge)'
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
 
 permissions:
   contents: write
@@ -84,9 +90,33 @@ jobs:
           MINOR=$(echo "$BASE" | cut -d. -f2)
           PATCH=$(echo "$BASE" | cut -d. -f3)
 
-          # Target = next patch from stable (tracks same MAJOR.MINOR as main)
-          # e.g. stable v0.2.1 → canary targets v0.2.2-beta.N
-          TARGET="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+          FORCE_BUMP="${{ github.event.inputs.force_bump }}"
+          if [ -n "$FORCE_BUMP" ] && [ "$FORCE_BUMP" != "auto" ]; then
+            BUMP="$FORCE_BUMP"
+            echo "Bump level forced via workflow_dispatch: $BUMP"
+          else
+            # Bump level = highest [minor]/[major] marker on any commit since the
+            # last stable tag. Squash-merged PR commits end in " (#123)" after the
+            # marker, so allow that optional suffix.
+            COMMITS_SINCE=$(git log "${LATEST_STABLE}..HEAD" --format=%s)
+            if echo "$COMMITS_SINCE" | grep -qE '\[major\]( \(#[0-9]+\))?$'; then
+              BUMP="major"
+            elif echo "$COMMITS_SINCE" | grep -qE '\[minor\]( \(#[0-9]+\))?$'; then
+              BUMP="minor"
+            else
+              BUMP="patch"
+            fi
+            echo "Bump level since $LATEST_STABLE: $BUMP"
+          fi
+
+          # Target = next version at that bump level from stable
+          # e.g. stable v0.2.1, no markers → canary targets v0.2.2-beta.N
+          # e.g. stable v0.2.1, a [minor] commit → canary targets v0.3.0-beta.N
+          case "$BUMP" in
+            major) TARGET="v$((MAJOR + 1)).0.0" ;;
+            minor) TARGET="v${MAJOR}.$((MINOR + 1)).0" ;;
+            *) TARGET="v${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+          esac
 
           # Find highest existing beta for this target
           LATEST_BETA=$(git tag --list "${TARGET}-beta.*" --sort=-version:refname | head -n1)
