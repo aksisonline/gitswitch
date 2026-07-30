@@ -16,7 +16,7 @@
         "features/ssh-keys",
         "features/gpg",
         "features/github-sync",
-        "features/gh-isolation",
+        "features/session-isolation",
         "features/shell",
         "features/ai-agents"
       ]
