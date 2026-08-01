@@ -34,6 +34,7 @@
     {
       "label": "Guides",
       "items": [
+        "scenarios/beginners",
         "scenarios/multi-github",
         "scenarios/freelancer",
         "scenarios/oss"

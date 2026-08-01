@@ -14,6 +14,11 @@ type ToolCheck struct {
 	OK          bool   `json:"ok"`
 	InstallHint string `json:"install_hint,omitempty"`
 	InstallURL  string `json:"install_url,omitempty"`
+	// InstallCommand, when non-empty, is a ready-to-exec argv that installs
+	// this tool (e.g. ["brew", "install", "gh"]). Nil means auto-install
+	// isn't supported here (e.g. macOS git needs the Xcode CLT GUI dialog) —
+	// callers should fall back to displaying InstallHint only.
+	InstallCommand []string `json:"install_command,omitempty"`
 }
 
 type CheckResult struct {
@@ -80,8 +85,9 @@ func printInstallHint(t *ToolCheck) {
 
 func checkGit() *ToolCheck {
 	t := &ToolCheck{
-		InstallHint: gitInstallHint(),
-		InstallURL:  "https://git-scm.com/downloads",
+		InstallHint:    gitInstallHint(),
+		InstallURL:     "https://git-scm.com/downloads",
+		InstallCommand: gitInstallCommand(),
 	}
 	_, err := exec.LookPath("git")
 	if err != nil {
@@ -104,8 +110,9 @@ func checkGit() *ToolCheck {
 
 func checkGH() *ToolCheck {
 	t := &ToolCheck{
-		InstallHint: ghInstallHint(),
-		InstallURL:  "https://github.com/cli/cli/releases/latest",
+		InstallHint:    ghInstallHint(),
+		InstallURL:     "https://github.com/cli/cli/releases/latest",
+		InstallCommand: ghInstallCommand(),
 	}
 	_, err := exec.LookPath("gh")
 	if err != nil {
@@ -165,5 +172,49 @@ func ghInstallHint() string {
 		return "winget install GitHub.cli"
 	default:
 		return "sudo apt install gh  OR  sudo dnf install gh"
+	}
+}
+
+// detectLinuxPM returns the first known package manager found on PATH.
+func detectLinuxPM() (mgr string, ok bool) {
+	for _, candidate := range []string{"apt-get", "apt", "dnf", "pacman"} {
+		if _, err := exec.LookPath(candidate); err == nil {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
+// gitInstallCommand returns a ready-to-exec argv for installing git, or nil
+// if auto-install isn't supported on this platform (macOS git requires the
+// Xcode CLT GUI dialog, which can't be driven or confirmed programmatically).
+func gitInstallCommand() []string {
+	switch runtime.GOOS {
+	case "windows":
+		return []string{"winget", "install", "Git.Git"}
+	case "linux":
+		if mgr, ok := detectLinuxPM(); ok {
+			return []string{"sudo", mgr, "install", "git"}
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+// ghInstallCommand returns a ready-to-exec argv for installing the GitHub CLI.
+func ghInstallCommand() []string {
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{"brew", "install", "gh"}
+	case "windows":
+		return []string{"winget", "install", "GitHub.cli"}
+	case "linux":
+		if mgr, ok := detectLinuxPM(); ok {
+			return []string{"sudo", mgr, "install", "gh"}
+		}
+		return nil
+	default:
+		return nil
 	}
 }
