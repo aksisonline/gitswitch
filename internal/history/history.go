@@ -18,6 +18,12 @@ type History struct {
 	Repos map[string]RepoHistory `json:"repos"`
 }
 
+// AutoPinThreshold is how many times the same nickname must be used in a repo
+// before gitswitch trusts the pattern enough to act on it on its own —
+// auto-pinning a not-yet-pinned repo, or recommending a switch away from the
+// currently active profile.
+const AutoPinThreshold = 3
+
 func configDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -112,41 +118,50 @@ func recordInHistory(h *History, repoKey, nickname string) {
 }
 
 // recordAt loads history from histPath, increments the count, and saves back.
+// Returns nickname's updated usage count for repoKey.
 // It is used by Record (with the default path) and by tests (with a temp path).
-func recordAt(histPath, repoKey, nickname string) error {
+func recordAt(histPath, repoKey, nickname string) (count int, err error) {
 	h, err := loadFromPath(histPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return err
+			return 0, err
 		}
 		h = &History{Repos: make(map[string]RepoHistory)}
 	}
 	recordInHistory(h, repoKey, nickname)
-	return saveToPath(h, histPath)
+	if err := saveToPath(h, histPath); err != nil {
+		return 0, err
+	}
+	return h.Repos[repoKey].Identities[nickname], nil
 }
 
-// Record increments the usage count for nickname under repoKey.
+// Record increments the usage count for nickname under repoKey and returns its
+// new total — callers compare this against AutoPinThreshold to decide whether
+// to auto-pin, without a second read of history.json.
 // It holds an exclusive advisory lock for the duration of the read-modify-write
 // to prevent lost updates when multiple shells call "gitswitch record" concurrently.
-func Record(repoKey, nickname string) error {
+func Record(repoKey, nickname string) (count int, err error) {
 	if repoKey == "" || nickname == "" {
-		return nil
+		return 0, nil
 	}
 	dir, err := configDir()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
+		return 0, err
 	}
-	return withLock(dir, func() error {
-		return recordAt(filepath.Join(dir, "history.json"), repoKey, nickname)
+	err = withLock(dir, func() error {
+		var lockErr error
+		count, lockErr = recordAt(filepath.Join(dir, "history.json"), repoKey, nickname)
+		return lockErr
 	})
+	return count, err
 }
 
 // Recommend returns the suggested nickname for repoKey.
 // Pinned identity always wins over auto-learned counts.
-// Auto-learned threshold: ≥3 uses AND ≥60% share AND differs from currentNickname.
+// Auto-learned threshold: ≥AutoPinThreshold uses AND ≥60% share AND differs from currentNickname.
 func Recommend(repoKey, currentNickname string) (nickname string, ok bool) {
 	if repoKey == "" {
 		return "", false
@@ -178,7 +193,7 @@ func recommendFromHistory(h *History, repoKey, currentNickname string) (string, 
 			topNick = nick
 		}
 	}
-	if total == 0 || topCount < 3 {
+	if total == 0 || topCount < AutoPinThreshold {
 		return "", false
 	}
 	if float64(topCount)/float64(total) < 0.60 {
@@ -191,21 +206,36 @@ func recommendFromHistory(h *History, repoKey, currentNickname string) (string, 
 }
 
 // Pin permanently sets the recommended identity for repoKey.
+// Locked the same way as Record, so a pin can never race a concurrent
+// "gitswitch record" (or another Pin) into a lost update.
 func Pin(repoKey, nickname string) error {
 	if repoKey == "" || nickname == "" {
 		return nil
 	}
-	h, err := Load()
+	dir, err := configDir()
 	if err != nil {
 		return err
 	}
-	rh := h.Repos[repoKey]
-	if rh.Identities == nil {
-		rh.Identities = make(map[string]int)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
 	}
-	rh.Pinned = nickname
-	h.Repos[repoKey] = rh
-	return Save(h)
+	return withLock(dir, func() error {
+		path := filepath.Join(dir, "history.json")
+		h, err := loadFromPath(path)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+			h = &History{Repos: make(map[string]RepoHistory)}
+		}
+		rh := h.Repos[repoKey]
+		if rh.Identities == nil {
+			rh.Identities = make(map[string]int)
+		}
+		rh.Pinned = nickname
+		h.Repos[repoKey] = rh
+		return saveToPath(h, path)
+	})
 }
 
 // Unpin clears the pinned identity for repoKey, falling back to auto-learned counts.
@@ -213,17 +243,30 @@ func Unpin(repoKey string) error {
 	if repoKey == "" {
 		return nil
 	}
-	h, err := Load()
+	dir, err := configDir()
 	if err != nil {
 		return err
 	}
-	rh, exists := h.Repos[repoKey]
-	if !exists {
-		return nil
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
 	}
-	rh.Pinned = ""
-	h.Repos[repoKey] = rh
-	return Save(h)
+	return withLock(dir, func() error {
+		path := filepath.Join(dir, "history.json")
+		h, err := loadFromPath(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		rh, exists := h.Repos[repoKey]
+		if !exists {
+			return nil
+		}
+		rh.Pinned = ""
+		h.Repos[repoKey] = rh
+		return saveToPath(h, path)
+	})
 }
 
 // GetPinned returns the pinned nickname for repoKey, or "" if none.

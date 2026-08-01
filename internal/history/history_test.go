@@ -208,8 +208,12 @@ func TestRecordAt_IncrementsCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := recordAt(path, testRepo, "work"); err != nil {
+	count, err := recordAt(path, testRepo, "work")
+	if err != nil {
 		t.Fatalf("recordAt: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("recordAt returned count %d, want 3", count)
 	}
 
 	h2, err := loadFromPath(path)
@@ -241,7 +245,7 @@ func TestRecordAt_DoesNotTouchPinned(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := recordAt(path, testRepo, "work"); err != nil {
+	if _, err := recordAt(path, testRepo, "work"); err != nil {
 		t.Fatalf("recordAt: %v", err)
 	}
 
@@ -260,7 +264,7 @@ func TestRecordAt_CreatesFileFromScratch(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "history.json")
 
-	if err := recordAt(path, testRepo, "work"); err != nil {
+	if _, err := recordAt(path, testRepo, "work"); err != nil {
 		t.Fatalf("recordAt on missing file: %v", err)
 	}
 

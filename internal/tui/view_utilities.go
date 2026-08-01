@@ -8,7 +8,7 @@ import (
 //   0 = Shell Integration       (toggleable)
 //   1 = Session Isolation       (toggleable)
 //   2 = HTTPS Credential Helper (toggleable)
-//   3 = Auto-pin New Repos      (toggleable)
+//   3 = Auto-pin Repeat Repos   (toggleable)
 
 func (m Model) viewUtilitiesTab(pw int) string {
 	var top string
@@ -75,12 +75,12 @@ func (m Model) utilItem(pw, iw, idx int) string {
 		line2 = padTo(line2, iw)
 		return renderItemBox(pw, focused, false, line1, line2)
 
-	case 3: // Auto-pin New Repos
-		title := "Auto-pin New Repos"
-		desc := "First time in a repo, pin the active account to it."
+	case 3: // Auto-pin Repeat Repos
+		title := "Auto-pin Repeat Repos"
+		desc := "Pin the account after 3 uses in the same repo."
 		if m.arcadeMode {
 			title = "AUTO-CLAIM"
-			desc = "First visit to a repo claims it for the active player."
+			desc = "Play a repo 3 times with an account — it's yours."
 		}
 		toggle := renderToggle(!m.autoPinDisabled)
 		line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)

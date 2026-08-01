@@ -759,21 +759,27 @@ var recordCmd = &cobra.Command{
 			return nil
 		}
 
-		// First time this repo has been seen: auto-pin the active profile to it,
-		// so coming back to this repo always uses the same account. Silent —
-		// hooks must stay quiet either way. Toggle: Utilities tab, or
-		// storage.Prefs.AutoPinDisabled.
-		if h, err := history.Load(); err == nil {
-			if _, seen := h.Repos[repoKey]; !seen {
-				if prefs, err := store.LoadPrefs(); err == nil && !prefs.AutoPinDisabled {
-					if _, err := applyProfile(git.New(false), active); err == nil {
-						_ = history.Pin(repoKey, active.Nickname)
-					}
+		// Record usage first — this is also the single locked read that gives us
+		// the updated count, so we never read history.json twice per call.
+		count, err := history.Record(repoKey, active.Nickname)
+		if err != nil {
+			return err
+		}
+
+		// Once the same account has been used in this repo enough times to call
+		// it a pattern (not just one drive-by commit), auto-pin it so coming
+		// back always uses the same account. Fires exactly once, the visit the
+		// threshold is crossed. Silent — hooks must stay quiet either way.
+		// Toggle: Utilities tab, or storage.Prefs.AutoPinDisabled.
+		if count == history.AutoPinThreshold {
+			if prefs, err := store.LoadPrefs(); err == nil && !prefs.AutoPinDisabled {
+				if _, err := applyProfile(git.New(false), active); err == nil {
+					_ = history.Pin(repoKey, active.Nickname)
 				}
 			}
 		}
 
-		return history.Record(repoKey, active.Nickname)
+		return nil
 	},
 }
 
