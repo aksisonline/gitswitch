@@ -91,6 +91,9 @@ type Prefs struct {
 	ShellAliasDisabled bool   `json:"shell_alias_disabled"` // zero value = enabled (default on)
 	ArcadeHiScore      int    `json:"arcade_hi_score,omitempty"`
 	ArcadeMode         bool   `json:"arcade_mode,omitempty"`
+	// AutoPinDisabled turns off auto-pinning the active account to a repo the
+	// first time it's seen. Zero value = enabled (default on).
+	AutoPinDisabled bool `json:"auto_pin_disabled"`
 }
 
 func (s *Store) prefsPath() string {

@@ -122,6 +122,10 @@ type Model struct {
 	// account per-repo instead of relying on gh's single global active
 	// account (shell.IsGHWrapperInstalled).
 	ghWrapperEnabled bool
+	// autoPinDisabled turns off auto-pinning the active account to a repo the
+	// first time it's seen (recordCmd, cmd/gitswitch/main.go). Zero value
+	// (false) means enabled — mirrors storage.Prefs.AutoPinDisabled.
+	autoPinDisabled bool
 	// Accounts secondary column: false=email (default), true=GitHub username
 	showUsername bool
 
@@ -269,6 +273,7 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		shellAliasDisabled:      prefs.ShellAliasDisabled,
 		aliasInput:              aliasInput,
 		arcadeMode:              prefs.ArcadeMode,
+		autoPinDisabled:         prefs.AutoPinDisabled,
 	}
 	m.refreshRepoScope()
 	for _, opt := range opts {
@@ -327,6 +332,7 @@ func (m *Model) savePrefs() error {
 		ShellAliasDisabled: m.shellAliasDisabled,
 		ArcadeHiScore:      m.hiScore,
 		ArcadeMode:         m.arcadeMode,
+		AutoPinDisabled:    m.autoPinDisabled,
 	})
 }
 

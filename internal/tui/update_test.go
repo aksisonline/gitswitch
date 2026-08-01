@@ -107,6 +107,25 @@ func TestCredentialHelperToggle(t *testing.T) {
 	}
 }
 
+func TestAutoPinToggle(t *testing.T) {
+	m := Model{
+		store: storage.NewAt(t.TempDir()), state: StateList, width: 84, height: 30,
+		tabIndex: 1, utilityFocus: 3, autoPinDisabled: false,
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	final := next.(Model)
+	if !final.autoPinDisabled {
+		t.Errorf("autoPinDisabled = false after toggling off, statusMsg=%q", final.statusMsg)
+	}
+
+	next, _ = final.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	final = next.(Model)
+	if final.autoPinDisabled {
+		t.Error("autoPinDisabled = true after toggling back on")
+	}
+}
+
 // The TUI must notice the repo it was launched from: without this wiring the
 // glyphs and the Current line silently report the global identity while git uses
 // the pinned one.
