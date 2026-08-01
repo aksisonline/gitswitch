@@ -20,7 +20,7 @@ builds:
 
 archives:
   - id: gitswitch
-    name_template: "gitswitch-{{ .Os }}-{{ .Arch }}{{ if eq .Os \"windows\" }}.exe{{ end }}"
+    name_template: "gitswitch-{{ .Os }}-{{ .Arch }}"
     # Binary-only archives — no tarballs, so install script keeps working
     format: binary
     builds:
