@@ -5,6 +5,11 @@ Format: `[version] — date — summary`
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Windows install command was broken** — `irm .../install.ps1 | iex` downloaded a binary that was never actually published, so every Windows install failed. Windows builds are now included in every release.
+
 ## [v0.3.0] — 2026-07-30
 
 ### Fixed

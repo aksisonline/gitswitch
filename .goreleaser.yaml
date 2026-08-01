@@ -9,6 +9,7 @@ builds:
     goos:
       - darwin
       - linux
+      - windows
     goarch:
       - amd64
       - arm64
@@ -19,7 +20,7 @@ builds:
 
 archives:
   - id: gitswitch
-    name_template: "gitswitch-{{ .Os }}-{{ .Arch }}"
+    name_template: "gitswitch-{{ .Os }}-{{ .Arch }}{{ if eq .Os \"windows\" }}.exe{{ end }}"
     # Binary-only archives — no tarballs, so install script keeps working
     format: binary
     builds:
