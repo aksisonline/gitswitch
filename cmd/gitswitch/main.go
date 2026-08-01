@@ -166,21 +166,19 @@ func mergeOAuthUpdate(existing *storage.Profile, updated storage.Profile) storag
 
 // applyProfile writes a profile's identity into one git config scope and points
 // the gh CLI at the matching account, so git and GitHub never disagree about who
-// you are.
-func applyProfile(cfg *git.Config, p *storage.Profile) error {
+// you are. Returns a non-fatal warning (e.g. gh auth switch failed) instead of
+// printing it directly — some callers (shell hooks) must stay silent.
+func applyProfile(cfg *git.Config, p *storage.Profile) (warning string, err error) {
 	if err := cfg.SetUser(p.UserName, p.Email); err != nil {
-		return err
+		return "", err
 	}
 	if err := cfg.SetSignKey(p.SignKey); err != nil {
-		return err
+		return "", err
 	}
 	if err := cfg.SetSSHKey(p.SSHKey); err != nil {
-		return err
+		return "", err
 	}
-	if w := git.SwitchGHUser(p.GHUser); w != "" {
-		fmt.Printf("warning: %s\n", w)
-	}
-	return nil
+	return git.SwitchGHUser(p.GHUser), nil
 }
 
 // effectiveProfile returns the identity commits in dir will actually use, and the
@@ -220,11 +218,15 @@ func quickSwitch(nickname string) error {
 	if err != nil {
 		return err
 	}
-	if err := applyProfile(git.New(true), p); err != nil {
+	warn, err := applyProfile(git.New(true), p)
+	if err != nil {
 		return err
 	}
 	if err := store.SetActive(p.Nickname); err != nil {
 		return err
+	}
+	if warn != "" {
+		fmt.Printf("warning: %s\n", warn)
 	}
 	fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
 	return nil
@@ -268,11 +270,15 @@ var switchCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := applyProfile(git.New(true), p); err != nil {
+		warn, err := applyProfile(git.New(true), p)
+		if err != nil {
 			return err
 		}
 		if err := store.SetActive(p.Nickname); err != nil {
 			return err
+		}
+		if warn != "" {
+			fmt.Printf("warning: %s\n", warn)
 		}
 		fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
 		return nil
@@ -684,11 +690,15 @@ var pinCmd = &cobra.Command{
 			fmt.Printf("Adopted this repo's existing identity <%s>\n", existing)
 		}
 
-		if err := applyProfile(git.New(false), p); err != nil {
+		warn, err := applyProfile(git.New(false), p)
+		if err != nil {
 			return err
 		}
 		if err := history.Pin(repoKey, p.Nickname); err != nil {
 			return err
+		}
+		if warn != "" {
+			fmt.Printf("warning: %s\n", warn)
 		}
 		fmt.Printf("%s Pinned '%s' to this repo — %s <%s> (local git config; global identity unchanged)\n",
 			styleOK("✓"), p.Nickname, p.UserName, p.Email)
@@ -748,7 +758,28 @@ var recordCmd = &cobra.Command{
 		if err != nil || active == nil {
 			return nil
 		}
-		return history.Record(repoKey, active.Nickname)
+
+		// Record usage first — this is also the single locked read that gives us
+		// the updated count, so we never read history.json twice per call.
+		count, err := history.Record(repoKey, active.Nickname)
+		if err != nil {
+			return err
+		}
+
+		// Once the same account has been used in this repo enough times to call
+		// it a pattern (not just one drive-by commit), auto-pin it so coming
+		// back always uses the same account. Fires exactly once, the visit the
+		// threshold is crossed. Silent — hooks must stay quiet either way.
+		// Toggle: Utilities tab, or storage.Prefs.AutoPinDisabled.
+		if count == history.AutoPinThreshold {
+			if prefs, err := store.LoadPrefs(); err == nil && !prefs.AutoPinDisabled {
+				if _, err := applyProfile(git.New(false), active); err == nil {
+					_ = history.Pin(repoKey, active.Nickname)
+				}
+			}
+		}
+
+		return nil
 	},
 }
 
