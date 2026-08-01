@@ -5,6 +5,8 @@ description: gitswitch keeps every commit and every push on the right account �
 
 **Every commit goes out as the right you. Automatically.**
 
+New to git entirely? Skip the tutorials on SSH keys and `.gitconfig`. Install gitswitch, run `gitswitch setup` — it checks for git and the GitHub CLI and offers to install whichever's missing — then `gitswitch login` sets up your identity, keys, and signing. You're set up correctly without reading a single guide, and you don't need a second account for any of this to be worth it. See [gitswitch for git beginners](/docs/scenarios/beginners).
+
 gitswitch keeps track of the git accounts you use — personal, work, each client — and makes sure the right one is used in the right repo. Not just your name and email: your SSH key, your signing key, and which GitHub account `git push` and `gh` talk to.
 
 ```bash
@@ -58,7 +60,7 @@ No — they solve different halves of the problem. `gh auth switch` changes whic
 | GitLab, Bitbucket, self-hosted | ✗ | ✓ — it's just git config |
 | Interactive UI | ✗ | ✓ |
 
-gitswitch happily uses `gh` under the hood when it's installed. Think of it as the layer above.
+gitswitch happily uses `gh` under the hood — and if it's not installed yet, `gitswitch setup` offers to install it for you. Think of it as the layer above.
 
 ## What it is *not*
 

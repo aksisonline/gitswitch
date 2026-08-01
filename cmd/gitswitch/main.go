@@ -30,8 +30,15 @@ var version = "dev"
 
 var store *storage.Store
 
+// commandAllowsMissingGit is true for the subcommands whose whole job is to
+// check for (and now offer to install) git itself — they must be able to run
+// on a machine that doesn't have git yet.
+func commandAllowsMissingGit() bool {
+	return len(os.Args) > 1 && (os.Args[1] == "setup" || os.Args[1] == "doctor")
+}
+
 func init() {
-	if !git.IsGitInstalled() {
+	if !git.IsGitInstalled() && !commandAllowsMissingGit() {
 		fmt.Fprintf(os.Stderr, "Error: git is not installed or not on PATH\n")
 		os.Exit(1)
 	}
@@ -45,8 +52,8 @@ func init() {
 
 var rootCmd = &cobra.Command{
 	Use:           "gitswitch [nickname]",
-	Short:         "Switch between GitHub accounts on one machine",
-	Long:          `Run without arguments to open the profile picker.`,
+	Short:         "Set up git and switch between GitHub accounts on one machine",
+	Long:          `Run without arguments to open the profile picker. New here? Run 'gitswitch setup' — it'll offer to install git/gh if you're missing them, then 'gitswitch login' gets you fully set up.`,
 	Args:          cobra.MaximumNArgs(1),
 	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -610,6 +617,26 @@ func confirm(question string) bool {
 	return resp == "y" || resp == "yes"
 }
 
+// promptInstallTool shows the exact command needed to install a missing tool,
+// asks for confirmation (skipped when yes is true), and runs it. Returns nil
+// with no action taken if the tool has no InstallCommand for this platform
+// (e.g. macOS git, which needs the Xcode CLT GUI dialog) or if the user declines.
+func promptInstallTool(label string, t *prereqs.ToolCheck, yes bool) error {
+	if len(t.InstallCommand) == 0 {
+		return nil
+	}
+	fmt.Printf("  About to run: %s\n", strings.Join(t.InstallCommand, " "))
+	if !yes && !confirm("  Proceed?") {
+		fmt.Println("  Skipped.")
+		return nil
+	}
+	if err := runCommand(t.InstallCommand[0], t.InstallCommand[1:]...); err != nil {
+		return fmt.Errorf("%s install failed: %w", label, err)
+	}
+	fmt.Printf("  ✓ %s installed.\n", label)
+	return nil
+}
+
 // A pin is a local identity: it writes the profile into this repo's
 // .git/config, so commits here are correct no matter which profile is active
 // globally. Nothing needs to be switched on entry.
@@ -1065,6 +1092,7 @@ var doctorCmd = &cobra.Command{
 	Short: "Check that git and gh are installed and up to date",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		jsonOut, _ := cmd.Flags().GetBool("json")
+		yes, _ := cmd.Flags().GetBool("yes")
 		r := prereqs.Check()
 		conflicts := git.CredentialHelperConflicts()
 		ghWrapperInstalled := shell.IsGHWrapperInstalled(shell.RCFile(shell.DetectShell()))
@@ -1128,6 +1156,17 @@ var doctorCmd = &cobra.Command{
 
 		fmt.Println()
 		prereqs.PrintWarnings(r)
+
+		if !r.Git.Installed {
+			if err := promptInstallTool("git", r.Git, yes); err != nil {
+				return err
+			}
+		}
+		if !r.GH.Installed {
+			if err := promptInstallTool("gh", r.GH, yes); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
 }
@@ -1137,6 +1176,7 @@ var setupCmd = &cobra.Command{
 	Short: "Check requirements and show next steps",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agentMode, _ := cmd.Flags().GetBool("agent")
+		yes, _ := cmd.Flags().GetBool("yes")
 		r := prereqs.Check()
 
 		if agentMode {
@@ -1170,6 +1210,20 @@ var setupCmd = &cobra.Command{
 		}
 		fmt.Println()
 		prereqs.PrintWarnings(r)
+
+		if !r.Git.Installed {
+			if err := promptInstallTool("git", r.Git, yes); err != nil {
+				return err
+			}
+		}
+		if !r.GH.Installed {
+			if err := promptInstallTool("gh", r.GH, yes); err != nil {
+				return err
+			}
+		}
+		if !r.Git.Installed || !r.GH.Installed {
+			r = prereqs.Check()
+		}
 
 		if r.AllOK() {
 			profiles, _ := store.Load()
@@ -1221,7 +1275,9 @@ func main() {
 	uninstallCmd.Flags().String("shell", "", "Shell to uninstall for: zsh, bash, or fish (default: auto-detect)")
 	claudeCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills) or 'project' (.claude/skills)")
 	doctorCmd.Flags().Bool("json", false, "Output machine-readable JSON")
+	doctorCmd.Flags().BoolP("yes", "y", false, "Skip install confirmation prompts")
 	setupCmd.Flags().Bool("agent", false, "Emit machine-readable setup manifest for AI agents")
+	setupCmd.Flags().BoolP("yes", "y", false, "Skip install confirmation prompts")
 	loginCmd.Flags().String("host", "", "GitHub host (default: github.com)")
 	loginCmd.Flags().String("client-id", "", "OAuth app client ID (overrides built-in)")
 	loginCmd.Flags().String("profile", "", "Profile nickname to create (default: GitHub username)")
