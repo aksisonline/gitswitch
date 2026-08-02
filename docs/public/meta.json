@@ -1,5 +1,5 @@
 {
-  "$comment": "Sidebar + ordering for gitswitch.dev docs. Source of truth lives here in the git-switcher repo; the website (gitswitch-web-v3) fetches this at build time and mirrors this folder structure. Edit docs here and the site rebuilds via repository_dispatch.",
+  "$comment": "Sidebar + ordering for gitswitch.dev docs. Source of truth lives here in the gitswitch repo; the website (gitswitch-web-v3) fetches this at build time and mirrors this folder structure. Edit docs here and the site rebuilds via repository_dispatch.",
   "groups": [
     {
       "label": "Get Started",

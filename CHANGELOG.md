@@ -10,6 +10,9 @@ Format: `[version] — date — summary`
 ### Fixed
 - **Windows install command was broken** — `irm .../install.ps1 | iex` downloaded a binary that was never actually published, so every Windows install failed. Windows builds are now included in every release.
 
+### Under the Hood
+- **The product name is now spelled consistently as "Gitswitch" everywhere** — the TUI header, arcade mode, and onboarding screens previously showed "Git-Switcher" (with a hyphen); they now match the CLI and docs.
+
 ## [v0.3.0] — 2026-07-30
 
 ### Fixed

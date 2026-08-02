@@ -74,7 +74,7 @@ Opens a full terminal UI. First run auto-imports your existing `git config` as a
 
 ```
 ╭──────────────────────────────────────────────────────╮
-│  ✦  Git-Switcher                                     │
+│  ✦  Gitswitch                                        │
 │     identity manager for git                        │
 │                                                      │
 │  Current  username  ·  user@gmail.com                │
