@@ -65,7 +65,7 @@ Push to `main` → CI checks for code changes in `internal/` or `cmd/` → compu
 
 **Never push tags manually to remote.** CI owns remote tags.
 
-**CHANGELOG.md's `[Unreleased]` section is cut automatically.** After a successful main release, CI itself renames `## [Unreleased]` to `## [vX.Y.Z] — <date>` and commits a fresh, empty `[Unreleased]` above it. Don't do this by hand — write new entries under `[Unreleased]` as normal, and let the release finish the rename.
+**CHANGELOG.md's `[Unreleased]` section is cut automatically.** After a successful main release, CI renames `## [Unreleased]` to `## [vX.Y.Z] — <date>` and opens a PR against `main` with a fresh, empty `[Unreleased]` above it (auto-merges once approved — `main` requires a PR for every change, including from CI). Don't do this by hand — write new entries under `[Unreleased]` as normal, and approve the auto-opened PR when it shows up.
 
 **`canary` is kept in sync automatically.** After a main release, CI merges `main` back into `canary` and pushes. If that merge conflicts, the job fails loudly instead of skipping — resolve it with a manual PR from `main` into `canary`.
 
