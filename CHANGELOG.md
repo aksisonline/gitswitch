@@ -7,6 +7,8 @@ Format: `[version] — date — summary`
 
 ## [Unreleased]
 
+## [v0.4.2] — 2026-08-03
+
 ### Under the Hood
 - **The Windows install command is shorter too** — `irm https://get.gitswitch.dev/install.ps1 | iex` replaces the long `raw.githubusercontent.com/.../install.ps1` URL, matching the shortened curl command from the previous release. Behaves identically; get.gitswitch.dev proxies the same script.
 
