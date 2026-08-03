@@ -13,7 +13,7 @@ Format: `[version] — date — summary`
 - **`gitswitch claude` is now `gitswitch skills`, and it's no longer just for Claude Code** — it tries [skills.sh](https://www.skills.sh) first, which installs the gitswitch skill correctly for whichever AI agent you're using (Claude Code, Cursor, Codex, and more), and falls back to installing it directly if you're offline.
 - **A copy-paste setup prompt for AI agents** — a new Agent Aided Setup guide gives you one block to hand your coding agent, and it installs gitswitch, checks git/gh, and connects your account for you.
 
-### Fixed
+### Bug Fixes
 - **Windows install command was broken** — `irm .../install.ps1 | iex` downloaded a binary that was never actually published, so every Windows install failed. Windows builds are now included in every release.
 - **Signing in through gitswitch's own GitHub login didn't always let Session Isolation or HTTPS push routing use the new account** — those two features get their tokens from the `gh` CLI, but a fresh sign-in never told `gh` about the account, so it silently didn't work until you separately ran `gh auth login`. Logging in now registers the account with `gh` too, so it works right away.
 
