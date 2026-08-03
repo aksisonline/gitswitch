@@ -7,6 +7,11 @@ Format: `[version] — date — summary`
 
 ## [Unreleased]
 
+### Under the Hood
+- **The install command is shorter** — `curl -fsSL https://get.gitswitch.dev | bash` replaces the long `raw.githubusercontent.com/.../install.sh` URL everywhere it's documented. Behaves identically; `get.gitswitch.dev` proxies the same script with the right `Content-Type`, it's not a redirect.
+
+## [v0.4.0] — 2026-08-03
+
 ### What's New
 - **One command sets up everything now** — run `gitswitch` on a fresh machine and it checks whether git and the GitHub CLI (`gh`) are installed, offers to install whichever's missing, then walks you through connecting your GitHub account. No separate setup command to remember first.
 - **`gitswitch install` is now `gitswitch shell`** — same shell-integration wizard (prompt, HTTPS push routing, Session Isolation), just a name that matches what it actually does.

@@ -50,7 +50,7 @@ brew install aksisonline/tap/gitswitch
 
 **Curl** (one-liner):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh | bash
+curl -fsSL https://get.gitswitch.dev | bash
 ```
 
 Or **build from source**:
