@@ -1,37 +1,52 @@
 {
-  "$comment": "Sidebar + ordering for gitswitch.dev docs. Source of truth lives here in the git-switcher repo; the website (gitswitch-web-v3) fetches this at build time. Edit docs here and the site rebuilds via repository_dispatch.",
+  "$comment": "Sidebar + ordering for gitswitch.dev docs. Source of truth lives here in the gitswitch repo; the website (gitswitch-web-v3) fetches this at build time and mirrors this folder structure. Edit docs here and the site rebuilds via repository_dispatch.",
   "groups": [
     {
-      "label": "Getting Started",
+      "label": "Get Started",
       "items": ["intro", "installation", "quick-start"]
     },
     {
       "label": "Concepts",
-      "items": ["features/identity-awareness"]
+      "items": ["concepts/scopes", "features/identity-awareness"]
     },
     {
-      "label": "Features",
+      "label": "Accounts",
       "items": [
+        "features/accounts",
         "features/commit-identity",
         "features/ssh-keys",
-        "features/gpg",
-        "features/github-sync",
-        "features/session-isolation",
-        "features/shell",
-        "features/ai-agents"
+        "features/gpg"
       ]
     },
     {
-      "label": "CLI Reference",
-      "items": ["cli/commands", "cli/profiles", "cli/config"]
+      "label": "Automatic Routing",
+      "items": [
+        "features/session-isolation",
+        "features/https",
+        "features/github-sync",
+        "features/shell"
+      ]
+    },
+    {
+      "label": "Extras",
+      "items": ["features/ai-agents", "features/arcade"]
     },
     {
       "label": "Guides",
       "items": [
+        "scenarios/beginners",
+        "scenarios/multi-github",
         "scenarios/freelancer",
-        "scenarios/oss",
-        "scenarios/multi-github"
+        "scenarios/oss"
       ]
+    },
+    {
+      "label": "CLI Reference",
+      "items": ["cli/commands", "cli/profiles", "cli/config", "cli/channels"]
+    },
+    {
+      "label": "Help",
+      "items": ["troubleshooting"]
     }
   ]
 }

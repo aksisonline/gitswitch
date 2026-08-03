@@ -1,68 +1,78 @@
 ---
 title: Introduction
-description: What gitswitch is and what it does
+description: gitswitch keeps every commit and every push on the right account — automatically
 ---
 
-gitswitch manages multiple git identities — name, email, SSH key, GPG signing key, and GitHub CLI account — and switches between them with a single command.
+**Every commit goes out as the right you. Automatically.**
+
+New to git entirely? Skip the tutorials on SSH keys and `.gitconfig`. Install gitswitch, run `gitswitch setup` — it checks for git and the GitHub CLI and offers to install whichever's missing — then `gitswitch login` sets up your identity, keys, and signing. You're set up correctly without reading a single guide, and you don't need a second account for any of this to be worth it. See [gitswitch for git beginners](/docs/scenarios/beginners).
+
+gitswitch keeps track of the git accounts you use — personal, work, each client — and makes sure the right one is used in the right repo. Not just your name and email: your SSH key, your signing key, and which GitHub account `git push` and `gh` talk to.
+
+```bash
+gitswitch install    # one-time setup
+gitswitch login      # connect a GitHub account in the browser
+gitswitch pin work   # this repo always uses that account
+```
+
+That's it. From then on you can forget about it.
 
 ## The problem
 
-Every commit is attributed to whoever `git config --global user.name` and `git config --global user.email` point to. If you work across personal, work, and client repos on the same machine, you're constantly at risk of attributing commits to the wrong identity. Wrong attribution is permanent after a push.
-
-SSH keys compound the problem: your agent may silently authenticate with whichever key works, not necessarily the one you intended.
-
-## What gitswitch does
+Git has exactly one global name and email:
 
 ```bash
-gitswitch              # Open interactive TUI to browse and switch profiles
-gitswitch work         # Immediately switch to the 'work' profile
-gitswitch install      # Set up shell prompt, identity nudges, and tab completion
+git config --global user.name   "Alice Smith"
+git config --global user.email  "alice@gmail.com"
 ```
 
-When you switch to a profile, gitswitch runs in this order:
+Every commit you make anywhere on your machine uses those two values. So the moment you have more than one account, you're one distracted `git commit` away from a work repo full of commits stamped with your personal email — and once it's pushed, that's permanent.
 
-1. `git config --global user.name "<name>"`
-2. `git config --global user.email "<email>"`
-3. `git config --global user.signingkey "<key>"` — if the profile has a GPG key
-4. `git config --global core.sshCommand "ssh -i <path> -o IdentitiesOnly=yes"` — if the profile has an SSH key
-5. `gh auth switch --user <username>` — if the profile has a GitHub username (best-effort)
+It gets worse in the corners:
 
-## How it compares to `gh auth switch`
+- **SSH keys** — your agent offers every key it has, so a push can authenticate as an account you didn't mean to use.
+- **The GitHub CLI** — `gh` remembers one active account for your whole machine, so `gh pr create` in one terminal can be acting as a different account than you think.
+- **AI coding agents** — Claude Code and friends run `git commit` for you, using whatever identity happens to be active.
 
-`gh auth switch` changes which GitHub API token the `gh` CLI uses. It does not touch `user.name`, `user.email`, SSH keys, or GPG keys.
+## What gitswitch does about it
 
-| | `gh auth switch` | `gitswitch` |
+| | |
+|---|---|
+| **Switches everything at once** | name, email, SSH key, signing key, GitHub account — one command |
+| **Pins repos** | this repo always uses this account, no thinking required |
+| **Routes pushes** | HTTPS pushes use the right account's token, per repo |
+| **Isolates terminals** | two terminals, two GitHub accounts, no fighting over `gh` |
+| **Learns your habits** | notices which account you use where, and nudges you if something looks off |
+| **Fixes past mistakes** | rewrites the author on commits you already made |
+| **Stays local** | no servers, no telemetry, no account — tokens live in your OS keychain |
+
+## Is this just `gh auth switch`?
+
+No — they solve different halves of the problem. `gh auth switch` changes which GitHub *API* account the `gh` command uses. It doesn't touch what your commits actually say.
+
+| | `gh auth switch` | gitswitch |
 |---|---|---|
-| Changes commit author identity | No | Yes |
-| Switches SSH keys | No | Yes |
-| Switches GPG signing keys | No | Yes |
-| Switches GitHub CLI account | Yes | Yes (optional, via `--gh-user`) |
-| Works with GitLab / Bitbucket | Yes | Yes |
-| Interactive TUI | No | Yes |
+| Commit name and email | ✗ | ✓ |
+| SSH key | ✗ | ✓ |
+| Signing key | ✗ | ✓ |
+| GitHub CLI account | ✓ (one, globally) | ✓ (per repo, per terminal) |
+| Per-repo pinning | ✗ | ✓ |
+| GitLab, Bitbucket, self-hosted | ✗ | ✓ — it's just git config |
+| Interactive UI | ✗ | ✓ |
 
-## Core features
+gitswitch happily uses `gh` under the hood — and if it's not installed yet, `gitswitch setup` offers to install it for you. Think of it as the layer above.
 
-- **Commit identity** — switches `user.name` and `user.email` globally
-- **SSH key routing** — forces `IdentitiesOnly=yes` so no accidental agent fallback
-- **GPG signing** — switches `user.signingkey` alongside your identity
-- **GitHub CLI sync** — optionally calls `gh auth switch` on every profile switch
-- **Session isolation** (canary) — every terminal's `gh` commands resolve the right account for their repo, and repo pins actually stick, so multiple terminals never fight over gh's one shared global account
-- **Identity awareness** — learns which identity you use per-repo and nudges you when something looks wrong
-- **Shell integration** — prompt segments, automatic nudges on `cd`, tab completion
-- **AI coding agent setup** — installs a Claude Code skill (`gitswitch claude`) and fixes commits an agent already made under the wrong identity (`gitswitch reauthor`)
-- **12 color themes** — Default, Ocean, Sunset, Forest, Mono, Rose, Arctic, Gold, Violet, Ember, Matrix, Steel
+## What it is *not*
 
-## Storage
+gitswitch is a router, not a vault. Your commits stay in git, your keys stay in `~/.ssh/`, your tokens stay in your OS keychain. gitswitch decides which one applies right now — it never proxies your traffic, phones home, or copies your credentials anywhere.
 
-| File | Contents |
-|------|----------|
-| `~/.config/gitswitch/profiles.json` | All profile definitions |
-| `~/.config/gitswitch/config.json` | UI preferences (color theme) |
-| `~/.config/gitswitch/history.json` | Per-repo identity usage counts and pins |
+## Where to go next
 
-## Next steps
+- **[Install it](/docs/installation)** — Homebrew, curl, or Go
+- **[Quick Start](/docs/quick-start)** — first account connected in about two minutes
+- **[Scopes](/docs/concepts/scopes)** — global vs. repo vs. terminal, and how to tell which one is winning
+- **[Multi-account GitHub](/docs/scenarios/multi-github)** — the most common setup, start to finish
+- **[AI Coding Agents](/docs/features/ai-agents)** — stop your agent committing as the wrong person
+- **[CLI Reference](/docs/cli/commands)** — every command and flag
 
-- [Install gitswitch](/docs/installation)
-- [Quick Start](/docs/quick-start)
-- [AI Coding Agents](/docs/features/ai-agents)
-- [CLI Reference](/docs/cli/commands)
+There is also a hidden arcade mode. We're not going to tell you what it does. ([Fine, here.](/docs/features/arcade))

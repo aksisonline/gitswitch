@@ -192,7 +192,7 @@ func (m Model) viewWizardAddMore(pw int) string {
 	if m.arcadeMode {
 		oauthLabel = "LOG IN WITH GITHUB  [OAuth]"
 		manualLabel = "ADD MANUALLY"
-		doneLabel = "DONE, OPEN GIT-SWITCHER"
+		doneLabel = "DONE, OPEN GITSWITCH"
 	} else {
 		oauthLabel = "Log in with GitHub  [OAuth device flow]"
 		manualLabel = "Add manually"
@@ -259,7 +259,7 @@ func (m Model) viewWizardDone(pw int) string {
 	var ctaLabel string
 	if m.arcadeMode {
 		ctaBorderStyle = lipgloss.NewStyle().Bold(true).Foreground(colorYellow)
-		ctaLabel = "▶  OPEN GIT-SWITCHER"
+		ctaLabel = "▶  OPEN GITSWITCH"
 	} else {
 		ctaLabel = "▶  Open gitswitch"
 	}

@@ -96,7 +96,7 @@ func (m Model) viewHeader(subtitle string) string {
 
 func (m Model) viewNormalHeader(subtitle string) string {
 	icon := styleTitle.Render("◆")
-	title := styleTitle.Render("Git-Switcher")
+	title := styleTitle.Render("Gitswitch")
 	tagline := styleBrand.Render("identity manager for git")
 
 	var heading string
@@ -113,7 +113,7 @@ func (m Model) viewNormalHeader(subtitle string) string {
 
 func (m Model) viewArcadeHeader(subtitle string) string {
 	icon := styleTitle.Render("ᗧ")
-	title := styleTitle.Render("GIT-SWITCHER")
+	title := styleTitle.Render("GITSWITCH")
 	pellets := styleDivider.Render("· · ·")
 
 	var heading string
@@ -389,7 +389,7 @@ func (m Model) viewTips(pw int) string {
 func (m Model) viewIntro(pw int) string {
 	score := m.viewScoreLine(pw)
 	icon := styleTitle.Render("ᗧ")
-	title := styleTitle.Render("GIT-SWITCHER")
+	title := styleTitle.Render("GITSWITCH")
 	pellets := styleDivider.Render("· · ·")
 	titleRow := fmt.Sprintf("  %s  %s %s", icon, title, pellets)
 	subtitleRow := lipgloss.NewStyle().Foreground(arcadeMazeBlue).Bold(true).Render("     ARCADE MODE")

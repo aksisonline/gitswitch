@@ -1,76 +1,64 @@
 ---
-title: GitHub Account Sync
-description: How gitswitch integrates with the GitHub CLI
+title: GitHub CLI Sync
+description: Keeping the gh CLI's account in step with your git identity
 ---
 
-This page covers the `--gh-user` flag — what it does when you switch profiles and how it behaves when `gh` is unavailable.
+Your commit identity and your `gh` account are two different things. gitswitch can keep them together.
 
-## What it does
+## `--gh-user`
 
-When you switch to a profile that has a GitHub username, gitswitch runs:
-
-```bash
-gh auth switch --user alice-work
-```
-
-This changes which GitHub account `gh` CLI commands operate under — creating PRs, listing issues, fetching notifications, and so on.
-
-## Add a profile with a GitHub username
+Give an account a GitHub username and switching to it also switches `gh`:
 
 ```bash
-gitswitch add work "Alice Smith" alice@company.com \
-  --gh-user alice-work
+gitswitch add work "Alice Smith" alice@company.com --gh-user alice-corp
+gitswitch work
+# runs: gh auth switch --user alice-corp
 ```
 
-The value passed to `--gh-user` must match a username that is already authenticated in `gh`:
+`gitswitch login` sets this for you automatically — the username comes back from GitHub.
+
+The username must already be logged in to `gh`:
 
 ```bash
-gh auth status
-# Shows all authenticated accounts
+gh auth status      # who's logged in?
+gh auth login       # add another account
 ```
 
-If the account is not yet authenticated:
+## When `gh` isn't there
 
-```bash
-gh auth login
-# Follow the prompts to authenticate the account
-```
-
-## Behavior when `gh` is unavailable
-
-The GitHub switch is best-effort. If `gh` is not installed, or the specified account is not authenticated, gitswitch prints a warning but still completes the profile switch:
+Nothing breaks. The `gh` step is the last one and it's advisory only — you get a warning and the git config switch still happens:
 
 ```
-warning: gh auth switch --user alice-work: exec: "gh": executable file not found in $PATH
+warning: gh auth switch --user alice-corp: exec: "gh": executable file not found in $PATH
 ✓ Switched to 'work' — Alice Smith <alice@company.com>
 ```
 
-Steps 1–4 (git config writes) always execute. Step 5 (`gh auth switch`) is advisory only.
+Accounts with no `--gh-user` leave the active `gh` account alone entirely.
 
-## Profiles without GitHub sync
+## `gh auth switch` is global — and that's a problem
 
-If you don't pass `--gh-user`, switching that profile leaves the active `gh` account unchanged:
+This is worth understanding, because it's the reason [Session Isolation](/docs/features/session-isolation) exists.
 
-```bash
-gitswitch add internal "Alice Smith" alice@internal.corp
-# No --gh-user — gh account is not touched when switching to 'internal'
-```
-
-## Using gh CLI with multiple accounts
+`gh auth switch` flips one machine-wide setting. Switch identities in one terminal and every *other* terminal's `gh pr create` silently starts using that account too, even in unrelated repos:
 
 ```bash
-# Switch to personal profile (includes --gh-user alice)
-gitswitch personal
-gh repo list
-# Lists repos owned by alice
+# terminal 1
+gitswitch work        # gh is now alice-corp, everywhere
 
-# Switch to work profile (includes --gh-user alice-work)
-gitswitch work
-gh pr create --title "Fix" --body "..."
-# Creates PR as alice-work
+# terminal 2, in a personal repo, five minutes later
+gh pr create          # ...opens the PR as alice-corp. Oops.
 ```
 
-## Verify active GitHub account
+**Session Isolation fixes this properly.** With it on (the default), each `gh` call resolves the account for the repo you're actually in and passes that account's token for that one command — no global state, no cross-terminal interference:
+
+```bash
+cd ~/work/api      && gh pr create     # acts as alice-corp
+cd ~/personal/blog && gh issue list    # acts as alice — same moment, other terminal
+```
+
+So think of `--gh-user` as "which account does this profile belong to", and Session Isolation as the thing that makes it apply *per repo* rather than globally.
+
+## Verify
 
 ```bash
 gh auth status
@@ -78,42 +66,35 @@ gh auth status
 
 ```
 github.com
-  ✓ Logged in to github.com account alice-work (keyring)
+  ✓ Logged in to github.com account alice-corp (keyring)
   - Active account: true
 ```
 
+> With Session Isolation on, `gh auth status` still reports your old global account — by design. Isolation never touches gh's global account file; it overrides the token per call. Judge it by which account a `gh` command actually acted as.
+
 ## Troubleshooting
 
-**`gh auth switch` fails silently**
+**`gh auth switch` fails**
 
-Run it manually to see the error:
-
-```bash
-gh auth switch --user alice-work
-```
-
-Common causes:
-- Account not authenticated (`gh auth login`)
-- Username typo in the profile (check with `gh auth status`)
-- `gh` not installed
-
-**`gh` account and git identity are out of sync**
-
-This is expected when you use profiles without `--gh-user`. The two are independent:
+Run it by hand to see why:
 
 ```bash
-gh auth status          # shows GitHub API account
-gitswitch current       # shows git commit identity
+gh auth switch --user alice-corp
 ```
 
-To resync manually:
+Usually: that account isn't logged in to `gh` (`gh auth login`), or the username in the profile has a typo (`gh auth status` to check spelling).
+
+**`gh` and my git identity disagree**
+
+Expected for accounts without `--gh-user` — they're independent. Compare:
 
 ```bash
-gh auth switch --user alice-work
+gh auth status       # the GitHub API account
+gitswitch current    # the git commit identity
 ```
 
-## Next steps
+## Next
 
-- [Identity Awareness](/docs/features/identity-awareness)
-- [Shell Integration](/docs/features/shell)
-- [CLI Reference](/docs/cli/commands)
+- **[Session Isolation](/docs/features/session-isolation)** — per-repo, per-terminal `gh`
+- **[HTTPS Push Routing](/docs/features/https)** — the same idea, for `git push`
+- **[Connecting Accounts](/docs/features/accounts)** — `gitswitch login`

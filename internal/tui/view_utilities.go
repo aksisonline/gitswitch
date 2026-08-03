@@ -5,9 +5,10 @@ import (
 )
 
 // Utility items (indices match utilityFocus and the 5-relY mouse grid):
-//   0 = Shell Integration     (toggleable)
-//   1 = Session Isolation     (toggleable)
+//   0 = Shell Integration       (toggleable)
+//   1 = Session Isolation       (toggleable)
 //   2 = HTTPS Credential Helper (toggleable)
+//   3 = Auto-pin Repeat Repos   (toggleable)
 
 func (m Model) viewUtilitiesTab(pw int) string {
 	var top string
@@ -19,7 +20,7 @@ func (m Model) viewUtilitiesTab(pw int) string {
 	iw := itemInnerW(pw)
 
 	// Build each item box
-	items := m.utilItem(pw, iw, 0) + m.utilItem(pw, iw, 1) + m.utilItem(pw, iw, 2)
+	items := m.utilItem(pw, iw, 0) + m.utilItem(pw, iw, 1) + m.utilItem(pw, iw, 2) + m.utilItem(pw, iw, 3)
 
 	sep := "\n\n"
 	footer := sep + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
@@ -50,7 +51,7 @@ func (m Model) utilItem(pw, iw, idx int) string {
 
 	case 1: // Session Isolation
 		title := "Session Isolation"
-		desc := "Isolates this repo's git identity + gh account. Required for pins to take effect."
+		desc := "Per-repo git identity + gh account — needed for pins to work."
 		if m.arcadeMode {
 			title = "GH CO-OP MODE"
 			desc = "No more fighting over one shared gh account. Every terminal plays its own."
@@ -69,6 +70,19 @@ func (m Model) utilItem(pw, iw, idx int) string {
 			desc = "HTTPS auth. Automatic. No 401 game-overs."
 		}
 		toggle := renderToggle(m.credentialHelperEnabled)
+		line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)
+		line2 := lipgloss.NewStyle().Foreground(colorDim).Render(truncate(desc, iw))
+		line2 = padTo(line2, iw)
+		return renderItemBox(pw, focused, false, line1, line2)
+
+	case 3: // Auto-pin Repeat Repos
+		title := "Auto-pin Repeat Repos"
+		desc := "Pin the account after 3 uses in the same repo."
+		if m.arcadeMode {
+			title = "AUTO-CLAIM"
+			desc = "Play a repo 3 times with an account — it's yours."
+		}
+		toggle := renderToggle(!m.autoPinDisabled)
 		line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)
 		line2 := lipgloss.NewStyle().Foreground(colorDim).Render(truncate(desc, iw))
 		line2 = padTo(line2, iw)

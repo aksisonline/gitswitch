@@ -1,49 +1,29 @@
 ---
 title: Shell Integration
-description: How to install the prompt segment, identity nudge, and tab completion
+description: Prompt segment, nudges on cd, tab completion, and the gs alias
 ---
-
-This page covers what `gitswitch install` sets up, which frameworks it supports, and how to customize the prompt segment.
-
-## What gets installed
 
 ```bash
 gitswitch install
 ```
 
-Runs an interactive wizard that installs two things:
+One wizard, three steps, each explaining itself and each skippable:
 
-1. **Shell integration** — prompt segment, identity nudge on `cd`, tab completion
-2. **HTTPS credential helper** — routes HTTPS git operations through the active profile's `gh` account (optional)
+| Step | |
+|---|---|
+| **Shell integration** | Prompt segment, identity nudge on `cd`, tab completion, and the `gs` alias — this page |
+| **HTTPS credential routing** | Right token per repo on `git push` — [HTTPS Push Routing](/docs/features/https) |
+| **Session Isolation** | Right `gh` account per repo, and working pins — [Session Isolation](/docs/features/session-isolation) |
 
-To skip the wizard and accept defaults:
-
-```bash
-gitswitch install --yes
-```
-
-To target a specific shell:
+Skip the questions:
 
 ```bash
-gitswitch install --shell zsh
-gitswitch install --shell bash
-gitswitch install --shell fish
+gitswitch install --yes                # accept all defaults, for scripts and CI
+gitswitch install --shell zsh          # target a specific shell (also skips the wizard)
+gitswitch install --https=false        # everything except HTTPS routing
 ```
 
-## Framework detection
-
-gitswitch detects your prompt framework and installs accordingly:
-
-| Framework | What gets written |
-|-----------|-------------------|
-| Starship | `[custom.gitswitch]` block appended to `~/.config/starship.toml` |
-| oh-my-zsh | Plugin created at `~/.oh-my-zsh/custom/plugins/gitswitch/gitswitch.plugin.zsh` |
-| Powerlevel10k | Segment function dropped to rc file; manual step printed for `~/.p10k.zsh` |
-| Raw zsh / bash / fish | Prompt function, nudge hook, and completion snippet appended to rc file |
-
-All installations are idempotent — everything gitswitch adds lives between `# gitswitch shell integration` markers, and re-running `gitswitch install` replaces that block in place rather than appending a second copy. That is also how you pick up an improved prompt after upgrading, which is what the "shell integration updated — run `gitswitch install`" notice is asking you to do.
-
-After installing, reload your shell:
+Then reload:
 
 ```bash
 source ~/.zshrc    # zsh
@@ -51,35 +31,41 @@ source ~/.bashrc   # bash
 # or open a new terminal
 ```
 
-## Prompt segment
+## It knows your prompt framework
 
-The prompt segment shows the git identity in effect when you are inside a git repo. It calls:
+| Framework | What gets written |
+|---|---|
+| Starship | `[custom.gitswitch]` block in `~/.config/starship.toml` |
+| oh-my-zsh | A plugin at `~/.oh-my-zsh/custom/plugins/gitswitch/gitswitch.plugin.zsh` |
+| Powerlevel10k | Segment function in your rc file, plus one manual step it prints for `~/.p10k.zsh` |
+| Plain zsh / bash / fish | Prompt function, nudge hook, completion, and alias appended to your rc file |
+
+Everything gitswitch writes lives between `# gitswitch` marker comments, and re-running `install` **replaces that block in place** — it never appends a second copy. That's also how you pick up an improved prompt after an upgrade, which is what the "shell integration updated — run `gitswitch install`" notice is asking for.
+
+## The prompt segment
+
+Shows who you are, but only inside a git repo:
+
+```
+~/personal/blog  [personal] ❯
+~/work/api       [work●] ❯
+~/somewhere      [work◆] ❯
+```
+
+That trailing marker is the [scope](/docs/concepts/scopes) — nothing for your global identity, `●` for a pinned repo, `◆` for a terminal override. A glance tells you whether a commit here will be attributed the way you expect.
+
+Under the hood:
 
 ```bash
 gitswitch current --prompt
 # work	141	●
 ```
 
-The three fields are the profile nickname, the theme colour, and a **scope marker** saying where that identity comes from:
+Three tab-separated fields: nickname, the ANSI color for your current theme, and the marker. Starship gets `gitswitch current --short` instead (nickname + email, marker riding on the nickname) because it renders command output verbatim.
 
-| Marker | Meaning |
-|---|---|
-| _(none)_ | your global identity — the profile you last switched to |
-| `●` | this repo is [pinned](/docs/features/identity-awareness#pin-a-repo) and overrides the global identity |
-| `◆` | this terminal's session overrides both |
+### Customizing it
 
-So a glance at the prompt tells you whether a commit here will use the identity you think it will:
-
-```
-~/personal/blog  [personal] ❯
-~/work/api       [work●] ❯
-```
-
-The segment is hidden when you're not inside a git repo. Starship uses `gitswitch current --short` instead, where the marker rides on the nickname (`work●`) because Starship renders the command output verbatim.
-
-### Starship customization
-
-The block added to `~/.config/starship.toml`:
+**Starship** — edit the block in `~/.config/starship.toml`:
 
 ```toml
 [custom.gitswitch]
@@ -90,118 +76,79 @@ style = "bold cyan"
 format = "[$symbol($output)]($style) "
 ```
 
-Edit `style` to change the color, or `symbol` to add an icon.
+`style` for color, `symbol` for an icon.
 
-### oh-my-zsh customization
+**oh-my-zsh / plain shells** — edit the `__gitswitch_prompt` function in the gitswitch block. Note that re-running `install` replaces that block, so keep changes you want to survive an upgrade somewhere else in the file.
 
-Edit the `__gitswitch_prompt` function in the gitswitch block of your `~/.zshrc` directly.
+## The nudge
 
-Re-running `gitswitch install` replaces that block with a fresh one, so keep customizations elsewhere in the file if you want them to survive an upgrade.
-
-## Identity nudge
-
-When you `cd` into a git repo, the shell hook runs `gitswitch recommend`. If a recommendation exists (based on usage history or a pin), it prints:
+`cd` into a repo where you usually use a different account and you get one line:
 
 ```
 gitswitch: this repo usually uses work <alice@company.com> — switch? [y/N]
 ```
 
-Press `y` to switch immediately, or `n` / `Enter` to skip. The nudge does not block your prompt.
+`y` switches, `n` or Enter carries on. It never blocks your prompt, and it defaults to no.
 
-See [Identity Awareness](/docs/features/identity-awareness) for details on how recommendations are learned.
+Pinned repos are never nudged — they already commit correctly. How the "usually" is worked out: [Identity Awareness](/docs/features/identity-awareness).
+
+## The `gs` alias
+
+Because you'll type this a lot:
+
+```bash
+gs              # same as gitswitch
+gs work
+gs current
+```
+
+Installed with the shell integration. In the TUI's **Settings** tab you can rename it (`e`) or turn it off (`enter`) — either one reinstalls the shell block in place so it takes effect on your next shell reload.
 
 ## Tab completion
 
-After installation, tab completion is active for all `gitswitch` commands and your profile nicknames:
+Commands and your own account nicknames:
 
 ```
 $ gitswitch <Tab>
-add       claude    current   init      install   list      pin       record    recommend remove    switch    uninstall unpin     upgrade   version
-
-$ gitswitch sw<Tab>
-switch
+add  beta  claude  current  doctor  init  install  list  login  pacman  pin
+reauthor  record  recommend  remove  setup  stable  switch  uninstall  unpin
+upgrade  version
 
 $ gitswitch w<Tab>
 work
 ```
 
-## Uninstall
+Needs zsh 5.0+, bash 4.0+, or fish 3.0+. The installed block sources it from `gitswitch completion <shell>`, which you can also wire up yourself if you manage your rc file some other way.
 
-To remove all shell integration written by `gitswitch install`:
+## Uninstall
 
 ```bash
 gitswitch uninstall
 ```
 
-This removes the marker block from your rc file (or the oh-my-zsh plugin file), unregisters the HTTPS credential helper, and removes the `gh` CLI wrapper — all if they were installed. Reload your shell to complete removal.
-
-## Session Isolation
-
-`gh` (the GitHub CLI) only tracks one "active" account for your whole machine. If you switch identities in one terminal, every other terminal's bare `gh` commands (`gh pr create`, `gh issue list`, ...) silently start using that account too.
-
-Toggle "Session Isolation" on in the TUI's Utilities tab to fix this: it adds a `gh` shell function (its own marker block, independent of the rest of shell integration) that resolves the right account for your current repo before every `gh` call and passes it via `GH_TOKEN` for just that one command — the same resolution the HTTPS credential helper uses, so pushes and `gh` commands always agree. gh's global active-account file is never touched, so concurrent terminals never fight over it.
-
-Session Isolation also gates [repo pins](identity-awareness.md#pin-a-repo) — a pin only takes effect while it's on. `gitswitch install` turns it on by default; `gitswitch pin` turns it on automatically the first time you pin a repo if it was off.
-
-`gitswitch doctor` reports whether it's active. Reload your shell (or open a new terminal) after toggling.
-
-## How the HTTPS credential helper is registered
-
-Worth knowing if you also use `gh`, because git's rules here are surprising.
-
-Git does not pick *one* credential helper. For a given URL it collects the values of `credential.helper` **and** every matching `credential.<host>.helper` into a single list, in the order they appear in your config files, then asks each one in turn until one returns a username and password. Two consequences:
-
-- A host-specific entry does **not** override the generic one — it just joins the same list.
-- A helper set to the **empty string** discards everything collected before it. `gh auth setup-git` writes exactly that, followed by its own helper, which is how it removes your keychain helper for github.com.
-
-So gitswitch cannot simply add itself to `credential.helper`: `gh`'s empty entry would erase it. Instead `gitswitch install` makes gitswitch the first *live* entry in every helper list it finds, leaving everything else — including `gh`'s helper and your keychain — in place behind it:
-
-```
-[credential "https://github.com"]
-	helper =                                     # gh's reset, preserved
-	helper = !gitswitch credential               # gitswitch answers first
-	helper = !/opt/homebrew/bin/gh auth git-credential   # fallback, untouched
-```
-
-gitswitch stays silent for any host or repo it cannot serve, so git falls straight through to the next helper. Nothing is removed, and `gitswitch uninstall` takes only gitswitch's own lines back out.
-
-**Re-running `gh auth setup-git` (or an interactive `gh auth login`) undoes this.** gh rewrites that whole key with `--replace-all`, which drops gitswitch's line along with anything else there. `gitswitch doctor` detects it and names the helper answering ahead of gitswitch; `gitswitch install` puts things back.
-
-Check the current state any time with:
-
-```bash
-gitswitch doctor
-```
+Removes the marker block from your rc file (or the oh-my-zsh plugin), unregisters the HTTPS credential helper, and removes the `gh` wrapper — whichever of those were installed. Reload your shell to finish.
 
 ## Troubleshooting
 
-**Prompt segment not appearing**
+**No prompt segment**
 
-- Confirm `gitswitch install` completed without errors
-- Reload your shell or open a new terminal
-- Confirm you're inside a git repo: `git rev-parse --git-dir`
-- Test manually: `gitswitch current --short`
+- Are you in a git repo? It hides outside one on purpose.
+- Did you reload your shell?
+- Does `gitswitch current --short` print anything?
+- On Starship? Check `~/.config/starship.toml`, not your rc file.
 
-**Nudges not appearing**
+**No nudges**
 
-- Shell integration must be installed: `gitswitch install`
-- The identity threshold needs ≥ 3 visits with ≥ 60% consistency before a nudge fires
-- Check history: `cat ~/.config/gitswitch/history.json`
+The threshold is ≥ 3 visits with ≥ 60% consistency before a nudge fires. `gitswitch recommend` shows what it would say right now.
 
 **Completion not working**
 
-Verify the shell version:
+Check your shell version against the minimums above, then re-run `gitswitch install` and reload.
 
-```bash
-zsh --version   # 5.0 or later
-bash --version  # 4.0 or later
-fish --version  # 3.0 or later
-```
+More in [Troubleshooting](/docs/troubleshooting).
 
-Reinstall if needed: `gitswitch install`
+## Next
 
-## Next steps
-
-- [Identity Awareness](/docs/features/identity-awareness)
-- [Quick Start](/docs/quick-start)
-- [CLI Reference](/docs/cli/commands)
+- **[Identity Awareness](/docs/features/identity-awareness)** — pins, learning, nudges
+- **[HTTPS Push Routing](/docs/features/https)** — the credential helper step
+- **[Session Isolation](/docs/features/session-isolation)** — the `gh` wrapper step

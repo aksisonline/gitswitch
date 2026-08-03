@@ -1,97 +1,104 @@
 ---
 title: Open Source + Work
-description: Separate git identities for day-job and personal open source contributions
+description: A company account and a public one, kept strictly apart
 ---
 
-Setup: 2 GitHub accounts — `alice-work` for the company and `alice` for personal/OSS.
+Two accounts: `alice-corp` for the day job, `alice` for your own open source. The stakes here are slightly different from the other setups — you really don't want a company email in a public commit log, or a personal account opening a PR on an internal repo.
 
-No SSH keys to generate, no keys to paste into GitHub's settings page, no manual git config. gitswitch handles all of it.
-
-## 1. One-time setup
+## Set up
 
 ```bash
-gitswitch install   # shell integration, HTTPS routing, Session Isolation — all on by default
+gitswitch install
 ```
-
-## 2. Connect both accounts
 
 ```bash
-gitswitch login   # opens GitHub in your browser, log in as alice-work
-gitswitch login   # run again, log in as alice this time
+gitswitch login --profile work    # log in as alice-corp
+gitswitch login --profile oss     # run again, log in as alice
 ```
 
-Each run creates a profile automatically — name, email, and a securely stored token, no typing required. Rename them if you want friendlier nicknames:
+Both accounts should also be logged in to `gh` (`gh auth status`) — that's where push tokens come from.
+
+## Claim your repos
 
 ```bash
-gitswitch list
-gitswitch add work "Alice Smith" alice@company.com --gh-user alice-work   # only if you'd rather set it up by hand
+cd ~/work/internal-api   && gitswitch pin work
+cd ~/projects/my-library && gitswitch pin oss
 ```
 
-## 3. Pin repos
+The identity now lives in each repo's own git config, so it holds even when you switch globally for something else — and even when an AI agent commits without asking you first.
+
+## Every day
 
 ```bash
 cd ~/work/internal-api
-gitswitch pin work
-
-cd ~/projects/my-library
-gitswitch pin oss
-```
-
-That's it. From here, every commit, push, and `gh` call in these repos just uses the right account — nothing left to remember.
-
-## Daily workflow
-
-```bash
-cd ~/work/internal-api
-# nudge: "this repo usually uses work — switch? [y/N]"  — only shows up if you didn't pin
-
 git commit -m "Fix critical bug"
 git push origin fix/critical-bug
-# committed and pushed as alice-work, no thinking required
+# alice-corp, always
 ```
 
 ```bash
 cd ~/projects/my-library
 git commit -m "Add feature"
 git push origin add-feature
-# committed and pushed as alice, automatically
+# alice, always
 ```
 
-`gh` follows along too — with [Session Isolation](/docs/features/shell#session-isolation) on (the default), `gh pr create`, `gh issue list`, etc. always resolve to whichever account owns the repo you're in.
+`gh` comes along for the ride — with [Session Isolation](/docs/features/session-isolation) on (the default), `gh pr create` and `gh issue list` resolve to whichever account owns the repo you're in, so you can review a work PR and triage an OSS issue in two terminals at once.
 
-## Verify correct attribution
+## Contributing to a public repo you don't own
+
+```bash
+git clone https://github.com/someone/cool-project.git
+cd cool-project
+gitswitch pin oss
+```
+
+Pin *before* your first commit and there's nothing to clean up later.
+
+## Signed commits for the public account
+
+Many OSS projects want verified commits. If you have an SSH key, you already have a signing key:
+
+```bash
+gitswitch add oss "Alice" alice@users.noreply.github.com \
+  --sign-key ~/.ssh/id_ed25519.pub --gh-user alice
+git config --global commit.gpgsign true
+```
+
+Register it on GitHub as a **Signing Key** (a separate entry from an authentication key, even for the same key). Full detail: [Commit Signing](/docs/features/gpg).
+
+> Using GitHub's `@users.noreply.github.com` address for public commits keeps your real email out of a permanent public log while still linking commits to your account.
+
+## Company email in a public commit log
+
+Fix it before anyone notices:
+
+```bash
+gitswitch reauthor 3 --to oss --from alice@company.com --push
+```
+
+Only the commits authored by the work email get rewritten. This rewrites history, so if the branch has contributors on it, say something first — and if it's already merged upstream, that ship has sailed; the fix is to pin the repo so it stops recurring.
+
+## Verify before you push
 
 ```bash
 gitswitch current
-# oss — Alice <alice@github.com>  (pinned to this repo)
-```
+# oss — Alice <alice@users.noreply.github.com>  (pinned to this repo)
 
-## Fixed a commit with the wrong identity?
-
-Not pushed yet:
-
-```bash
-gitswitch oss
-git commit --amend --reset-author --no-edit
-```
-
-Already pushed — rewrite it in one command instead of hand-rolling a rebase:
-
-```bash
-gitswitch reauthor 3 --to oss --push
-# rewrites the last 3 commits to the 'oss' identity and force-pushes safely
+git log -1 --format="%an <%ae>"
 ```
 
 ## Prefer SSH over HTTPS?
 
-Optional — HTTPS (the default) needs nothing from you. If you'd rather use SSH keys you already manage yourself, point a profile at one:
+Optional — HTTPS is the default and needs nothing from you:
 
 ```bash
-gitswitch add work "Alice Smith" alice@company.com --ssh-key ~/.ssh/id_work --gh-user alice-work
+gitswitch add work "Alice Smith" alice@company.com \
+  --ssh-key ~/.ssh/id_work --gh-user alice-corp
 ```
 
-## Next steps
+## Next
 
-- [Multi-account GitHub](/docs/scenarios/multi-github)
-- [Multi-client Freelancer](/docs/scenarios/freelancer)
-- [GitHub Account Sync](/docs/features/github-sync)
+- **[Two GitHub Accounts](/docs/scenarios/multi-github)**
+- **[AI Coding Agents](/docs/features/ai-agents)** — agents are the main way this goes wrong now
+- **[Commit Signing](/docs/features/gpg)**

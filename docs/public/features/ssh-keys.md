@@ -1,52 +1,52 @@
 ---
-title: SSH Key Management
-description: How gitswitch forces a specific SSH key per profile
+title: SSH Keys
+description: Force exactly the right key per account — no more agent roulette
 ---
 
-This page covers how SSH key switching works and how to set it up.
+By default, SSH offers your agent's keys one after another until something works. If two of your GitHub accounts each have a key loaded, "works" and "the one you meant" are not the same thing. That's how a push lands on the wrong account.
+
+gitswitch pins it down.
 
 ## What it sets
 
-When you switch to a profile that has an SSH key, gitswitch runs:
+Switching to an account with an SSH key writes:
 
 ```bash
 git config --global core.sshCommand "ssh -i ~/.ssh/id_work -o IdentitiesOnly=yes"
 ```
 
-`-o IdentitiesOnly=yes` tells SSH not to offer any other keys from your agent. Every `git push`, `git pull`, and `git fetch` uses exactly that key.
+`IdentitiesOnly=yes` is the whole trick: SSH will offer *only* the key named with `-i`, and nothing from the agent. Every `push`, `pull`, and `fetch` uses exactly that key.
 
-## Add a profile with an SSH key
+Switching to an account **without** an SSH key unsets `core.sshCommand`, so the previous account's key never lingers.
+
+## Point an account at a key
 
 ```bash
-gitswitch add work "Alice Smith" alice@company.com \
-  --ssh-key ~/.ssh/id_work
+gitswitch add work "Alice Smith" alice@company.com --ssh-key ~/.ssh/id_work
 ```
 
-The value passed to `--ssh-key` is stored as-is and expanded at switch time. Tilde (`~`) and `$HOME` both expand to your home directory.
+Or add it to an existing account in the TUI (`e` to edit). The path is stored as you typed it and expanded when applied — `~` and `$HOME` both work.
 
-## Generate a new SSH key
+## Don't have a key yet?
+
+You may not need one. `gitswitch login` + [HTTPS routing](/docs/features/https) covers pushing without any key management at all. If you'd still rather use SSH:
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/id_work -C "alice@company.com"
-```
-
-Add the public key to the service:
-
-```bash
 cat ~/.ssh/id_work.pub
-# Paste this into GitHub → Settings → SSH and GPG keys → New SSH key
+# paste into GitHub → Settings → SSH and GPG keys → New SSH key
 ```
 
-Test it:
+Check it:
 
 ```bash
 ssh -i ~/.ssh/id_work -T git@github.com
-# Hi alice-work! You've successfully authenticated, but GitHub does not provide shell access.
+# Hi alice-corp! You've successfully authenticated...
 ```
 
-## Verify the active SSH key
+That greeting names the account GitHub thinks you are. Very useful when something's off.
 
-After switching:
+## Verify what's active
 
 ```bash
 gitswitch work
@@ -54,69 +54,61 @@ git config --global core.sshCommand
 # ssh -i /Users/alice/.ssh/id_work -o IdentitiesOnly=yes
 ```
 
-## SSH keys with passphrases
+## Keys with passphrases
 
-gitswitch does not cache passphrases — it only sets `core.sshCommand`. If your key has a passphrase, add it to your SSH agent so git can use it without prompting:
+gitswitch doesn't cache passphrases — it only sets `core.sshCommand`. Put the key in your agent so git doesn't prompt:
 
 ```bash
 ssh-add ~/.ssh/id_work
 ```
 
-The `-o IdentitiesOnly=yes` flag is compatible with agent-provided keys: SSH will use the agent for decryption but still only offer the key specified with `-i`.
+`IdentitiesOnly=yes` still works with an agent-held key: the agent does the crypto, but only the `-i` key is offered.
 
-## Multiple keys for multiple GitHub accounts
+## One key per account
 
 ```bash
-gitswitch add personal "Alice" alice@gmail.com --ssh-key ~/.ssh/id_personal
-gitswitch add work "Alice" alice@company.com --ssh-key ~/.ssh/id_work
+gitswitch add personal "Alice" alice@gmail.com  --ssh-key ~/.ssh/id_personal
+gitswitch add work     "Alice" alice@company.com --ssh-key ~/.ssh/id_work
 ```
 
-GitHub identifies accounts by which SSH key authenticates. With `IdentitiesOnly=yes`, the correct key is always used — no cross-account authentication surprises.
+GitHub identifies you by which key authenticates, so with `IdentitiesOnly` on, the right account is guaranteed rather than probable.
 
-## Per-repo SSH key override
-
-If you need a different key for one repo without switching your global profile:
+## A different key for one repo only
 
 ```bash
 cd ~/special-repo
-git config --local core.sshCommand "ssh -i ~/.ssh/id_special -o IdentitiesOnly=yes"
+gitswitch pin work    # applies work's key (and identity) to this repo alone
 ```
 
-Local config takes priority over global.
+Or by hand, if the key doesn't belong to any account:
+
+```bash
+git config --local core.sshCommand "ssh -i ~/.ssh/id_special -o IdentitiesOnly=yes"
+```
 
 ## Troubleshooting
 
 **`Permission denied (publickey)`**
 
 ```bash
-# Verify the key path is correct
-git config --global core.sshCommand
-
-# Test the key directly
-ssh -i ~/.ssh/id_work -T git@github.com
-
-# If the key has a passphrase, ensure it's in the agent
-ssh-add -l  # list loaded keys
-ssh-add ~/.ssh/id_work
+git config --global core.sshCommand      # is the path right?
+ssh -i ~/.ssh/id_work -T git@github.com  # does the key work at all?
+ssh-add -l                               # is a passphrase-protected key loaded?
 ```
 
-**Slow authentication**
+**Authentication feels slow, or picks the wrong account**
 
-If SSH tries multiple keys before succeeding, `IdentitiesOnly=yes` is not set:
+That's SSH trying keys in turn, which means `IdentitiesOnly=yes` isn't in play:
 
 ```bash
 git config --global core.sshCommand
-# Must contain: -o IdentitiesOnly=yes
+# must contain: -o IdentitiesOnly=yes
 ```
 
-If it's missing, re-switch the profile:
+Re-switch the account (`gitswitch work`) to rewrite it. If the repo is pinned, `gitswitch pin work` again.
 
-```bash
-gitswitch work
-```
+## Next
 
-## Next steps
-
-- [GPG Signing](/docs/features/gpg)
-- [GitHub Account Sync](/docs/features/github-sync)
-- [Identity Awareness](/docs/features/identity-awareness)
+- **[Commit Signing](/docs/features/gpg)** — you can sign with an SSH key too
+- **[HTTPS Push Routing](/docs/features/https)** — the no-keys-at-all alternative
+- **[Troubleshooting](/docs/troubleshooting)**

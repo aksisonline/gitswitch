@@ -1,98 +1,111 @@
 ---
-title: Commit Identity Switching
-description: How gitswitch switches git commit attribution
+title: Commit Identity
+description: What a switch actually writes, and how git decides who you are
 ---
 
-This page covers what switching does to your git config and how git resolves identity when both local and global config exist.
-
-## What switching sets
-
-Every profile switch — whether via `gitswitch <nickname>`, `gitswitch switch <nickname>`, or the TUI — runs these commands in order:
+## Switching
 
 ```bash
-git config --global user.name "<name>"
-git config --global user.email "<email>"
-git config --global user.signingkey "<key>"     # only if profile has sign-key
-git config --global gpg.format ssh              # only if that key is an SSH key
-git config --global core.sshCommand "ssh -i <path> -o IdentitiesOnly=yes"  # only if profile has ssh-key
-```
-
-These are `--global` writes to `~/.gitconfig`. They apply to every repo on your machine until you switch again — except repos you [pinned](/docs/features/identity-awareness#pin-a-repo), which keep their own identity in their local config and ignore the global one.
-
-## Quick switch
-
-```bash
-gitswitch work
+gitswitch work          # or: gitswitch switch work, or enter in the TUI
 ```
 
 ```
 ✓ Switched to 'work' — Alice Smith <alice@company.com>
 ```
 
-## Check what's active
+That writes, in order:
+
+```bash
+git config --global user.name    "Alice Smith"
+git config --global user.email   "alice@company.com"
+git config --global user.signingkey "<key>"    # if the account has one
+git config --global gpg.format   ssh           # only when that key is an SSH key
+git config --global core.sshCommand "ssh -i <path> -o IdentitiesOnly=yes"   # if it has an SSH key
+gh auth switch --user alice-corp               # if it has a GitHub username
+```
+
+Two things worth knowing:
+
+- **Accounts without a key clear that setting.** Switching to an account with no signing key unsets `user.signingkey` *and* `gpg.format`; no SSH key unsets `core.sshCommand`. So one account's setup never leaks into the next one.
+- **The `gh` step is best-effort.** If `gh` isn't installed or that account isn't logged in, you get a warning and the git config still switches correctly:
+
+```
+warning: gh auth switch --user alice-corp: exec: "gh": executable file not found in $PATH
+✓ Switched to 'work' — Alice Smith <alice@company.com>
+```
+
+## Who am I right now?
 
 ```bash
 gitswitch current
 ```
 
 ```
-work — Alice Smith <alice@company.com>
+work — Alice Smith <alice@company.com>  (pinned to this repo)
+HTTPS credential helper: active
 ```
 
-Or inspect git config directly:
+The parenthetical is the important part — see [Scopes](/docs/concepts/scopes). For scripts:
+
+```bash
+gitswitch current --json
+```
+
+Or ask git directly:
 
 ```bash
 git config --global user.name
 git config --global user.email
 ```
 
-## Git's identity resolution order
+## How git decides
 
-Git checks identity in this order, stopping at the first match:
+Narrowest scope wins:
 
-1. Repo-local config (`git config --local user.email`) — set per-repo, never touched by gitswitch
-2. Global config (`~/.gitconfig`) — gitswitch writes here
-3. System config (`/etc/gitconfig`)
+1. `GIT_CONFIG_*` environment variables — this terminal only
+2. The repo's own `.git/config` — where [pins](/docs/features/identity-awareness#pin-a-repo) live
+3. `~/.gitconfig` — where a plain `gitswitch <name>` writes
+4. `/etc/gitconfig` — system-wide
 
-If a repo has a local override, gitswitch's global switch has no effect on that repo.
+So a pinned repo ignores your global identity entirely. That's the point of pinning.
 
-## Verify commits are attributed correctly
-
-Check the author of a recent commit:
+## Check what a commit says
 
 ```bash
 git log -1 --format="%an <%ae>"
 ```
 
-Before pushing, if you suspect the wrong identity was used:
+## Fixing a wrong one
+
+Not pushed yet:
 
 ```bash
-# Check what identity was active
-gitswitch current
-
-# If wrong, switch and amend the last commit before pushing
 gitswitch work
 git commit --amend --reset-author --no-edit
 ```
 
-> **Tip:** Once pushed, commit attribution is permanent. Use [shell integration](/docs/features/shell) to get nudged when entering repos that usually use a different identity.
-
-For more than one wrong commit — the common case when an AI coding agent has been committing under the wrong identity — use `gitswitch reauthor` instead of amending one commit at a time. See [AI Coding Agents](/docs/features/ai-agents).
-
-## Remove a local override
-
-If commits in a repo are using a per-repo identity you set manually:
+More than one commit, or already pushed:
 
 ```bash
-git config --local --unset user.email
-git config --local --unset user.name
+gitswitch reauthor 3 --to work --push
 ```
 
-After this, the global config (managed by gitswitch) takes effect.
+One command instead of a hand-rolled interactive rebase. Full reference in [AI Coding Agents](/docs/features/ai-agents) — it's the same tool whether a human or an agent made the mess.
 
-## Next steps
+> Once pushed, attribution is permanent unless you rewrite history. Cheaper to prevent: [pin the repo](/docs/features/identity-awareness#pin-a-repo), or let the [shell nudge](/docs/features/shell#the-nudge) catch you on the way in.
 
-- [SSH Keys](/docs/features/ssh-keys)
-- [GPG Signing](/docs/features/gpg)
-- [Identity Awareness](/docs/features/identity-awareness)
-- [AI Coding Agents](/docs/features/ai-agents)
+## Removing a per-repo identity
+
+If a repo has its own identity you no longer want:
+
+```bash
+gitswitch unpin
+```
+
+That clears `user.name`, `user.email`, `user.signingkey`, `gpg.format`, and `core.sshCommand` from the repo's local config, and it falls back to your global identity. (The by-hand equivalent is `git config --local --unset user.email`, five times over.)
+
+## Next
+
+- **[Scopes](/docs/concepts/scopes)** — global vs. repo vs. terminal
+- **[SSH Keys](/docs/features/ssh-keys)** — forcing the right key
+- **[Commit Signing](/docs/features/gpg)** — GPG or SSH signing per account

@@ -292,7 +292,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor--
 				}
 			case 1:
-				m.utilityFocus = (m.utilityFocus + 2) % 3
+				m.utilityFocus = (m.utilityFocus + 3) % 4
 			case 2:
 				if m.settingsFocus > 0 {
 					m.settingsFocus--
@@ -307,7 +307,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor++
 				}
 			case 1:
-				m.utilityFocus = (m.utilityFocus + 1) % 3
+				m.utilityFocus = (m.utilityFocus + 1) % 4
 			case 2:
 				if m.settingsFocus < 2 {
 					m.settingsFocus++
@@ -337,6 +337,17 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				if m.utilityFocus == 2 {
 					return m, m.toggleCredentialHelperCmd()
+				}
+				if m.utilityFocus == 3 {
+					m.autoPinDisabled = !m.autoPinDisabled
+					_ = m.savePrefs()
+					if m.autoPinDisabled {
+						m.statusMsg = "auto-pin disabled"
+					} else {
+						m.statusMsg = "auto-pin enabled"
+					}
+					m.statusIsErr = false
+					return m, nil
 				}
 			case 2: // Settings
 				if m.settingsFocus == 0 {
@@ -1090,7 +1101,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				m.cursor = idx
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff, 2); ok {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 3); ok {
 				m.utilityFocus = idx
 			}
 		case 2:
@@ -1271,7 +1282,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				return m, m.switchProfileCmd(m.profiles[idx])
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff, 2); ok {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 3); ok {
 				m.utilityFocus = idx
 				switch idx {
 				case 0:
@@ -1280,6 +1291,15 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 					return m, m.toggleGHWrapperCmd()
 				case 2:
 					return m, m.toggleCredentialHelperCmd()
+				case 3:
+					m.autoPinDisabled = !m.autoPinDisabled
+					_ = m.savePrefs()
+					if m.autoPinDisabled {
+						m.statusMsg = "auto-pin disabled"
+					} else {
+						m.statusMsg = "auto-pin enabled"
+					}
+					m.statusIsErr = false
 				}
 			}
 		case 2:
