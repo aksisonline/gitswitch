@@ -776,7 +776,7 @@ func (m Model) switchProfileCmd(p storage.Profile) tea.Cmd {
 }
 
 // toggleCredentialHelperCmd installs or removes the HTTPS credential helper,
-// mirroring `gitswitch install`/`uninstall --https`. Toggle direction is
+// mirroring `gitswitch shell`/`uninstall --https`. Toggle direction is
 // decided by current state so it behaves like the other Utilities toggles: one
 // key/click, no confirm dialog (unlike shell integration, this never touches an
 // rc file or requires a shell reload).
@@ -797,7 +797,7 @@ func (m Model) toggleCredentialHelperCmd() tea.Cmd {
 }
 
 // toggleGHWrapperCmd installs or removes the `gh` CLI wrapper function,
-// mirroring `gitswitch install`/`uninstall`'s gh-wrapper handling. Unlike the
+// mirroring `gitswitch shell`/`uninstall`'s gh-wrapper handling. Unlike the
 // credential helper, this writes to the shell rc file, so — like shell
 // integration — it needs a reload to take effect.
 func (m Model) toggleGHWrapperCmd() tea.Cmd {

@@ -125,5 +125,5 @@ Re-switch the account to rewrite them as a pair.
 
 ## Next
 
-- **[SSH Keys](/docs/features/ssh-keys)** — the authentication half
-- **[Commit Identity](/docs/features/commit-identity)** — everything a switch writes
+- **[SSH Keys](/docs/accounts/ssh-keys)** — the authentication half
+- **[Commit Identity](/docs/accounts/commit-identity)** — everything a switch writes

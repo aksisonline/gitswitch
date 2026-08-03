@@ -9,26 +9,29 @@ Two commands exist for exactly this.
 
 ## Prevention: pin your repos
 
-Boring answer, best answer. A [pinned repo](/docs/features/identity-awareness#pin-a-repo) writes the identity into the repo's own git config, so an agent doesn't have to know anything — git itself uses the right account:
+Boring answer, best answer. A [pinned repo](/docs/routing/identity-awareness#pin-a-repo) writes the identity into the repo's own git config, so an agent doesn't have to know anything — git itself uses the right account:
 
 ```bash
 gitswitch pin work
 ```
 
-## `gitswitch claude` — teach Claude Code about this
+## `gitswitch skills` — teach your agent about this
 
 ```bash
-gitswitch claude
+gitswitch skills
 ```
 
-Installs the gitswitch skill into Claude Code. After that, saying "I'm committing as the wrong account" gets you an actual fix instead of a hand-edited `git config`. The skill is embedded in the binary — no download, always matching your installed version.
+Installs the gitswitch skill for whichever AI coding agent you're using. Tries [skills.sh](https://www.skills.sh) first (`npx skills add aksisonline/gitswitch`), which places it correctly for Claude Code, Cursor, Codex, and anything else that speaks the Agent Skills format — gitswitch doesn't need to know each tool's own layout. No network, or no `npx`? It falls back to installing directly for Claude Code (`~/.claude/skills/`) and the shared `.agents/skills/` convention (Codex and others).
+
+After that, saying "I'm committing as the wrong account" gets you an actual fix instead of a hand-edited `git config`. The skill is embedded in the binary — no download, always matching your installed version.
 
 | Flag | |
 |---|---|
-| `--scope user` | `~/.claude/skills/gitswitch/` — every project (default) |
-| `--scope project` | `.claude/skills/gitswitch/` — this project only |
+| `--scope user` | `~/.claude/skills/gitswitch/`, `~/.agents/skills/gitswitch/` — every project (default) |
+| `--scope project` | `.claude/skills/gitswitch/`, `.agents/skills/gitswitch/` — this project only |
+| `--offline` | Skip the skills.sh attempt, go straight to the offline installer |
 
-Reload Claude Code (or start a new session) afterwards.
+Reload your agent (or start a new session) afterwards.
 
 ## `gitswitch reauthor` — fix commits that already exist
 
@@ -60,8 +63,7 @@ Every state-reading command speaks JSON, so an agent never has to parse prose:
 ```bash
 gitswitch current --json    # who am I here, and why (scope: global | repo | session)
 gitswitch list --json       # all accounts
-gitswitch doctor --json     # is git/gh present, is HTTPS routed, is isolation on
-gitswitch setup --agent     # a one-shot manifest: version, account count, git/gh state
+gitswitch doctor --json     # a one-shot manifest: version, profile count, git/gh state, is HTTPS routed, is isolation on
 ```
 
 ```json
@@ -95,6 +97,6 @@ If you launch an agent from a terminal with `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_0
 
 ## Next
 
-- **[Pins & Identity Awareness](/docs/features/identity-awareness)** — the prevention half
-- **[Scopes](/docs/concepts/scopes)** — global, repo, session
+- **[Pins & Identity Awareness](/docs/routing/identity-awareness)** — the prevention half
+- **[Scopes](/docs/accounts/scopes)** — global, repo, session
 - **[CLI Reference](/docs/cli/commands)** — all flags

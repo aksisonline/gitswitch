@@ -81,9 +81,9 @@ gitswitch add work "Alice Smith" alice@company.com \
 
 | Flag | |
 |---|---|
-| `--ssh-key <path>` | Private key to force for this account — see [SSH Keys](/docs/features/ssh-keys) |
-| `--sign-key <key>` | GPG key ID *or* an SSH key for SSH signing — see [Commit Signing](/docs/features/gpg) |
-| `--gh-user <username>` | GitHub username, for `gh` and push routing — see [GitHub Account Sync](/docs/features/github-sync) |
+| `--ssh-key <path>` | Private key to force for this account — see [SSH Keys](/docs/accounts/ssh-keys) |
+| `--sign-key <key>` | GPG key ID *or* an SSH key for SSH signing — see [Commit Signing](/docs/accounts/gpg) |
+| `--gh-user <username>` | GitHub username, for `gh` and push routing — see [GitHub Account Sync](/docs/routing/github-sync) |
 
 ## Where your tokens live
 
@@ -135,6 +135,6 @@ gitswitch init
 
 ## Next
 
-- **[Commit Identity](/docs/features/commit-identity)** — what switching writes
+- **[Commit Identity](/docs/accounts/commit-identity)** — what switching writes
 - **[Profiles reference](/docs/cli/profiles)** — every field, and the storage format
-- **[Quick Start](/docs/quick-start)** — connect, pin, done
+- **[Quick Start](/docs/get-started/quick-start)** — connect, pin, done

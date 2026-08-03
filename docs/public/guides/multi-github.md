@@ -10,7 +10,7 @@ No SSH keys to generate. No keys to paste into a settings page. No `~/.ssh/confi
 ## Set up
 
 ```bash
-gitswitch install
+gitswitch shell
 ```
 
 Say yes to all three steps (they're the defaults), then reload your shell.
@@ -85,7 +85,7 @@ Then pin the new clone and forget about it.
 
 ## `gh` follows along
 
-With [Session Isolation](/docs/features/session-isolation) on (the default), bare `gh` commands resolve to whichever account owns the repo you're standing in — even in two terminals at once:
+With [Session Isolation](/docs/routing/session-isolation) on (the default), bare `gh` commands resolve to whichever account owns the repo you're standing in — even in two terminals at once:
 
 ```bash
 cd ~/work/internal-api && gh pr create      # as alice-corp
@@ -121,7 +121,7 @@ Then pin the repo so it can't happen twice. If someone else has already pulled t
 
 ## Lots of repos?
 
-Organise by account and pin as you go — the [learning](/docs/features/identity-awareness) covers the ones you haven't got to yet:
+Organise by account and pin as you go — the [learning](/docs/routing/identity-awareness) covers the ones you haven't got to yet:
 
 ```
 ~/github/
@@ -138,10 +138,10 @@ gitswitch add personal "Alice" alice@gmail.com \
   --ssh-key ~/.ssh/id_personal --gh-user alice
 ```
 
-See [SSH Keys](/docs/features/ssh-keys).
+See [SSH Keys](/docs/accounts/ssh-keys).
 
 ## Next
 
-- **[Open Source + Work](/docs/scenarios/oss)** — when one account is a company account
-- **[Multi-client Freelancer](/docs/scenarios/freelancer)** — three or more accounts
-- **[Pins & Identity Awareness](/docs/features/identity-awareness)**
+- **[Open Source + Work](/docs/guides/oss)** — when one account is a company account
+- **[Multi-client Freelancer](/docs/guides/freelancer)** — three or more accounts
+- **[Pins & Identity Awareness](/docs/routing/identity-awareness)**

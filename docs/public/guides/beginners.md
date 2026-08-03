@@ -21,10 +21,10 @@ Four commands, one of which asks you to copy a public key into a web form by han
 ## What gitswitch does instead
 
 ```bash
-gitswitch setup
+gitswitch
 ```
 
-Checks whether `git` and the GitHub CLI (`gh`) are on your machine. If either is missing, it shows you the exact install command and offers to run it for you:
+The first time you run it on a machine with no profiles yet, it checks whether `git` and the GitHub CLI (`gh`) are on your machine before anything else. If either is missing, it shows you the exact install command and offers to run it for you:
 
 ```
 ✗  git not found
@@ -53,10 +53,10 @@ That's it. `git commit` and `git push` now work, correctly attributed, with no S
 
 ## You're done — but you're not stuck
 
-If you ever *do* pick up a second account (a job, a client, an open-source project you contribute to), everything here already applies — see [Multi-account GitHub](/docs/scenarios/multi-github). Nothing about starting with one account locks you out of adding a second later; there's no migration step.
+If you ever *do* pick up a second account (a job, a client, an open-source project you contribute to), everything here already applies — see [Multi-account GitHub](/docs/guides/multi-github). Nothing about starting with one account locks you out of adding a second later; there's no migration step.
 
 ## Next
 
-- **[Quick Start](/docs/quick-start)** — the full command walkthrough
-- **[Multi-account GitHub](/docs/scenarios/multi-github)** — when you add a second account
-- **[Troubleshooting](/docs/troubleshooting)** — if `gitswitch setup` can't find a package manager it recognizes
+- **[Quick Start](/docs/get-started/quick-start)** — the full command walkthrough
+- **[Multi-account GitHub](/docs/guides/multi-github)** — when you add a second account
+- **[Troubleshooting](/docs/troubleshooting)** — if gitswitch can't find a package manager it recognizes

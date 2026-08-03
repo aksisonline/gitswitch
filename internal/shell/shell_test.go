@@ -507,7 +507,7 @@ func TestHookUpdateMessage_OldFormatRevisionBumped(t *testing.T) {
 	if !strings.Contains(msg, "v1.2.3") || !strings.Contains(msg, "v1.3.0") {
 		t.Errorf("update hint missing versions: %q", msg)
 	}
-	if !strings.Contains(msg, "gitswitch install") {
+	if !strings.Contains(msg, "gitswitch shell") {
 		t.Errorf("update hint missing install command: %q", msg)
 	}
 }
@@ -536,7 +536,7 @@ func TestHookUpdateMessage_IsolationNeeded(t *testing.T) {
 	if msg == "" {
 		t.Error("expected update hint when Session Isolation is available but not installed")
 	}
-	if !strings.Contains(msg, "gitswitch install") {
+	if !strings.Contains(msg, "gitswitch shell") {
 		t.Errorf("update hint missing install command: %q", msg)
 	}
 }

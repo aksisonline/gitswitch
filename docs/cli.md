@@ -149,10 +149,10 @@ Also run automatically on first launch if no profiles exist yet.
 
 ---
 
-## `gitswitch install` — set up shell integration
+## `gitswitch shell` — set up shell integration
 
 ```bash
-gitswitch install [--shell zsh|bash|fish]
+gitswitch shell [--shell zsh|bash|fish]
 ```
 
 Installs three shell features at once:
@@ -247,24 +247,25 @@ Recommendation threshold (auto-learned, no pin): top identity has **≥3 entries
 
 ---
 
-## `gitswitch claude` — install the Claude Code skill
+## `gitswitch skills` — install the gitswitch skill for your AI agent
 
 ```bash
-gitswitch claude [--scope user|project]
+gitswitch skills [--scope user|project] [--offline]
 ```
 
-Installs the gitswitch skill into Claude Code. The skill teaches Claude to detect and fix git identity problems automatically.
+Installs the gitswitch skill, which teaches an AI agent to detect and fix git identity problems automatically. Tries [skills.sh](https://www.skills.sh) first (`npx skills add aksisonline/gitswitch`), which installs correctly for Claude Code, Cursor, Codex, and anything else that speaks the Agent Skills format. Falls back to installing directly for Claude Code and the shared `.agents/skills` convention (Codex and others) when `--offline` is passed or `npx` isn't available.
 
-The SKILL.md is embedded in the binary — no network call required, always matches your installed version.
+The SKILL.md is embedded in the binary — the offline path needs no network call, and always matches your installed version.
 
 **Flags**
 
 | Flag | Description |
 |------|-------------|
-| `--scope user` | Install to `~/.claude/skills/gitswitch/` (default — all projects) |
-| `--scope project` | Install to `.claude/skills/gitswitch/` (this project only) |
+| `--scope user` | Offline fallback installs to `~/.claude/skills/gitswitch/` and `~/.agents/skills/gitswitch/` (default — all projects) |
+| `--scope project` | Offline fallback installs to `.claude/skills/gitswitch/` and `.agents/skills/gitswitch/` (this project only) |
+| `--offline` | Skip the skills.sh attempt, go straight to the offline installer |
 
-After installing, reload Claude Code or open a new session to activate.
+After installing, reload your agent or open a new session to activate.
 
 ---
 

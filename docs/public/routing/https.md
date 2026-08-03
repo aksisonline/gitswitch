@@ -10,7 +10,7 @@ gitswitch fixes this by answering that question itself, correctly, per repo.
 ## Turn it on
 
 ```bash
-gitswitch install
+gitswitch shell
 ```
 
 It's one of the wizard steps, on by default. Or toggle **HTTPS Credential Helper** in the TUI's **Utilities** tab.
@@ -30,9 +30,9 @@ gitswitch doctor    # confirm it's actually in charge
 
 ## How it picks an account
 
-Same resolution as [Session Isolation](/docs/features/session-isolation), so pushes and `gh` commands can never disagree about who you are:
+Same resolution as [Session Isolation](/docs/routing/session-isolation), so pushes and `gh` commands can never disagree about who you are:
 
-1. Is this repo [pinned](/docs/features/identity-awareness#pin-a-repo), or does this terminal override the identity? Use that account.
+1. Is this repo [pinned](/docs/routing/identity-awareness#pin-a-repo), or does this terminal override the identity? Use that account.
 2. Otherwise, does the repo have a learned/pinned recommendation in your history? Use that.
 3. Otherwise, use your globally active account.
 
@@ -49,7 +49,7 @@ Git doesn't pick *one* credential helper. For a given URL it collects `credentia
 
 `gh auth setup-git` writes exactly that empty entry, followed by its own helper. That's how it removes your keychain helper for github.com — and it would erase gitswitch too if gitswitch just appended itself.
 
-So `gitswitch install` makes gitswitch the first *live* entry in every helper list it finds, leaving everything else in place behind it:
+So `gitswitch shell` makes gitswitch the first *live* entry in every helper list it finds, leaving everything else in place behind it:
 
 ```ini
 [credential "https://github.com"]
@@ -69,27 +69,27 @@ gh rewrites that whole key with `--replace-all`, dropping gitswitch's line along
 ```
   ✗  HTTPS pushes answered by another helper before gitswitch:
        credential.https://github.com.helper → !/opt/homebrew/bin/gh auth git-credential
-       pushes may use the wrong account — run: gitswitch install
+       pushes may use the wrong account — run: gitswitch shell
 ```
 
 ```bash
-gitswitch install    # puts gitswitch back in front, keeps gh's helper as fallback
+gitswitch shell    # puts gitswitch back in front, keeps gh's helper as fallback
 ```
 
 ## Prefer SSH?
 
-Then you don't need any of this — SSH auth is decided by the key, and gitswitch handles that separately. See [SSH Keys](/docs/features/ssh-keys). Nothing stops you using both: HTTPS for some repos, SSH for others.
+Then you don't need any of this — SSH auth is decided by the key, and gitswitch handles that separately. See [SSH Keys](/docs/accounts/ssh-keys). Nothing stops you using both: HTTPS for some repos, SSH for others.
 
 ## Turn it off
 
 ```bash
-gitswitch uninstall    # removes everything gitswitch installed
+gitswitch uninstall    # removes everything gitswitch shelled
 ```
 
 Or toggle **HTTPS Credential Helper** off in the Utilities tab.
 
 ## Next
 
-- **[Session Isolation](/docs/features/session-isolation)** — the same routing, for `gh` commands
+- **[Session Isolation](/docs/routing/session-isolation)** — the same routing, for `gh` commands
 - **[Troubleshooting](/docs/troubleshooting)** — a push still went out as the wrong account
-- **[Shell Integration](/docs/features/shell)** — everything else `gitswitch install` sets up
+- **[Shell Integration](/docs/routing/shell)** — everything else `gitswitch shell` sets up

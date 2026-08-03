@@ -87,7 +87,7 @@ A repo whose local `user.email` is *the same* as your global one is **not** trea
 
 ## Pins need Session Isolation
 
-A repo pin only actually takes effect while [Session Isolation](/docs/features/session-isolation) is on — that's the piece that keeps a repo's `gh` account and push token separate from the rest of your machine. It's on by default, and `gitswitch pin` turns it on for you the first time you pin something.
+A repo pin only actually takes effect while [Session Isolation](/docs/routing/session-isolation) is on — that's the piece that keeps a repo's `gh` account and push token separate from the rest of your machine. It's on by default, and `gitswitch pin` turns it on for you the first time you pin something.
 
 If you deliberately turned it off, gitswitch says so rather than pretending:
 
@@ -98,6 +98,6 @@ work — Alice Smith <alice@company.com>
 
 ## Next
 
-- **[Identity Awareness](/docs/features/identity-awareness)** — pins, learned habits, and nudges
-- **[Session Isolation](/docs/features/session-isolation)** — per-terminal `gh` accounts
-- **[Commit Identity](/docs/features/commit-identity)** — what a switch actually writes
+- **[Identity Awareness](/docs/routing/identity-awareness)** — pins, learned habits, and nudges
+- **[Session Isolation](/docs/routing/session-isolation)** — per-terminal `gh` accounts
+- **[Commit Identity](/docs/accounts/commit-identity)** — what a switch actually writes

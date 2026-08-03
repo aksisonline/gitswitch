@@ -8,7 +8,7 @@ Three clients, each expecting commits from a different email, plus your own pers
 ## Set up
 
 ```bash
-gitswitch install
+gitswitch shell
 ```
 
 Then one login per client:
@@ -126,6 +126,6 @@ gitswitch add clienta "Your Name" you@clienta.com --ssh-key ~/.ssh/id_clienta
 
 ## Next
 
-- **[Two GitHub Accounts](/docs/scenarios/multi-github)** — the two-account version
-- **[Pins & Identity Awareness](/docs/features/identity-awareness)**
+- **[Two GitHub Accounts](/docs/guides/multi-github)** — the two-account version
+- **[Pins & Identity Awareness](/docs/routing/identity-awareness)**
 - **[Troubleshooting](/docs/troubleshooting)**

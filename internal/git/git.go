@@ -460,7 +460,7 @@ func helperChainWithGitswitchFirst(values []string) []string {
 // IsCredentialHelperInstalled reports whether gitswitch will actually be
 // consulted first. False when another tool's URL-scoped helper shadows us, since
 // a registration that never gets asked is not an installation — that answer is
-// what makes `gitswitch install` offer to repair it.
+// what makes `gitswitch shell` offer to repair it.
 func IsCredentialHelperInstalled() bool {
 	for _, key := range credentialHelperKeys() {
 		chain := credentialHelperChain(key)

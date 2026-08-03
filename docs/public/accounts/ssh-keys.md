@@ -29,7 +29,7 @@ Or add it to an existing account in the TUI (`e` to edit). The path is stored as
 
 ## Don't have a key yet?
 
-You may not need one. `gitswitch login` + [HTTPS routing](/docs/features/https) covers pushing without any key management at all. If you'd still rather use SSH:
+You may not need one. `gitswitch login` + [HTTPS routing](/docs/routing/https) covers pushing without any key management at all. If you'd still rather use SSH:
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/id_work -C "alice@company.com"
@@ -109,6 +109,6 @@ Re-switch the account (`gitswitch work`) to rewrite it. If the repo is pinned, `
 
 ## Next
 
-- **[Commit Signing](/docs/features/gpg)** — you can sign with an SSH key too
-- **[HTTPS Push Routing](/docs/features/https)** — the no-keys-at-all alternative
+- **[Commit Signing](/docs/accounts/gpg)** — you can sign with an SSH key too
+- **[HTTPS Push Routing](/docs/routing/https)** — the no-keys-at-all alternative
 - **[Troubleshooting](/docs/troubleshooting)**

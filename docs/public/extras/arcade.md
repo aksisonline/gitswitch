@@ -31,7 +31,7 @@ The factory high score is **5000** — deliberately beatable. Your high score pe
 
 ## The markers change too
 
-The [scope markers](/docs/concepts/scopes) get arcade counterparts:
+The [scope markers](/docs/accounts/scopes) get arcade counterparts:
 
 | Normal | Arcade | Meaning |
 |---|---|---|
@@ -50,5 +50,5 @@ Your choice is saved. `Matrix` is exactly what you think it is.
 
 ## Next
 
-- **[Quick Start](/docs/quick-start)** — back to work
+- **[Quick Start](/docs/get-started/quick-start)** — back to work
 - **[Configuration](/docs/cli/config)** — where the score and theme live on disk

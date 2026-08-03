@@ -5,13 +5,12 @@ description: gitswitch keeps every commit and every push on the right account �
 
 **Every commit goes out as the right you. Automatically.**
 
-New to git entirely? Skip the tutorials on SSH keys and `.gitconfig`. Install gitswitch, run `gitswitch setup` — it checks for git and the GitHub CLI and offers to install whichever's missing — then `gitswitch login` sets up your identity, keys, and signing. You're set up correctly without reading a single guide, and you don't need a second account for any of this to be worth it. See [gitswitch for git beginners](/docs/scenarios/beginners).
+New to git entirely? Skip the tutorials on SSH keys and `.gitconfig`. Install gitswitch and run it — the first time, on a machine with no profiles yet, it checks for git and the GitHub CLI and offers to install whichever's missing, then walks you through connecting a GitHub account. You're set up correctly without reading a single guide, and you don't need a second account for any of this to be worth it. See [gitswitch for git beginners](/docs/guides/beginners).
 
 gitswitch keeps track of the git accounts you use — personal, work, each client — and makes sure the right one is used in the right repo. Not just your name and email: your SSH key, your signing key, and which GitHub account `git push` and `gh` talk to.
 
 ```bash
-gitswitch install    # one-time setup
-gitswitch login      # connect a GitHub account in the browser
+gitswitch            # first run sets up git/gh and connects your account automatically
 gitswitch pin work   # this repo always uses that account
 ```
 
@@ -60,7 +59,7 @@ No — they solve different halves of the problem. `gh auth switch` changes whic
 | GitLab, Bitbucket, self-hosted | ✗ | ✓ — it's just git config |
 | Interactive UI | ✗ | ✓ |
 
-gitswitch happily uses `gh` under the hood — and if it's not installed yet, `gitswitch setup` offers to install it for you. Think of it as the layer above.
+gitswitch happily uses `gh` under the hood — and if it's not installed yet, the first-run check offers to install it for you. Think of it as the layer above.
 
 ## What it is *not*
 
@@ -68,11 +67,11 @@ gitswitch is a router, not a vault. Your commits stay in git, your keys stay in 
 
 ## Where to go next
 
-- **[Install it](/docs/installation)** — Homebrew, curl, or Go
-- **[Quick Start](/docs/quick-start)** — first account connected in about two minutes
-- **[Scopes](/docs/concepts/scopes)** — global vs. repo vs. terminal, and how to tell which one is winning
-- **[Multi-account GitHub](/docs/scenarios/multi-github)** — the most common setup, start to finish
-- **[AI Coding Agents](/docs/features/ai-agents)** — stop your agent committing as the wrong person
+- **[Install it](/docs/get-started/installation)** — Homebrew, curl, or Go
+- **[Quick Start](/docs/get-started/quick-start)** — first account connected in about two minutes
+- **[Scopes](/docs/accounts/scopes)** — global vs. repo vs. terminal, and how to tell which one is winning
+- **[Multi-account GitHub](/docs/guides/multi-github)** — the most common setup, start to finish
+- **[AI Coding Agents](/docs/ai/ai-agents)** — stop your agent committing as the wrong person
 - **[CLI Reference](/docs/cli/commands)** — every command and flag
 
-There is also a hidden arcade mode. We're not going to tell you what it does. ([Fine, here.](/docs/features/arcade))
+There is also a hidden arcade mode. We're not going to tell you what it does. ([Fine, here.](/docs/extras/arcade))

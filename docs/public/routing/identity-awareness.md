@@ -37,13 +37,13 @@ Which is just `git config --local` five times over — except gitswitch applies 
 
 Everything else follows the repo too, so git and GitHub can't disagree about who you are:
 
-- **`gh` commands** — resolve to that account inside this repo ([Session Isolation](/docs/features/session-isolation))
-- **HTTPS pushes** — use that account's token ([HTTPS routing](/docs/features/https))
+- **`gh` commands** — resolve to that account inside this repo ([Session Isolation](/docs/routing/session-isolation))
+- **HTTPS pushes** — use that account's token ([HTTPS routing](/docs/routing/https))
 - **Prompt and `gitswitch current`** — report the repo's identity while you're in it, marked `●`
 
 Your globally active account is the one thing left alone. Pinning one repo shouldn't change what every other repo does.
 
-> **Pins need Session Isolation.** It's on by default, and `gitswitch pin` turns it on automatically the first time you pin something. If you've deliberately turned it off, the pin is stored but inactive — and gitswitch [says so](/docs/concepts/scopes#pins-need-session-isolation) rather than pretending.
+> **Pins need Session Isolation.** It's on by default, and `gitswitch pin` turns it on automatically the first time you pin something. If you've deliberately turned it off, the pin is stored but inactive — and gitswitch [says so](/docs/accounts/scopes#pins-need-session-isolation) rather than pretending.
 
 ### From the TUI
 
@@ -138,7 +138,7 @@ rm ~/.config/gitswitch/history.json      # forget everything
 
 **Nudges aren't appearing**
 
-1. `gitswitch install`, then reload your shell
+1. `gitswitch shell`, then reload your shell
 2. Are you inside a git repo? (`git rev-parse --git-dir`)
 3. Have you been there 3+ times with a consistent account? (`gitswitch recommend`)
 
@@ -148,6 +148,6 @@ The recommendation is only ever a reflection of recorded history. Fix it at the 
 
 ## Next
 
-- **[Scopes](/docs/concepts/scopes)** — global vs. repo vs. terminal
-- **[Session Isolation](/docs/features/session-isolation)** — what makes pins take effect
-- **[Guides](/docs/scenarios/multi-github)** — pinning in a real two-account setup
+- **[Scopes](/docs/accounts/scopes)** — global vs. repo vs. terminal
+- **[Session Isolation](/docs/routing/session-isolation)** — what makes pins take effect
+- **[Guides](/docs/guides/multi-github)** — pinning in a real two-account setup

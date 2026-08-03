@@ -56,8 +56,8 @@ Already on latest version.
 
 | | |
 |---|---|
-| **`git`** | Required. gitswitch checks for it at startup and exits if it's missing. |
-| **`gh`** ([GitHub CLI](https://cli.github.com)) | Optional, but recommended. gitswitch works fine without it — but [HTTPS push routing](/docs/features/https) and [Session Isolation](/docs/features/session-isolation) get their tokens from `gh`, so those two features install but stay inert until `gh` is set up. |
+| **`git`** | Required. Missing? The first time you run bare `gitswitch` on a machine with no profiles yet, it offers to install it for you — no separate step needed. |
+| **`gh`** ([GitHub CLI](https://cli.github.com)) | Optional, but recommended. gitswitch works fine without it — but [HTTPS push routing](/docs/routing/https) and [Session Isolation](/docs/routing/session-isolation) get their tokens from `gh`, so those two features install but stay inert until `gh` is set up. That first-run check offers to install it too. |
 
 Check both at any time:
 
@@ -65,15 +65,23 @@ Check both at any time:
 gitswitch doctor
 ```
 
-## Then set it up
+## Run it
 
 ```bash
-gitswitch install
+gitswitch
 ```
 
-A short wizard: shell prompt + nudges, HTTPS push routing, and Session Isolation. Everything is opt-out, defaults are sensible, and it's safe to re-run. See [Shell Integration](/docs/features/shell).
+That's the whole "then set it up" step — first run on a machine with no profiles checks for git/gh and offers to install what's missing, then opens a short wizard that gets you a working account.
 
-Then head to the [Quick Start](/docs/quick-start).
+Want shell integration too (prompt segment, nudges, HTTPS push routing, Session Isolation)? That's a separate, optional step:
+
+```bash
+gitswitch shell
+```
+
+Everything is opt-out, defaults are sensible, and it's safe to re-run. See [Shell Integration](/docs/routing/shell).
+
+Then head to the [Quick Start](/docs/get-started/quick-start).
 
 ## Staying up to date
 

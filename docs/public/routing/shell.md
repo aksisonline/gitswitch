@@ -4,7 +4,7 @@ description: Prompt segment, nudges on cd, tab completion, and the gs alias
 ---
 
 ```bash
-gitswitch install
+gitswitch shell
 ```
 
 One wizard, three steps, each explaining itself and each skippable:
@@ -12,15 +12,15 @@ One wizard, three steps, each explaining itself and each skippable:
 | Step | |
 |---|---|
 | **Shell integration** | Prompt segment, identity nudge on `cd`, tab completion, and the `gs` alias — this page |
-| **HTTPS credential routing** | Right token per repo on `git push` — [HTTPS Push Routing](/docs/features/https) |
-| **Session Isolation** | Right `gh` account per repo, and working pins — [Session Isolation](/docs/features/session-isolation) |
+| **HTTPS credential routing** | Right token per repo on `git push` — [HTTPS Push Routing](/docs/routing/https) |
+| **Session Isolation** | Right `gh` account per repo, and working pins — [Session Isolation](/docs/routing/session-isolation) |
 
 Skip the questions:
 
 ```bash
-gitswitch install --yes                # accept all defaults, for scripts and CI
-gitswitch install --shell zsh          # target a specific shell (also skips the wizard)
-gitswitch install --https=false        # everything except HTTPS routing
+gitswitch shell --yes                # accept all defaults, for scripts and CI
+gitswitch shell --shell zsh          # target a specific shell (also skips the wizard)
+gitswitch shell --https=false        # everything except HTTPS routing
 ```
 
 Then reload:
@@ -40,7 +40,7 @@ source ~/.bashrc   # bash
 | Powerlevel10k | Segment function in your rc file, plus one manual step it prints for `~/.p10k.zsh` |
 | Plain zsh / bash / fish | Prompt function, nudge hook, completion, and alias appended to your rc file |
 
-Everything gitswitch writes lives between `# gitswitch` marker comments, and re-running `install` **replaces that block in place** — it never appends a second copy. That's also how you pick up an improved prompt after an upgrade, which is what the "shell integration updated — run `gitswitch install`" notice is asking for.
+Everything gitswitch writes lives between `# gitswitch` marker comments, and re-running `install` **replaces that block in place** — it never appends a second copy. That's also how you pick up an improved prompt after an upgrade, which is what the "shell integration updated — run `gitswitch shell`" notice is asking for.
 
 ## The prompt segment
 
@@ -52,7 +52,7 @@ Shows who you are, but only inside a git repo:
 ~/somewhere      [work◆] ❯
 ```
 
-That trailing marker is the [scope](/docs/concepts/scopes) — nothing for your global identity, `●` for a pinned repo, `◆` for a terminal override. A glance tells you whether a commit here will be attributed the way you expect.
+That trailing marker is the [scope](/docs/accounts/scopes) — nothing for your global identity, `●` for a pinned repo, `◆` for a terminal override. A glance tells you whether a commit here will be attributed the way you expect.
 
 Under the hood:
 
@@ -90,7 +90,7 @@ gitswitch: this repo usually uses work <alice@company.com> — switch? [y/N]
 
 `y` switches, `n` or Enter carries on. It never blocks your prompt, and it defaults to no.
 
-Pinned repos are never nudged — they already commit correctly. How the "usually" is worked out: [Identity Awareness](/docs/features/identity-awareness).
+Pinned repos are never nudged — they already commit correctly. How the "usually" is worked out: [Identity Awareness](/docs/routing/identity-awareness).
 
 ## The `gs` alias
 
@@ -143,12 +143,12 @@ The threshold is ≥ 3 visits with ≥ 60% consistency before a nudge fires. `gi
 
 **Completion not working**
 
-Check your shell version against the minimums above, then re-run `gitswitch install` and reload.
+Check your shell version against the minimums above, then re-run `gitswitch shell` and reload.
 
 More in [Troubleshooting](/docs/troubleshooting).
 
 ## Next
 
-- **[Identity Awareness](/docs/features/identity-awareness)** — pins, learning, nudges
-- **[HTTPS Push Routing](/docs/features/https)** — the credential helper step
-- **[Session Isolation](/docs/features/session-isolation)** — the `gh` wrapper step
+- **[Identity Awareness](/docs/routing/identity-awareness)** — pins, learning, nudges
+- **[HTTPS Push Routing](/docs/routing/https)** — the credential helper step
+- **[Session Isolation](/docs/routing/session-isolation)** — the `gh` wrapper step
