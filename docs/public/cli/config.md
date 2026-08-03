@@ -55,7 +55,7 @@ Open it from the UI's **Settings** tab → *Config Location* — it launches you
 | `show_username` | `false` | Show GitHub usernames instead of emails in the list. `v` toggles it. |
 | `shell_alias` | `"gs"` | The short alias installed with shell integration. |
 | `shell_alias_disabled` | `false` | Turn the alias off. |
-| `arcade_hi_score` | — | Your [arcade mode](/docs/features/arcade) high score. Yes, really. |
+| `arcade_hi_score` | — | Your [arcade mode](/docs/extras/arcade) high score. Yes, really. |
 | `arcade_mode` | `false` | Whether `gitswitch pacman` left arcade mode on. |
 | `shell_enabled` | — | Internal: shell integration state. |
 | `splash_seen_020` | — | Internal: whether the one-time upgrade splash has been shown. |
@@ -132,10 +132,10 @@ Only inside marked blocks, so nothing else in your rc file is ever touched:
 | | |
 |---|---|
 | `# gitswitch shell integration` block | Prompt function, `cd` nudge hook, completion, `gs` alias |
-| `# gitswitch gh wrapper` block | The [Session Isolation](/docs/features/session-isolation) `gh` function — separate, so it can be toggled independently |
+| `# gitswitch gh wrapper` block | The [Session Isolation](/docs/routing/session-isolation) `gh` function — separate, so it can be toggled independently |
 | `~/.config/starship.toml` | A `[custom.gitswitch]` block, on Starship |
 | `~/.oh-my-zsh/custom/plugins/gitswitch/` | A plugin file, on oh-my-zsh |
-| `credential.helper` entries in `~/.gitconfig` | [HTTPS routing](/docs/features/https) — added in front of existing helpers, never replacing them |
+| `credential.helper` entries in `~/.gitconfig` | [HTTPS routing](/docs/routing/https) — added in front of existing helpers, never replacing them |
 
 `gitswitch uninstall` removes all of it.
 

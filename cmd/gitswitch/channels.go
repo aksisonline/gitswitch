@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/aksisonline/gitswitch/internal/git"
 	ver "github.com/aksisonline/gitswitch/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -166,4 +167,28 @@ func runInstallScript(targetVersion string) error {
 		return err
 	}
 	return cmd.Run()
+}
+
+// registerWithGH hands a token obtained via gitswitch's own branded OAuth
+// device flow to the real gh CLI, via `gh auth login --with-token`, so gh's
+// own keyring/multi-account store — which is what every actual git/gh
+// operation (credential helper, the gh wrapper, `gh auth switch`) reads —
+// actually has this account. Without this, a profile created through
+// gitswitch's OAuth screen exists in gitswitch but is invisible to gh itself.
+// Best-effort: never blocks the login flow, even on failure.
+func registerWithGH(host, token string) {
+	if !git.IsGHInstalled() {
+		fmt.Println("  ⚠  gh CLI not installed — skipped gh account registration (git identity still works; install gh to enable Session Isolation and HTTPS routing for this account)")
+		return
+	}
+	if host == "" {
+		host = "github.com"
+	}
+	cmd := exec.Command("gh", "auth", "login", "--hostname", host, "--with-token")
+	cmd.Stdin = strings.NewReader(token)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		fmt.Printf("  ⚠  Could not register this account with gh CLI: %s\n", strings.TrimSpace(string(out)))
+		return
+	}
+	fmt.Println("  ✓  Registered with gh CLI")
 }

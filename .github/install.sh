@@ -89,4 +89,4 @@ else
 fi
 
 echo ""
-echo "Run  gs login  to connect your first GitHub account."
+echo "Run  gs  to get started — first run sets up git/gh and your account automatically."

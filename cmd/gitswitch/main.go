@@ -1,10 +1,10 @@
 package main
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -19,26 +19,28 @@ import (
 	"github.com/aksisonline/gitswitch/internal/storage"
 	"github.com/aksisonline/gitswitch/internal/tui"
 	ver "github.com/aksisonline/gitswitch/internal/version"
+	skill "github.com/aksisonline/gitswitch/skills/gitswitch"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
-
-//go:embed skill/SKILL.md
-var skillMD []byte
 
 var version = "dev"
 
 var store *storage.Store
 
-// commandAllowsMissingGit is true for the subcommands whose whole job is to
-// check for (and now offer to install) git itself — they must be able to run
-// on a machine that doesn't have git yet.
-func commandAllowsMissingGit() bool {
-	return len(os.Args) > 1 && (os.Args[1] == "setup" || os.Args[1] == "doctor")
+// commandAllowsMissingGit is true when it's safe for gitswitch to start
+// without git on PATH: `doctor`, whose whole job is checking/installing it,
+// and bare invocation (no subcommand), which now runs the same check-and-install
+// step itself before the TUI launches (see ensurePrereqsBootstrap).
+func commandAllowsMissingGit(args []string) bool {
+	if len(args) == 1 {
+		return true
+	}
+	return args[1] == "doctor"
 }
 
 func init() {
-	if !git.IsGitInstalled() && !commandAllowsMissingGit() {
+	if !git.IsGitInstalled() && !commandAllowsMissingGit(os.Args) {
 		fmt.Fprintf(os.Stderr, "Error: git is not installed or not on PATH\n")
 		os.Exit(1)
 	}
@@ -53,7 +55,9 @@ func init() {
 var rootCmd = &cobra.Command{
 	Use:           "gitswitch [nickname]",
 	Short:         "Set up git and switch between GitHub accounts on one machine",
-	Long:          `Run without arguments to open the profile picker. New here? Run 'gitswitch setup' — it'll offer to install git/gh if you're missing them, then 'gitswitch login' gets you fully set up.`,
+	Long: `Run without arguments to open the profile picker. First run on a machine with
+no profiles yet checks for git/gh automatically and offers to install them,
+then walks you through connecting a GitHub account — nothing else to run first.`,
 	Args:          cobra.MaximumNArgs(1),
 	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -63,6 +67,11 @@ var rootCmd = &cobra.Command{
 		// Quick switch: gitswitch <nickname>
 		if len(args) == 1 {
 			return quickSwitch(args[0])
+		}
+		if profiles, _ := store.Load(); len(profiles) == 0 {
+			if err := ensurePrereqsBootstrap(); err != nil {
+				return err
+			}
 		}
 		var tuiOpts []tui.Option
 		if show, notes := ver.ShouldShowWhatsNew(store.ConfigDir(), version); show {
@@ -139,6 +148,7 @@ var rootCmd = &cobra.Command{
 				if secrets.Available() {
 					fmt.Println("  ✓  Token stored in keychain")
 				}
+				registerWithGH("", token)
 				fmt.Printf("\n  Next: run  gs switch %s  to activate\n\n", nickname)
 			}
 		}
@@ -241,6 +251,33 @@ func ensureInitialized() error {
 		// Try to import current git config silently as a convenience.
 		// If it fails, the TUI will show the welcome screen instead.
 		_ = store.ImportCurrent()
+	}
+	return nil
+}
+
+// ensurePrereqsBootstrap runs once, the first time gitswitch is invoked bare
+// on a machine with zero profiles, before the TUI wizard launches. It's the
+// same git/gh check-and-install `doctor` already does (reused, not
+// duplicated) — this can't happen inside the bubbletea wizard itself because
+// installing git/gh may need a sudo password prompt or (macOS git) pop the
+// Xcode CLT GUI installer, which needs plain blocking terminal I/O.
+func ensurePrereqsBootstrap() error {
+	r := prereqs.Check()
+	if r.Git.Installed && r.GH.Installed {
+		return nil
+	}
+	fmt.Println()
+	fmt.Println("  First run — checking git and gh...")
+	prereqs.PrintWarnings(r)
+	if !r.Git.Installed {
+		if err := promptInstallTool("git", r.Git, false); err != nil {
+			return err
+		}
+	}
+	if !r.GH.Installed {
+		if err := promptInstallTool("gh", r.GH, false); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -832,41 +869,70 @@ var recommendCmd = &cobra.Command{
 	},
 }
 
-var claudeCmd = &cobra.Command{
-	Use:   "claude",
-	Short: "Install the gitswitch skill into Claude Code",
+var skillsCmd = &cobra.Command{
+	Use:   "skills",
+	Short: "Install the gitswitch skill for your AI agent",
+	Long: `Installs the gitswitch skill so an AI coding agent knows how to switch
+identities and fix wrong-account commits for you.
+
+Prefers skills.sh (npx skills add), which installs into whichever
+Agent-Skills-compatible tool you have locally — Claude Code, Cursor, Codex,
+and more — without gitswitch needing to know each one's own layout. Falls
+back to installing directly for Claude Code and the shared .agents/skills
+convention (used by Codex and others) when npx isn't available or --offline
+is passed.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		scope, _ := cmd.Flags().GetString("scope")
+		offline, _ := cmd.Flags().GetBool("offline")
 
-		var base string
+		if !offline {
+			if _, err := exec.LookPath("npx"); err == nil {
+				fmt.Println("  Installing via skills.sh (works with Claude Code, Cursor, Codex, and more)...")
+				c := exec.Command("npx", "-y", "skills", "add", "aksisonline/gitswitch")
+				c.Stdin = os.Stdin
+				c.Stdout = os.Stdout
+				c.Stderr = os.Stderr
+				if err := c.Run(); err == nil {
+					return nil
+				}
+				fmt.Println("  ⚠  skills.sh install failed (or no network) — falling back to the offline installer")
+			}
+		}
+
+		var claudeBase, agentsBase string
 		if scope == "project" {
-			base = ".claude"
+			claudeBase, agentsBase = ".claude", ".agents"
 		} else {
 			home, err := os.UserHomeDir()
 			if err != nil {
 				return err
 			}
-			base = filepath.Join(home, ".claude")
+			claudeBase = filepath.Join(home, ".claude")
+			agentsBase = filepath.Join(home, ".agents")
 		}
 
-		dest := filepath.Join(base, "skills", "gitswitch")
-		if err := os.MkdirAll(dest, 0755); err != nil {
-			return fmt.Errorf("could not create skills directory: %w", err)
+		var written []string
+		for _, base := range []string{claudeBase, agentsBase} {
+			dest := filepath.Join(base, "skills", "gitswitch")
+			if err := os.MkdirAll(dest, 0755); err != nil {
+				return fmt.Errorf("could not create skills directory: %w", err)
+			}
+			if err := os.WriteFile(filepath.Join(dest, "SKILL.md"), skill.Content, 0644); err != nil {
+				return fmt.Errorf("could not write skill: %w", err)
+			}
+			written = append(written, dest)
 		}
 
-		skillPath := filepath.Join(dest, "SKILL.md")
-		if err := os.WriteFile(skillPath, skillMD, 0644); err != nil {
-			return fmt.Errorf("could not write skill: %w", err)
+		for _, dest := range written {
+			fmt.Printf("✓ Skill installed to %s\n", dest)
 		}
-
-		fmt.Printf("✓ Skill installed to %s\n", dest)
-		fmt.Println("  Reload Claude Code (or open a new session) to activate.")
+		fmt.Println("  Reload your agent (or open a new session) to activate.")
 		return nil
 	},
 }
 
-var installCmd = &cobra.Command{
-	Use:   "install",
+var shellCmd = &cobra.Command{
+	Use:   "shell",
 	Short: "Set up gitswitch — shell integration and HTTPS credential routing",
 	Long: `Interactive setup wizard. Detects your shell, shows what each step does,
 and asks before making any changes. Use --yes to accept all defaults without
@@ -889,7 +955,7 @@ prompts (for scripts and CI).`,
 		if opts.InstallShell {
 			// Reinstall, not Install: Install is a no-op when the marker block is
 			// already there, so a user told "shell integration updated — run gitswitch
-			// install" would keep their old hook forever. Reinstall replaces it.
+			// shell" would keep their old hook forever. Reinstall replaces it.
 			shellResult, err = shell.Reinstall(opts.Shell, opts.Framework, "gs")
 			if err != nil {
 				return fmt.Errorf("shell install failed: %w", err)
@@ -1064,6 +1130,7 @@ var loginCmd = &cobra.Command{
 		if secrets.Available() {
 			fmt.Println("  ✓  Token stored in keychain")
 		}
+		registerWithGH(host, token)
 		fmt.Println()
 		fmt.Printf("  Next: run  gs switch %s  to activate\n\n", nickname)
 		return nil
@@ -1072,7 +1139,7 @@ var loginCmd = &cobra.Command{
 
 var uninstallCmd = &cobra.Command{
 	Use:   "uninstall",
-	Short: "Remove shell integration written by 'gitswitch install'",
+	Short: "Remove shell integration written by 'gitswitch shell'",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		shellFlag, _ := cmd.Flags().GetString("shell")
 
@@ -1129,14 +1196,21 @@ var doctorCmd = &cobra.Command{
 		ghWrapperInstalled := shell.IsGHWrapperInstalled(shell.RCFile(shell.DetectShell()))
 		if jsonOut {
 			// Embedded so git/gh stay top-level, matching the pre-existing shape.
+			// Version/Profiles absorb what `gitswitch setup --agent` used to report,
+			// now that doctor --json is the one machine-readable manifest.
 			report := struct {
 				prereqs.CheckResult
-				HTTPS struct {
+				Version  string `json:"version"`
+				Profiles int    `json:"profiles"`
+				HTTPS    struct {
 					RoutedByGitswitch bool                 `json:"routed_by_gitswitch"`
 					Conflicts         []git.HelperConflict `json:"conflicts,omitempty"`
 				} `json:"https"`
 				GHWrapperInstalled bool `json:"gh_wrapper_installed"`
 			}{CheckResult: r}
+			report.Version = version
+			profiles, _ := store.Load()
+			report.Profiles = len(profiles)
 			report.HTTPS.RoutedByGitswitch = len(conflicts) == 0
 			report.HTTPS.Conflicts = conflicts
 			report.GHWrapperInstalled = ghWrapperInstalled
@@ -1167,7 +1241,7 @@ var doctorCmd = &cobra.Command{
 		case len(conflicts) == 0:
 			fmt.Printf("  %s  HTTPS pushes routed by gitswitch\n", ok)
 		case conflicts[0].Winner == "" && len(conflicts) == 1:
-			fmt.Printf("  %s  HTTPS pushes not routed by gitswitch — run: gitswitch install\n", warn)
+			fmt.Printf("  %s  HTTPS pushes not routed by gitswitch — run: gitswitch shell\n", warn)
 		default:
 			fmt.Printf("  %s  HTTPS pushes answered by another helper before gitswitch:\n", bad)
 			for _, c := range conflicts {
@@ -1176,7 +1250,7 @@ var doctorCmd = &cobra.Command{
 				}
 				fmt.Printf("       %s → %s\n", c.Key, c.Winner)
 			}
-			fmt.Println("       pushes may use the wrong account — run: gitswitch install")
+			fmt.Println("       pushes may use the wrong account — run: gitswitch shell")
 		}
 
 		if ghWrapperInstalled {
@@ -1202,76 +1276,8 @@ var doctorCmd = &cobra.Command{
 	},
 }
 
-var setupCmd = &cobra.Command{
-	Use:   "setup",
-	Short: "Check requirements and show next steps",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		agentMode, _ := cmd.Flags().GetBool("agent")
-		yes, _ := cmd.Flags().GetBool("yes")
-		r := prereqs.Check()
-
-		if agentMode {
-			profiles, _ := store.Load()
-			manifest := map[string]interface{}{
-				"tool":    "gitswitch",
-				"version": version,
-				"state": map[string]interface{}{
-					"profiles": len(profiles),
-					"git":      r.Git,
-					"gh":       r.GH,
-				},
-			}
-			b, _ := json.MarshalIndent(manifest, "", "  ")
-			fmt.Printf("%s\n", b)
-			return nil
-		}
-
-		fmt.Println()
-		fmt.Println("  Checking requirements...")
-		fmt.Println()
-		if r.Git.Installed {
-			fmt.Printf("  ✓  git %s\n", r.Git.Version)
-		} else {
-			fmt.Println("  ✗  git  not found")
-		}
-		if r.GH.Installed {
-			fmt.Printf("  ✓  gh  %s\n", r.GH.Version)
-		} else {
-			fmt.Println("  ⚠  gh   not found")
-		}
-		fmt.Println()
-		prereqs.PrintWarnings(r)
-
-		if !r.Git.Installed {
-			if err := promptInstallTool("git", r.Git, yes); err != nil {
-				return err
-			}
-		}
-		if !r.GH.Installed {
-			if err := promptInstallTool("gh", r.GH, yes); err != nil {
-				return err
-			}
-		}
-		if !r.Git.Installed || !r.GH.Installed {
-			r = prereqs.Check()
-		}
-
-		if r.AllOK() {
-			profiles, _ := store.Load()
-			if len(profiles) == 0 {
-				fmt.Println("  No accounts yet.  Run  gs login  to get started.")
-				fmt.Println()
-			} else {
-				fmt.Printf("  %d profile(s) configured.  Run  gs  to open the picker.\n", len(profiles))
-				fmt.Println()
-			}
-		}
-		return nil
-	},
-}
-
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, installCmd, uninstallCmd, claudeCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, setupCmd, loginCmd, betaCmd, stableCmd, reauthorCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, shellCmd, uninstallCmd, skillsCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, loginCmd, betaCmd, stableCmd, reauthorCmd)
 
 	rootCmd.AddGroup(
 		&cobra.Group{ID: "identity", Title: "Identity:"},
@@ -1282,13 +1288,13 @@ func main() {
 	for _, c := range []*cobra.Command{addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd} {
 		c.GroupID = "identity"
 	}
-	for _, c := range []*cobra.Command{pinCmd, unpinCmd, installCmd, uninstallCmd, doctorCmd} {
+	for _, c := range []*cobra.Command{pinCmd, unpinCmd, shellCmd, uninstallCmd, doctorCmd} {
 		c.GroupID = "isolation"
 	}
 	for _, c := range []*cobra.Command{versionCmd, upgradeCmd, betaCmd, stableCmd} {
 		c.GroupID = "channels"
 	}
-	for _, c := range []*cobra.Command{pacmanCmd, claudeCmd, setupCmd, loginCmd, reauthorCmd} {
+	for _, c := range []*cobra.Command{pacmanCmd, skillsCmd, loginCmd, reauthorCmd} {
 		c.GroupID = "extras"
 	}
 	addCmd.Flags().String("sign-key", "", "Signing key: GPG key ID, or SSH key path for gpg.format=ssh")
@@ -1300,15 +1306,14 @@ func main() {
 	listCmd.Flags().Bool("json", false, "Output machine-readable JSON")
 	recordCmd.Flags().String("path", "", "Directory to record for (default: current working directory)")
 	recommendCmd.Flags().String("path", "", "Directory to check (default: current working directory)")
-	installCmd.Flags().String("shell", "", "Shell to target: zsh, bash, or fish (default: auto-detect; also skips interactive wizard)")
-	installCmd.Flags().Bool("https", true, "Register HTTPS credential helper (default: true; prompted interactively when omitted)")
-	installCmd.Flags().BoolP("yes", "y", false, "Accept all defaults without prompts (for scripts and CI)")
+	shellCmd.Flags().String("shell", "", "Shell to target: zsh, bash, or fish (default: auto-detect; also skips interactive wizard)")
+	shellCmd.Flags().Bool("https", true, "Register HTTPS credential helper (default: true; prompted interactively when omitted)")
+	shellCmd.Flags().BoolP("yes", "y", false, "Accept all defaults without prompts (for scripts and CI)")
 	uninstallCmd.Flags().String("shell", "", "Shell to uninstall for: zsh, bash, or fish (default: auto-detect)")
-	claudeCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills) or 'project' (.claude/skills)")
+	skillsCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills, ~/.agents/skills) or 'project' (.claude/skills, .agents/skills)")
+	skillsCmd.Flags().Bool("offline", false, "Skip the skills.sh (npx) install attempt and go straight to the offline installer")
 	doctorCmd.Flags().Bool("json", false, "Output machine-readable JSON")
 	doctorCmd.Flags().BoolP("yes", "y", false, "Skip install confirmation prompts")
-	setupCmd.Flags().Bool("agent", false, "Emit machine-readable setup manifest for AI agents")
-	setupCmd.Flags().BoolP("yes", "y", false, "Skip install confirmation prompts")
 	loginCmd.Flags().String("host", "", "GitHub host (default: github.com)")
 	loginCmd.Flags().String("client-id", "", "OAuth app client ID (overrides built-in)")
 	loginCmd.Flags().String("profile", "", "Profile nickname to create (default: GitHub username)")

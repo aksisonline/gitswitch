@@ -3,46 +3,53 @@
   "groups": [
     {
       "label": "Get Started",
-      "items": ["intro", "installation", "quick-start"]
-    },
-    {
-      "label": "Concepts",
-      "items": ["concepts/scopes", "features/identity-awareness"]
+      "items": [
+        "get-started/intro",
+        "get-started/installation",
+        "get-started/quick-start",
+        "get-started/agent-setup"
+      ]
     },
     {
       "label": "Accounts",
       "items": [
-        "features/accounts",
-        "features/commit-identity",
-        "features/ssh-keys",
-        "features/gpg"
+        "accounts/accounts",
+        "accounts/scopes",
+        "accounts/commit-identity",
+        "accounts/ssh-keys",
+        "accounts/gpg"
       ]
     },
     {
       "label": "Automatic Routing",
       "items": [
-        "features/session-isolation",
-        "features/https",
-        "features/github-sync",
-        "features/shell"
+        "routing/identity-awareness",
+        "routing/session-isolation",
+        "routing/https",
+        "routing/github-sync",
+        "routing/shell"
       ]
     },
     {
-      "label": "Extras",
-      "items": ["features/ai-agents", "features/arcade"]
+      "label": "AI",
+      "items": ["ai/ai-agents"]
     },
     {
       "label": "Guides",
       "items": [
-        "scenarios/beginners",
-        "scenarios/multi-github",
-        "scenarios/freelancer",
-        "scenarios/oss"
+        "guides/beginners",
+        "guides/multi-github",
+        "guides/freelancer",
+        "guides/oss"
       ]
     },
     {
       "label": "CLI Reference",
       "items": ["cli/commands", "cli/profiles", "cli/config", "cli/channels"]
+    },
+    {
+      "label": "Extras",
+      "items": ["extras/arcade"]
     },
     {
       "label": "Help",

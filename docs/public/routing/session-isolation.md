@@ -28,11 +28,11 @@ cd ~/personal/blog && gh issue list     # acts as alice
 
 gh's global active-account file is never read or written, so any number of terminals can work as different accounts simultaneously without stepping on each other.
 
-It's also the thing that makes [repo pins](/docs/features/identity-awareness#pin-a-repo) real — a pin only takes effect while Session Isolation is on, because this is the machinery that keeps a repo's account separate from the rest of your machine.
+It's also the thing that makes [repo pins](/docs/routing/identity-awareness#pin-a-repo) real — a pin only takes effect while Session Isolation is on, because this is the machinery that keeps a repo's account separate from the rest of your machine.
 
 ## Turn it on
 
-It's a step in `gitswitch install`, on by default. Later:
+It's a step in `gitswitch shell`, on by default. Later:
 
 ```bash
 gitswitch          # Utilities tab → toggle Session Isolation
@@ -58,7 +58,7 @@ gitswitch doctor
 
 ## How the account is chosen
 
-Exactly the same resolution [HTTPS push routing](/docs/features/https) uses, so `git push` and `gh` can never disagree about who you are:
+Exactly the same resolution [HTTPS push routing](/docs/routing/https) uses, so `git push` and `gh` can never disagree about who you are:
 
 1. Repo pin or terminal session override → that account
 2. Otherwise, a learned/pinned recommendation for this repo → that account
@@ -95,6 +95,6 @@ Check `gitswitch doctor`. A pin set while isolation was off is stored but inacti
 
 ## Next
 
-- **[HTTPS Push Routing](/docs/features/https)** — the same resolution, for `git push`
-- **[Identity Awareness](/docs/features/identity-awareness)** — pins and learned habits
-- **[Scopes](/docs/concepts/scopes)** — why a repo can outrank your global identity
+- **[HTTPS Push Routing](/docs/routing/https)** — the same resolution, for `git push`
+- **[Identity Awareness](/docs/routing/identity-awareness)** — pins and learned habits
+- **[Scopes](/docs/accounts/scopes)** — why a repo can outrank your global identity

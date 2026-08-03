@@ -247,7 +247,7 @@ jobs:
           fi
 
           mkdir -p /tmp/gs-skill
-          cp cmd/gitswitch/skill/SKILL.md /tmp/gs-skill/
+          cp skills/gitswitch/SKILL.md /tmp/gs-skill/
           zip -j /tmp/gitswitch.skill /tmp/gs-skill/SKILL.md
 
       - name: Run GoReleaser
@@ -275,6 +275,38 @@ jobs:
           gh release upload "${{ needs.version.outputs.new_tag }}" /tmp/gitswitch.skill --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sync-canary:
+    name: Fast-forward canary with this release
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    if: success()
+
+    steps:
+      - name: Checkout canary
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: canary
+
+      - name: Merge main into canary
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+
+          # canary must carry every stable release forward — otherwise its next
+          # beta would build on top of stale code while claiming a version
+          # number ahead of what's actually stable. If this conflicts, don't
+          # guess: fail loudly so it gets resolved with a real PR from main.
+          if git merge --no-edit origin/main -m "chore: merge main (${{ needs.version.outputs.new_tag }}) into canary"; then
+            git push origin canary
+            echo "✓ canary now carries ${{ needs.version.outputs.new_tag }}"
+          else
+            git merge --abort
+            echo "::error::Merging main into canary after ${{ needs.version.outputs.new_tag }} produced conflicts — resolve manually with a PR from main into canary, then re-run the canary workflow."
+            exit 1
+          fi
 
   notify-website:
     name: Rebuild gitswitch.dev

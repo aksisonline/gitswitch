@@ -141,7 +141,7 @@ func HookUpdateMessage(configDir, rcFile, currentVersion string, credHelperInsta
 				_ = WriteHookVersion(configDir, currentVersion)
 				return ""
 			}
-			return "gitswitch: shell integration may be outdated — run: gitswitch install"
+			return "gitswitch: shell integration may be outdated — run: gitswitch shell"
 		}
 		return ""
 	}
@@ -163,15 +163,15 @@ func HookUpdateMessage(configDir, rcFile, currentVersion string, credHelperInsta
 	switch {
 	case revisionBumped && (httpsNeeded || isolationNeeded):
 		// One message covers both: shell integration changed AND new feature waiting.
-		return fmt.Sprintf("gitswitch updated (%s → %s) — new features available. Run: gitswitch install", installed, currentVersion)
+		return fmt.Sprintf("gitswitch updated (%s → %s) — new features available. Run: gitswitch shell", installed, currentVersion)
 	case revisionBumped:
-		return fmt.Sprintf("gitswitch: shell integration updated (%s → %s) — run: gitswitch install", installed, currentVersion)
+		return fmt.Sprintf("gitswitch: shell integration updated (%s → %s) — run: gitswitch shell", installed, currentVersion)
 	case httpsNeeded && isolationNeeded:
-		return "gitswitch: HTTPS credential routing and Session Isolation available — run: gitswitch install"
+		return "gitswitch: HTTPS credential routing and Session Isolation available — run: gitswitch shell"
 	case httpsNeeded:
-		return "gitswitch: HTTPS credential routing available — run: gitswitch install"
+		return "gitswitch: HTTPS credential routing available — run: gitswitch shell"
 	case isolationNeeded:
-		return "gitswitch: Session Isolation available — run: gitswitch install"
+		return "gitswitch: Session Isolation available — run: gitswitch shell"
 	default:
 		return ""
 	}

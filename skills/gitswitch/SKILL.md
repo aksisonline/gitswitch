@@ -114,10 +114,10 @@ Requires a clean working tree (it rebases). If a merge conflict interrupts the r
 
 ## Identity awareness — shell integration
 
-`gitswitch install` sets up three things at once:
+`gitswitch shell` sets up three things at once:
 
 ```bash
-gitswitch install
+gitswitch shell
 ```
 
 - **Prompt segment** — shows current git identity in your shell prompt
@@ -182,7 +182,7 @@ gitswitch doctor
 
 Git asks credential helpers in config order and takes the first answer, so another
 tool's helper (usually `gh auth setup-git`'s) can be asked before gitswitch. doctor
-names it; `gitswitch install` repairs the order without removing the other helper.
+names it; `gitswitch shell` repairs the order without removing the other helper.
 Re-running `gh auth setup-git` or an interactive `gh auth login` undoes the repair,
 so if it recurs, that is why.
 
@@ -241,7 +241,7 @@ gitswitch personal   # or: gitswitch work
 
 ### "I want gitswitch to always remind me to use the right account in a repo"
 ```bash
-gitswitch install        # sets up the shell nudge hook
+gitswitch shell        # sets up the shell nudge hook
 gitswitch pin work       # better: pin it so the repo is just always correct
 ```
 
@@ -274,9 +274,9 @@ gitswitch     # opens the interactive TUI, use ↑↓ to navigate, Enter to swit
 | `gitswitch unpin` | Remove the repo's local identity, fall back to global |
 | `gitswitch record` | Log current identity for this repo (called by shell hooks) |
 | `gitswitch recommend` | Print recommended identity if threshold met |
-| `gitswitch install` | Set up shell prompt segment, nudge hook, and tab completion |
-| `gitswitch claude` | Install this skill into Claude Code (~/.claude/skills) |
-| `gitswitch claude --scope project` | Install skill for this project only (.claude/skills) |
+| `gitswitch shell` | Set up shell prompt segment, nudge hook, and tab completion |
+| `gitswitch skills` | Install this skill for your AI agent (skills.sh first, offline fallback for Claude Code / .agents/skills) |
+| `gitswitch skills --scope project` | Install skill for this project only |
 | `gitswitch init` | Re-import current `git config` as `default` |
 | `gitswitch version` | Show version, check for updates |
 | `gitswitch upgrade` | Upgrade to latest release |

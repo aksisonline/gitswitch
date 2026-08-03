@@ -65,13 +65,13 @@ After an upgrade that includes new features, gitswitch shows a one-time **What's
 
 It appears when the installed version's MINOR or MAJOR number goes up, and for every canary switch (canary versions only differ in their last number, so gitswitch schedules the screen explicitly for those).
 
-## "Shell integration updated — run `gitswitch install`"
+## "Shell integration updated — run `gitswitch shell`"
 
-Occasionally a release improves the shell hook, prompt, or completion script. When that happens gitswitch tells you once, and `gitswitch install` replaces the gitswitch block in your rc file in place.
+Occasionally a release improves the shell hook, prompt, or completion script. When that happens gitswitch tells you once, and `gitswitch shell` replaces the gitswitch block in your rc file in place.
 
 It only nags when your installed shell setup is genuinely out of date — not on every version bump.
 
 ## Next
 
-- **[Installation](/docs/installation)** — first-time install and uninstall
+- **[Installation](/docs/get-started/installation)** — first-time install and uninstall
 - **[CLI Reference](/docs/cli/commands)** — every command

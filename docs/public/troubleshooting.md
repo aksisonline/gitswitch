@@ -26,7 +26,7 @@ Most problems below are one of those four saying no.
 gitswitch current
 ```
 
-That tells you who you *are* here and **why** — global, pinned to this repo, or a terminal override. If it's not who you expected, [Scopes](/docs/concepts/scopes) explains who's winning.
+That tells you who you *are* here and **why** — global, pinned to this repo, or a terminal override. If it's not who you expected, [Scopes](/docs/accounts/scopes) explains who's winning.
 
 Not pushed yet:
 
@@ -41,7 +41,7 @@ Already pushed, or more than one commit:
 gitswitch reauthor 3 --to work --push
 ```
 
-See [AI Coding Agents](/docs/features/ai-agents#gitswitch-reauthor-fix-commits-that-already-exist) for the full `reauthor` reference — it's the same command whether a human or an agent made the mess.
+See [AI Coding Agents](/docs/ai/ai-agents#gitswitch-reauthor-fix-commits-that-already-exist) for the full `reauthor` reference — it's the same command whether a human or an agent made the mess.
 
 Then stop it recurring:
 
@@ -61,10 +61,10 @@ For **HTTPS** remotes, run `gitswitch doctor`. If you see this:
 then another credential helper is being asked before gitswitch and gitswitch never gets a say. Usually because `gh auth setup-git` ran (an interactive `gh auth login` does it too).
 
 ```bash
-gitswitch install
+gitswitch shell
 ```
 
-puts gitswitch back in front without removing anything else. Details: [HTTPS Push Routing](/docs/features/https).
+puts gitswitch back in front without removing anything else. Details: [HTTPS Push Routing](/docs/routing/https).
 
 For **SSH** remotes, check the key actually being offered:
 
@@ -73,17 +73,17 @@ git config --global core.sshCommand
 # must contain: -o IdentitiesOnly=yes
 ```
 
-If it's missing or wrong, re-switch the profile (`gitswitch work`). See [SSH Keys](/docs/features/ssh-keys).
+If it's missing or wrong, re-switch the profile (`gitswitch work`). See [SSH Keys](/docs/accounts/ssh-keys).
 
 ## "`gh pr create` used the wrong account"
 
-`gh` tracks one active account for your whole machine, so another terminal can flip it under you. That's what [Session Isolation](/docs/features/session-isolation) is for:
+`gh` tracks one active account for your whole machine, so another terminal can flip it under you. That's what [Session Isolation](/docs/routing/session-isolation) is for:
 
 ```bash
 gitswitch doctor    # is it active?
 ```
 
-If it's off, turn it on in the TUI's **Utilities** tab (or re-run `gitswitch install`) and reload your shell — the wrapper is a shell function, so terminals opened before you enabled it won't have it:
+If it's off, turn it on in the TUI's **Utilities** tab (or re-run `gitswitch shell`) and reload your shell — the wrapper is a shell function, so terminals opened before you enabled it won't have it:
 
 ```bash
 source ~/.zshrc    # zsh
@@ -110,7 +110,7 @@ Also: a repo whose local `user.email` merely repeats your global one isn't an ov
 ## "The prompt doesn't show anything"
 
 1. Are you inside a git repo? The segment hides outside one, on purpose. (`git rev-parse --git-dir`)
-2. Did you reload your shell after `gitswitch install`?
+2. Did you reload your shell after `gitswitch shell`?
 3. Does the underlying command work? `gitswitch current --short`
 4. Using Starship? The block goes in `~/.config/starship.toml`, not your rc file.
 
@@ -129,11 +129,11 @@ Pinned repos are never nudged, since they already commit correctly.
 
 ## "Tab completion isn't working"
 
-Needs zsh 5.0+, bash 4.0+, or fish 3.0+ (macOS ships bash 3.2 — `brew install bash` if you're on the system one). Then re-run `gitswitch install` and reload.
+Needs zsh 5.0+, bash 4.0+, or fish 3.0+ (macOS ships bash 3.2 — `brew install bash` if you're on the system one). Then re-run `gitswitch shell` and reload.
 
 ## "I told it to install, and it said 'already installed'"
 
-Fixed in v0.3.0 — `gitswitch install` now replaces the gitswitch block in your rc file rather than stopping short. If you're seeing this, you're on an older build:
+Fixed in v0.3.0 — `gitswitch shell` now replaces the gitswitch block in your rc file rather than stopping short. If you're seeing this, you're on an older build:
 
 ```bash
 gitswitch upgrade
@@ -163,7 +163,7 @@ chmod 600 ~/.config/gitswitch/*
 ```bash
 gitswitch uninstall            # shell integration, HTTPS routing, gh wrapper
 rm -rf ~/.config/gitswitch     # accounts, history, preferences
-gitswitch install
+gitswitch shell
 ```
 
 Tokens in your OS keychain aren't removed by that — delete `gitswitch:*` entries in Keychain Access / your secret store if you want those gone too.

@@ -7,11 +7,20 @@ Format: `[version] — date — summary`
 
 ## [Unreleased]
 
-### Fixed
+### What's New
+- **One command sets up everything now** — run `gitswitch` on a fresh machine and it checks whether git and the GitHub CLI (`gh`) are installed, offers to install whichever's missing, then walks you through connecting your GitHub account. No separate setup command to remember first.
+- **`gitswitch install` is now `gitswitch shell`** — same shell-integration wizard (prompt, HTTPS push routing, Session Isolation), just a name that matches what it actually does.
+- **`gitswitch claude` is now `gitswitch skills`, and it's no longer just for Claude Code** — it tries [skills.sh](https://www.skills.sh) first, which installs the gitswitch skill correctly for whichever AI agent you're using (Claude Code, Cursor, Codex, and more), and falls back to installing it directly if you're offline.
+- **A copy-paste setup prompt for AI agents** — a new Agent Aided Setup guide gives you one block to hand your coding agent, and it installs gitswitch, checks git/gh, and connects your account for you.
+
+### Bug Fixes
 - **Windows install command was broken** — `irm .../install.ps1 | iex` downloaded a binary that was never actually published, so every Windows install failed. Windows builds are now included in every release.
+- **Signing in through gitswitch's own GitHub login didn't always let Session Isolation or HTTPS push routing use the new account** — those two features get their tokens from the `gh` CLI, but a fresh sign-in never told `gh` about the account, so it silently didn't work until you separately ran `gh auth login`. Logging in now registers the account with `gh` too, so it works right away.
 
 ### Under the Hood
 - **The product name is now spelled consistently as "Gitswitch" everywhere** — the TUI header, arcade mode, and onboarding screens previously showed "Git-Switcher" (with a hyphen); they now match the CLI and docs.
+- **`gitswitch setup` is gone** — checking and installing git/gh now happens automatically the first time you run `gitswitch` on a machine with no accounts yet. Its machine-readable manifest for AI agents is now part of `gitswitch doctor --json`.
+- **Docs got reorganized** — Get Started, Accounts, Automatic Routing, AI, Guides, and CLI Reference now match how the site actually groups them, instead of one flat folder for everything.
 
 ## [v0.3.0] — 2026-07-30
 

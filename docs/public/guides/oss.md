@@ -8,7 +8,7 @@ Two accounts: `alice-corp` for the day job, `alice` for your own open source. Th
 ## Set up
 
 ```bash
-gitswitch install
+gitswitch shell
 ```
 
 ```bash
@@ -43,7 +43,7 @@ git push origin add-feature
 # alice, always
 ```
 
-`gh` comes along for the ride — with [Session Isolation](/docs/features/session-isolation) on (the default), `gh pr create` and `gh issue list` resolve to whichever account owns the repo you're in, so you can review a work PR and triage an OSS issue in two terminals at once.
+`gh` comes along for the ride — with [Session Isolation](/docs/routing/session-isolation) on (the default), `gh pr create` and `gh issue list` resolve to whichever account owns the repo you're in, so you can review a work PR and triage an OSS issue in two terminals at once.
 
 ## Contributing to a public repo you don't own
 
@@ -65,7 +65,7 @@ gitswitch add oss "Alice" alice@users.noreply.github.com \
 git config --global commit.gpgsign true
 ```
 
-Register it on GitHub as a **Signing Key** (a separate entry from an authentication key, even for the same key). Full detail: [Commit Signing](/docs/features/gpg).
+Register it on GitHub as a **Signing Key** (a separate entry from an authentication key, even for the same key). Full detail: [Commit Signing](/docs/accounts/gpg).
 
 > Using GitHub's `@users.noreply.github.com` address for public commits keeps your real email out of a permanent public log while still linking commits to your account.
 
@@ -99,6 +99,6 @@ gitswitch add work "Alice Smith" alice@company.com \
 
 ## Next
 
-- **[Two GitHub Accounts](/docs/scenarios/multi-github)**
-- **[AI Coding Agents](/docs/features/ai-agents)** — agents are the main way this goes wrong now
-- **[Commit Signing](/docs/features/gpg)**
+- **[Two GitHub Accounts](/docs/guides/multi-github)**
+- **[AI Coding Agents](/docs/ai/ai-agents)** — agents are the main way this goes wrong now
+- **[Commit Signing](/docs/accounts/gpg)**

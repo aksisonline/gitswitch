@@ -212,7 +212,7 @@ jobs:
       - name: Package skill file
         run: |
           mkdir -p gitswitch-skill
-          cp cmd/gitswitch/skill/SKILL.md gitswitch-skill/SKILL.md
+          cp skills/gitswitch/SKILL.md gitswitch-skill/SKILL.md
           zip -j release/gitswitch.skill gitswitch-skill/SKILL.md
 
       - name: Include install scripts

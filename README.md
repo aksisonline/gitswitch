@@ -2,7 +2,7 @@
 
 A terminal UI for managing multiple local git identities. Switch the name, email, SSH key, and GitHub account that are used for your commits — instantly, without touching config files manually.
 
-**New to git entirely?** `gitswitch setup` checks whether git and the GitHub CLI (`gh`) are installed and offers to install whichever's missing, then `gitswitch login` connects a GitHub account via OAuth and fills in your name, email, and keys — no SSH keys to generate by hand, nothing to paste into a settings page. You don't need a second account for this to be worth it.
+**New to git entirely?** Just run `gitswitch` — the first run on a machine with no profiles checks whether git and the GitHub CLI (`gh`) are installed and offers to install whichever's missing, then walks you through connecting a GitHub account via OAuth and filling in your name, email, and keys — no SSH keys to generate by hand, nothing to paste into a settings page. You don't need a second account for this to be worth it.
 
 ![gitswitch TUI](https://img.shields.io/badge/built%20with-Go-00ADD8?style=flat-square&logo=go)
 ![license](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)
@@ -131,7 +131,7 @@ See **[docs/cli.md](docs/cli.md)** for full flag reference and examples.
 One command sets up your shell with three features at once:
 
 ```bash
-gitswitch install
+gitswitch shell
 ```
 
 - **Prompt segment** — shows the active git identity in your shell prompt whenever you're inside a repo
@@ -173,7 +173,7 @@ Usage history is stored at `~/.config/gitswitch/history.json`.
 
 ### Pin a permanent identity to a repo
 
-Requires Session Isolation (on by default via `gitswitch install`; pinning turns it on automatically if it's off). For repos where you always want a specific identity, skip the learned-count logic entirely:
+Requires Session Isolation (on by default via `gitswitch shell`; pinning turns it on automatically if it's off). For repos where you always want a specific identity, skip the learned-count logic entirely:
 
 ```bash
 gitswitch pin work    # always recommend 'work' for this repo
@@ -184,16 +184,17 @@ The pin takes permanent priority over usage counts.
 
 ---
 
-## Claude Code skill
+## AI agent skill
 
-Install the gitswitch skill directly into Claude Code so it can detect and fix git identity problems automatically:
+Install the gitswitch skill so your AI coding agent can detect and fix git identity problems automatically — Claude Code, Cursor, Codex, and anything else that speaks the Agent Skills format:
 
 ```bash
-gitswitch claude                   # install to ~/.claude/skills/ (all projects)
-gitswitch claude --scope project   # install to .claude/skills/ (this project only)
+gitswitch skills                   # skills.sh first, falls back offline for Claude Code + .agents/skills
+gitswitch skills --scope project   # this project only
+gitswitch skills --offline         # skip skills.sh, go straight to the offline installer
 ```
 
-The skill is embedded in the binary — no download required, always matches your installed version. After installing, reload Claude Code or open a new session to activate.
+The skill is embedded in the binary — the offline path needs no download, always matches your installed version. After installing, reload your agent or open a new session to activate.
 
 ---
 
@@ -250,7 +251,7 @@ gitswitch add work     "Alice" alice@company.com --ssh-key ~/.ssh/id_work     --
 
 **Always use the right identity automatically**
 ```bash
-gitswitch install      # set up shell integration once (enables Session Isolation by default)
+gitswitch shell      # set up shell integration once (enables Session Isolation by default)
 gitswitch pin work     # pin 'work' to your work repo — never forget again
 ```
 

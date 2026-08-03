@@ -45,7 +45,7 @@ work — Alice Smith <alice@company.com>  (pinned to this repo)
 HTTPS credential helper: active
 ```
 
-The parenthetical is the important part — see [Scopes](/docs/concepts/scopes). For scripts:
+The parenthetical is the important part — see [Scopes](/docs/accounts/scopes). For scripts:
 
 ```bash
 gitswitch current --json
@@ -63,7 +63,7 @@ git config --global user.email
 Narrowest scope wins:
 
 1. `GIT_CONFIG_*` environment variables — this terminal only
-2. The repo's own `.git/config` — where [pins](/docs/features/identity-awareness#pin-a-repo) live
+2. The repo's own `.git/config` — where [pins](/docs/routing/identity-awareness#pin-a-repo) live
 3. `~/.gitconfig` — where a plain `gitswitch <name>` writes
 4. `/etc/gitconfig` — system-wide
 
@@ -90,9 +90,9 @@ More than one commit, or already pushed:
 gitswitch reauthor 3 --to work --push
 ```
 
-One command instead of a hand-rolled interactive rebase. Full reference in [AI Coding Agents](/docs/features/ai-agents) — it's the same tool whether a human or an agent made the mess.
+One command instead of a hand-rolled interactive rebase. Full reference in [AI Coding Agents](/docs/ai/ai-agents) — it's the same tool whether a human or an agent made the mess.
 
-> Once pushed, attribution is permanent unless you rewrite history. Cheaper to prevent: [pin the repo](/docs/features/identity-awareness#pin-a-repo), or let the [shell nudge](/docs/features/shell#the-nudge) catch you on the way in.
+> Once pushed, attribution is permanent unless you rewrite history. Cheaper to prevent: [pin the repo](/docs/routing/identity-awareness#pin-a-repo), or let the [shell nudge](/docs/routing/shell#the-nudge) catch you on the way in.
 
 ## Removing a per-repo identity
 
@@ -106,6 +106,6 @@ That clears `user.name`, `user.email`, `user.signingkey`, `gpg.format`, and `cor
 
 ## Next
 
-- **[Scopes](/docs/concepts/scopes)** — global vs. repo vs. terminal
-- **[SSH Keys](/docs/features/ssh-keys)** — forcing the right key
-- **[Commit Signing](/docs/features/gpg)** — GPG or SSH signing per account
+- **[Scopes](/docs/accounts/scopes)** — global vs. repo vs. terminal
+- **[SSH Keys](/docs/accounts/ssh-keys)** — forcing the right key
+- **[Commit Signing](/docs/accounts/gpg)** — GPG or SSH signing per account

@@ -8,9 +8,9 @@ description: Every gitswitch command and flag
 | | |
 |---|---|
 | **[Identity](#identity)** | `add` `switch` `list` `remove` `current` `init` |
-| **[Session Isolation](#session-isolation)** | `pin` `unpin` `install` `uninstall` `doctor` |
+| **[Session Isolation](#session-isolation)** | `pin` `unpin` `shell` `uninstall` `doctor` |
 | **[Channels](#channels)** | `version` `upgrade` `beta` `stable` |
-| **[Extras](#extras)** | `login` `claude` `reauthor` `setup` `pacman` |
+| **[Extras](#extras)** | `login` `skills` `reauthor` `pacman` |
 
 Plus [`gitswitch`](#gitswitch--the-interactive-ui) with no arguments, and [`gitswitch <nickname>`](#gitswitch-nickname--quick-switch) as a shortcut.
 
@@ -43,7 +43,7 @@ The mouse works throughout: hover moves focus, clicks select and toggle, the scr
 **Utilities tab** — three toggles: Shell Integration, Session Isolation, HTTPS Credential Helper.
 **Settings tab** — theme, config file location (opens it in `$EDITOR`), and the `gs` shell alias (rename with `e`, toggle with `enter`).
 
-First launch with no accounts runs a short onboarding wizard, which scans your `gh` logins and `~/.ssh/` keys and offers to import them.
+First launch on a machine with no profiles yet checks for `git`/`gh` and offers to install whichever's missing, then runs a short onboarding wizard, which scans your `gh` logins and `~/.ssh/` keys and offers to import them.
 
 ---
 
@@ -98,7 +98,7 @@ Prefer not typing all that? [`gitswitch login`](#login) fills it in from GitHub.
 gitswitch switch <nickname>
 ```
 
-Same as `gitswitch <nickname>`. See [Commit Identity](/docs/features/commit-identity) for exactly what gets written.
+Same as `gitswitch <nickname>`. See [Commit Identity](/docs/accounts/commit-identity) for exactly what gets written.
 
 ## `list`
 
@@ -124,7 +124,7 @@ work — Alice Smith <alice@company.com>  (pinned to this repo)
 HTTPS credential helper: active
 ```
 
-The suffix names the [scope](/docs/concepts/scopes): nothing for global, `(pinned to this repo)`, or `(this terminal's session)`. If a pin exists but Session Isolation is off, it says so.
+The suffix names the [scope](/docs/accounts/scopes): nothing for global, `(pinned to this repo)`, or `(this terminal's session)`. If a pin exists but Session Isolation is off, it says so.
 
 Prints `No active profile` if nothing has been applied yet.
 
@@ -164,7 +164,7 @@ Writes the account's full identity into **this repo's** local git config — `us
 
 With no nickname, it adopts the repo's existing local `user.email` and matches it to a stored account.
 
-Turns [Session Isolation](/docs/features/session-isolation) on automatically if it was off, since a pin can't take effect without it. Must be run inside a git repo.
+Turns [Session Isolation](/docs/routing/session-isolation) on automatically if it was off, since a pin can't take effect without it. Must be run inside a git repo.
 
 ## `unpin`
 
@@ -174,10 +174,10 @@ gitswitch unpin
 
 Removes those keys from the repo's local config; the repo falls back to your global identity. Must be run inside a git repo.
 
-## `install`
+## `shell`
 
 ```bash
-gitswitch install [flags]
+gitswitch shell [flags]
 ```
 
 Interactive wizard with three steps, each skippable:
@@ -220,10 +220,10 @@ The HTTPS check is the interesting one — git asks credential helpers in config
 ```
   ✗  HTTPS pushes answered by another helper before gitswitch:
        credential.https://github.com.helper → !/opt/homebrew/bin/gh auth git-credential
-       pushes may use the wrong account — run: gitswitch install
+       pushes may use the wrong account — run: gitswitch shell
 ```
 
-`gitswitch install` fixes the order without removing the other helper. See [HTTPS Push Routing](/docs/features/https).
+`gitswitch shell` fixes the order without removing the other helper. See [HTTPS Push Routing](/docs/routing/https).
 
 ---
 
@@ -264,15 +264,15 @@ Both confirm first and never touch `~/.config/gitswitch/`. See [Versions & Relea
 gitswitch login [--profile <nickname>] [--host <hostname>] [--client-id <id>]
 ```
 
-GitHub device flow in your browser. Creates an account with your name, email, and username filled in, and stores the token in your OS keychain. Re-running it on an existing account refreshes the token and keeps your SSH/signing keys. See [Connecting Accounts](/docs/features/accounts).
+GitHub device flow in your browser. Creates an account with your name, email, and username filled in, and stores the token in your OS keychain. Also registers the account with the `gh` CLI itself (`gh auth login --with-token`), so Session Isolation and HTTPS routing can actually use it. Re-running it on an existing account refreshes the token and keeps your SSH/signing keys. See [Connecting Accounts](/docs/accounts/accounts).
 
-## `claude`
+## `skills`
 
 ```bash
-gitswitch claude [--scope user|project]
+gitswitch skills [--scope user|project] [--offline]
 ```
 
-Installs the gitswitch skill into Claude Code, embedded in the binary. `user` → `~/.claude/skills/` (default), `project` → `.claude/skills/`.
+Installs the gitswitch skill, embedded in the binary. Tries [skills.sh](https://www.skills.sh) first (works with Claude Code, Cursor, Codex, and more); falls back to installing directly for Claude Code and the shared `.agents/skills` convention when `--offline` is passed or `npx` isn't available. `user` → `~/.claude/skills/`, `~/.agents/skills/` (default), `project` → `.claude/skills/`, `.agents/skills/`.
 
 ## `reauthor`
 
@@ -289,15 +289,7 @@ Rewrites author and committer on commits between `<base>` and `HEAD`. `<base>` i
 | `--push` | Force-push (`--force-with-lease`) afterwards. |
 | `--yes` / `-y` | No confirmations — for scripts and agents. |
 
-This rewrites history. Full context in [AI Coding Agents](/docs/features/ai-agents).
-
-## `setup`
-
-```bash
-gitswitch setup [--agent]
-```
-
-Checks `git` and `gh` and tells you what to do next. `--agent` emits a JSON manifest (version, account count, git/gh state) for AI agents.
+This rewrites history. Full context in [AI Coding Agents](/docs/ai/ai-agents).
 
 ## `pacman`
 
@@ -305,7 +297,7 @@ Checks `git` and `gh` and tells you what to do next. `--agent` emits a JSON mani
 gitswitch pacman
 ```
 
-Toggles [arcade mode](/docs/features/arcade) on or off for every future launch. No, we won't explain it here.
+Toggles [arcade mode](/docs/extras/arcade) on or off for every future launch. No, we won't explain it here.
 
 ## `record` / `recommend`
 
@@ -316,7 +308,7 @@ gitswitch record    [--path <dir>]    # count the active account for this repo
 gitswitch recommend [--path <dir>]    # print the recommended account, if any
 ```
 
-`recommend` exits `0` and prints `nickname<TAB>name<TAB>email` when there's a recommendation, `1` silently when there isn't. See [Pins & Identity Awareness](/docs/features/identity-awareness).
+`recommend` exits `0` and prints `nickname<TAB>name<TAB>email` when there's a recommendation, `1` silently when there isn't. See [Pins & Identity Awareness](/docs/routing/identity-awareness).
 
 ---
 

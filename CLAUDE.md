@@ -18,6 +18,8 @@ gitswitch users range from students running their first git command to senior en
 ### Under the Hood      ← for chore:/refactor: — optional, keep brief
 ```
 
+**Use these exact heading names — `### Bug Fixes`, not `### Fixed`.** Older entries further down `CHANGELOG.md` predate this standard and still say `### Fixed`; don't pattern-match off them when writing a new entry. Never rewrite a past release's heading to match — only new `[Unreleased]` sections use `Bug Fixes` going forward.
+
 ### Writing rules
 
 - **Lead with the user benefit, not the implementation.** Bad: "Refactored credential store to use atomic writes." Good: "Profiles now save instantly — no more partial-write corruption on slow disks."

@@ -3,41 +3,24 @@ title: Quick Start
 description: From zero to "I never think about this again" in about two minutes
 ---
 
-Three commands. That's the whole thing.
+Two commands. That's the whole thing.
 
 ```bash
-gitswitch install    # 1. set up
-gitswitch login      # 2. connect an account
-gitswitch pin work   # 3. claim a repo
+gitswitch            # 1. first run — sets up git/gh, connects your account
+gitswitch pin work   # 2. claim a repo
 ```
 
-Below is what each one actually does, in case you like knowing.
+Below is what actually happens, in case you like knowing.
 
-## 1. Set up
+## 1. First run
 
 ```bash
-gitswitch install
+gitswitch
 ```
 
-A short wizard with three steps, each one explaining itself and each one skippable:
+On a machine with no profiles yet, this checks for `git` and `gh` before anything else and offers to install whichever's missing, then opens a short wizard — it scans your `gh` logins and `~/.ssh/` keys and offers to import what it finds, or log in with GitHub fresh.
 
-| Step | What you get |
-|---|---|
-| **Shell integration** | Your prompt shows which account is active, you get nudged if a repo looks wrong, and tab-completion works. |
-| **HTTPS credential routing** | `git push` over HTTPS uses the right account's token instead of whatever your keychain hands over. |
-| **Session Isolation** | Each terminal's `gh` commands resolve the account for the repo *you're in* — and it's what makes repo pins work. |
-
-Then reload your shell:
-
-```bash
-source ~/.zshrc    # zsh
-source ~/.bashrc   # bash
-# or just open a new terminal
-```
-
-> Everything gitswitch writes lives between `# gitswitch` markers in your rc file. Re-running `install` replaces that block in place — it never appends a second copy.
-
-## 2. Connect an account
+You can also do the login step directly, any time, instead of through the wizard:
 
 ```bash
 gitswitch login
@@ -69,7 +52,7 @@ gitswitch login --profile work       # work, with a nicer nickname
 gitswitch login --host github.acme.com   # GitHub Enterprise
 ```
 
-No SSH keys to generate, nothing to paste into a settings page. If you'd rather bring your own keys, see [SSH Keys](/docs/features/ssh-keys) — or type a profile in by hand:
+No SSH keys to generate, nothing to paste into a settings page. If you'd rather bring your own keys, see [SSH Keys](/docs/accounts/ssh-keys) — or type a profile in by hand:
 
 ```bash
 gitswitch add work "Alice Smith" alice@company.com --gh-user alice-corp
@@ -88,7 +71,7 @@ gitswitch list
 
 The `✓` is your current global identity.
 
-## 3. Claim your repos
+## 2. Claim your repos
 
 ```bash
 cd ~/work/api
@@ -112,6 +95,30 @@ Changed your mind? `gitswitch unpin`.
 
 > **Already configured a repo by hand years ago?** Run `gitswitch pin` with no name. gitswitch reads the repo's existing `user.email`, matches it to one of your accounts, and fills in the rest.
 
+## Shell integration (optional, but worth it)
+
+```bash
+gitswitch shell
+```
+
+A short wizard with three steps, each one explaining itself and each one skippable:
+
+| Step | What you get |
+|---|---|
+| **Shell integration** | Your prompt shows which account is active, you get nudged if a repo looks wrong, and tab-completion works. |
+| **HTTPS credential routing** | `git push` over HTTPS uses the right account's token instead of whatever your keychain hands over. |
+| **Session Isolation** | Each terminal's `gh` commands resolve the account for the repo *you're in* — and it's what makes repo pins work. |
+
+Then reload your shell:
+
+```bash
+source ~/.zshrc    # zsh
+source ~/.bashrc   # bash
+# or just open a new terminal
+```
+
+> Everything gitswitch writes lives between `# gitswitch` markers in your rc file. Re-running `shell` replaces that block in place — it never appends a second copy.
+
 ## Switching by hand
 
 Pins cover the repos you own. For everything else:
@@ -125,7 +132,7 @@ gitswitch current     # who am I in here?
 work — Alice Smith <alice@company.com>  (pinned to this repo)
 ```
 
-That parenthetical matters — it tells you *why* you're that person. See [Scopes](/docs/concepts/scopes).
+That parenthetical matters — it tells you *why* you're that person. See [Scopes](/docs/accounts/scopes).
 
 ## The interactive UI
 
@@ -152,7 +159,7 @@ First launch with no accounts runs a short onboarding wizard — it scans your `
 
 ## Where next
 
-- **[Scopes](/docs/concepts/scopes)** — global, repo, and terminal identities, and who wins
-- **[Multi-account GitHub](/docs/scenarios/multi-github)** — the full two-account walkthrough
-- **[Identity Awareness](/docs/features/identity-awareness)** — the nudges, and how they're learned
+- **[Scopes](/docs/accounts/scopes)** — global, repo, and terminal identities, and who wins
+- **[Multi-account GitHub](/docs/guides/multi-github)** — the full two-account walkthrough
+- **[Identity Awareness](/docs/routing/identity-awareness)** — the nudges, and how they're learned
 - **[Troubleshooting](/docs/troubleshooting)** — when a push still goes out wrong

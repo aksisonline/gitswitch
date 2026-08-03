@@ -37,7 +37,7 @@ Accounts with no `--gh-user` leave the active `gh` account alone entirely.
 
 ## `gh auth switch` is global — and that's a problem
 
-This is worth understanding, because it's the reason [Session Isolation](/docs/features/session-isolation) exists.
+This is worth understanding, because it's the reason [Session Isolation](/docs/routing/session-isolation) exists.
 
 `gh auth switch` flips one machine-wide setting. Switch identities in one terminal and every *other* terminal's `gh pr create` silently starts using that account too, even in unrelated repos:
 
@@ -95,6 +95,6 @@ gitswitch current    # the git commit identity
 
 ## Next
 
-- **[Session Isolation](/docs/features/session-isolation)** — per-repo, per-terminal `gh`
-- **[HTTPS Push Routing](/docs/features/https)** — the same idea, for `git push`
-- **[Connecting Accounts](/docs/features/accounts)** — `gitswitch login`
+- **[Session Isolation](/docs/routing/session-isolation)** — per-repo, per-terminal `gh`
+- **[HTTPS Push Routing](/docs/routing/https)** — the same idea, for `git push`
+- **[Connecting Accounts](/docs/accounts/accounts)** — `gitswitch login`
