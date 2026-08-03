@@ -7,6 +7,8 @@ Format: `[version] — date — summary`
 
 ## [Unreleased]
 
+## [v0.4.1] — 2026-08-03
+
 ### Under the Hood
 - **The install command is shorter** — `curl -fsSL https://get.gitswitch.dev | bash` replaces the long `raw.githubusercontent.com/.../install.sh` URL everywhere it's documented. Behaves identically; `get.gitswitch.dev` proxies the same script with the right `Content-Type`, it's not a redirect.
 - **Agent setup is now a single URL** — the install script itself carries the full setup playbook as comments, so handing an agent `https://get.gitswitch.dev` is enough; it reads its own instructions from the file it just downloaded instead of needing a separate copy-paste block.
