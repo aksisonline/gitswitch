@@ -287,9 +287,13 @@ jobs:
           # forget (it sat un-cut through this whole release cycle once).
           perl -0777 -pi -e "s/## \[Unreleased\]/## [Unreleased]\n\n## [$NEW_TAG] — $DATE/" CHANGELOG.md
 
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
           git diff --cached --quiet || git commit -m "docs: cut ${NEW_TAG} release notes"
-          git push origin main
+          # Push HEAD explicitly rather than "main" — checkout may leave us
+          # in detached HEAD rather than on a local branch named main.
+          git push origin HEAD:main
 
   sync-canary:
     name: Fast-forward canary with this release
