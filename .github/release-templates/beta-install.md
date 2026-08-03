@@ -7,7 +7,7 @@ curl -fsSL https://get.gitswitch.dev | bash -s -- __TAG__
 
 **Windows — PowerShell**
 ```powershell
-$env:GS_VERSION="__TAG__"; irm https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.ps1 | iex
+$env:GS_VERSION="__TAG__"; irm https://get.gitswitch.dev/install.ps1 | iex
 ```
 
 **Windows — Command Prompt**

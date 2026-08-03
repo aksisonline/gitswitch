@@ -20,7 +20,7 @@ const (
 	githubReleasesURL   = "https://api.github.com/repos/aksisonline/gitswitch/releases?per_page=20"
 	githubReleaseTagURL = "https://api.github.com/repos/aksisonline/gitswitch/releases/tags/%s"
 	installScriptURL    = "https://get.gitswitch.dev"
-	installScriptPS1    = "https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.ps1"
+	installScriptPS1    = "https://get.gitswitch.dev/install.ps1"
 	cacheTTL            = 24 * time.Hour
 	seenVersionFile     = "version-seen.txt"
 	pendingWhatsNewFile = "whats-new-pending.txt"
