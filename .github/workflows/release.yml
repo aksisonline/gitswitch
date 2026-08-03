@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   check:
@@ -277,9 +278,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Cut CHANGELOG.md's Unreleased section into this version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           NEW_TAG="${{ needs.version.outputs.new_tag }}"
           DATE="$(date -u +%Y-%m-%d)"
+          BRANCH="chore/cut-changelog-${NEW_TAG}"
 
           # Move [Unreleased]'s content under a permanent version header and
           # leave a clean, empty [Unreleased] behind for the next release.
@@ -290,10 +294,34 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
-          git diff --cached --quiet || git commit -m "docs: cut ${NEW_TAG} release notes"
-          # Push HEAD explicitly rather than "main" — checkout may leave us
-          # in detached HEAD rather than on a local branch named main.
-          git push origin HEAD:main
+          if git diff --cached --quiet; then
+            echo "Nothing to cut, skipping."
+            exit 0
+          fi
+
+          # main requires a PR for every change — a direct push here gets
+          # rejected (GH006), so open one instead and let it auto-merge once
+          # approved, rather than trying to bypass branch protection.
+          #
+          # -B/-f make branch creation and push idempotent across reruns
+          # (e.g. a retried job after a transient failure hitting an
+          # already-existing branch). The gh calls are best-effort and
+          # non-fatal (warn, don't fail the job) — a rerun where the PR
+          # already exists, or auto-merge being unavailable, shouldn't take
+          # down `publish` and block `sync-canary` the way the direct push
+          # used to; worst case someone has to open/merge the PR by hand.
+          git checkout -B "$BRANCH"
+          git commit -m "docs: cut ${NEW_TAG} release notes"
+          git push -f origin "$BRANCH"
+
+          if ! gh pr view "$BRANCH" --json url >/dev/null 2>&1; then
+            gh pr create --base main --head "$BRANCH" \
+              --title "docs: cut ${NEW_TAG} release notes" \
+              --body "Automated: moves \`[Unreleased]\` into a permanent \`## [${NEW_TAG}] — ${DATE}\` header now that ${NEW_TAG} has shipped. Approve to merge — it's set to auto-merge once approved." \
+              || echo "::warning::Could not open the changelog-cut PR for ${NEW_TAG} — cut CHANGELOG.md by hand via a PR into main."
+          fi
+          gh pr merge "$BRANCH" --auto --squash \
+            || echo "::warning::Could not enable auto-merge on the changelog-cut PR for ${NEW_TAG} — merge it manually."
 
   sync-canary:
     name: Fast-forward canary with this release
