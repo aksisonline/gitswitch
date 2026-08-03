@@ -1,8 +1,8 @@
 # gitswitch Windows installer
 # Usage (PowerShell):
-#   irm https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.ps1 | iex
+#   irm https://get.gitswitch.dev/install.ps1 | iex
 #   # or pin a version:
-#   $env:GS_VERSION="v0.2.0"; irm .../install.ps1 | iex
+#   $env:GS_VERSION="v0.2.0"; irm https://get.gitswitch.dev/install.ps1 | iex
 #
 # Usage (winget — coming soon):
 #   winget install aksisonline.gitswitch
@@ -91,5 +91,5 @@ Write-Host ""
 Write-Host "  v  gitswitch.exe -> $DEST"
 Write-Host "  v  gs.exe        -> $GS_DEST"
 Write-Host ""
-Write-Host "  Restart your terminal, then run:  gs login"
+Write-Host "  Restart your terminal, then run:  gs  — first run sets up git/gh and your account automatically."
 Write-Host ""
