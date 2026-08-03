@@ -2,7 +2,7 @@
 
 **macOS / Linux**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh | bash -s -- __TAG__
+curl -fsSL https://get.gitswitch.dev | bash -s -- __TAG__
 ```
 
 **Windows — PowerShell**

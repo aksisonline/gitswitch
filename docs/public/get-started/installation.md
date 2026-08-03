@@ -20,7 +20,7 @@ brew upgrade gitswitch   # later
 ## curl
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aksisonline/gitswitch/main/.github/install.sh | bash
+curl -fsSL https://get.gitswitch.dev | bash
 ```
 
 Downloads the right binary for your OS and architecture into `/usr/local/bin`. Upgrade later with `gitswitch upgrade`.

@@ -276,6 +276,25 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Cut CHANGELOG.md's Unreleased section into this version
+        run: |
+          NEW_TAG="${{ needs.version.outputs.new_tag }}"
+          DATE="$(date -u +%Y-%m-%d)"
+
+          # Move [Unreleased]'s content under a permanent version header and
+          # leave a clean, empty [Unreleased] behind for the next release.
+          # Previously this was a manual follow-up commit — it's easy to
+          # forget (it sat un-cut through this whole release cycle once).
+          perl -0777 -pi -e "s/## \[Unreleased\]/## [Unreleased]\n\n## [$NEW_TAG] — $DATE/" CHANGELOG.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet || git commit -m "docs: cut ${NEW_TAG} release notes"
+          # Push HEAD explicitly rather than "main" — checkout may leave us
+          # in detached HEAD rather than on a local branch named main.
+          git push origin HEAD:main
+
   sync-canary:
     name: Fast-forward canary with this release
     needs: [version, publish]

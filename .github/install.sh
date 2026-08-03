@@ -1,4 +1,31 @@
 #!/bin/bash
+# gitswitch installer — https://get.gitswitch.dev
+#
+# Humans / scripts:  curl -fsSL https://get.gitswitch.dev | bash
+# Agents:            fetch this URL as text — this file is both the
+#                     installer and its own instructions. The code below
+#                     just installs the binary; read on for what to do
+#                     with it once it's there.
+#
+# ── After this script finishes ──────────────────────────────────────────
+#
+#   1. gitswitch doctor --json
+#      Reports git/gh presence, HTTPS routing, Session Isolation as JSON.
+#      Resolve anything it flags before moving on.
+#
+#   2. gitswitch login
+#      GitHub's OAuth device flow: it prints a URL and a short code. A
+#      human has to open that URL in a browser and approve it — an agent
+#      can't complete this step on its own. Show the user the URL and
+#      code, ask them to approve it, then wait; the command blocks until
+#      they do (or it times out). Don't try to script around it.
+#
+#   3. gitswitch doctor --json   (again, to confirm)
+#      "profiles" should now be >= 1 and "gh": {"installed": true}. If
+#      shell integration ran too (gitswitch shell), "https.routed_by_gitswitch"
+#      and "gh_wrapper_installed" should both be true.
+#
+# Full CLI reference: https://gitswitch.dev/docs/cli/commands
 set -e
 
 # Detect OS and architecture
