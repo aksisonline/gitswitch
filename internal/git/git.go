@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aksisonline/gitswitch/internal/oauth"
 )
@@ -324,10 +326,14 @@ func ListGHUsers() []GHAccount {
 				break
 			}
 		}
-		// Deduplicate by login (status can repeat per host).
+		// Deduplicate by (login, host) — `gh auth status`'s text can repeat an
+		// entry, but the same login can also legitimately exist on two
+		// different hosts (github.com and a GHES instance), and Host now
+		// matters for token/email lookups, so login alone would wrongly
+		// drop one of those as a "duplicate" of the other.
 		dup := false
 		for _, u := range users {
-			if u.Login == login {
+			if u.Login == login && u.Host == host {
 				dup = true
 				break
 			}
@@ -342,11 +348,17 @@ func ListGHUsers() []GHAccount {
 // ghTokenFor mirrors credential.ghAuthToken's mechanism (duplicated, not
 // imported, to avoid a cycle: internal/credential already imports
 // internal/git). Same silent-empty-on-failure contract — never a hard error.
+// Bounded by a timeout: detectExistingProfiles waits on all of these during
+// onboarding, so a hung `gh` subprocess (e.g. a keychain-unlock prompt with
+// nowhere to show it) must not stall the wizard indefinitely — the HTTP
+// timeout in oauth.FetchVerifiedEmails doesn't help if it never gets called.
 func ghTokenFor(host, login string) string {
 	if !IsGHInstalled() {
 		return ""
 	}
-	out, err := exec.Command("gh", "auth", "token", "--hostname", host, "--user", login).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "gh", "auth", "token", "--hostname", host, "--user", login).Output()
 	if err != nil {
 		return ""
 	}

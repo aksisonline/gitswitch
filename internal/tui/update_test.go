@@ -342,3 +342,36 @@ func TestMergeIntoFoundLiteralEmailCoincidence(t *testing.T) {
 		t.Fatalf("expected literal-email coincidence with no GHUser to be dropped, got %d profiles", len(found))
 	}
 }
+
+// TestMergeIntoFoundRecordsEmailEvenWhenMergedViaEarlierTier is a regression
+// test for a real gap Copilot review caught: a candidate whose own Email is
+// only recorded in seenEmail inside tier 3's branch means a merge via tier 1
+// or tier 2 (which returns before reaching that code) never marks its email
+// as seen — so a later, unrelated candidate sharing that same literal email
+// would slip past tier 3's dedup instead of being caught.
+func TestMergeIntoFoundRecordsEmailEvenWhenMergedViaEarlierTier(t *testing.T) {
+	found := []storage.Profile{{Nickname: "alice", Email: "alice@gmail.com"}}
+	seen := map[string]bool{"alice@gmail.com": true}
+
+	// Merges via tier 1 (nickname collision) — found[0].Email is already
+	// set, so mergeProfileFields won't overwrite it with this profile's own
+	// email, but that email must still be recorded in seenEmail.
+	found = mergeIntoFound(found, seen, storage.Profile{
+		Nickname: "alice",
+		Email:    "alice-work@gmail.com",
+		GHUser:   "alice-corp",
+	}, nil)
+	if len(found) != 1 {
+		t.Fatalf("expected nickname-collision merge, got %d profiles", len(found))
+	}
+
+	// A later, unrelated candidate sharing that same literal email (no
+	// GHUser) must be deduped, not appended as a spurious second profile.
+	found = mergeIntoFound(found, seen, storage.Profile{
+		Nickname: "someone-else",
+		Email:    "alice-work@gmail.com",
+	}, nil)
+	if len(found) != 1 {
+		t.Fatalf("expected literal-email dedup to catch the merged-away candidate's email, got %d profiles", len(found))
+	}
+}

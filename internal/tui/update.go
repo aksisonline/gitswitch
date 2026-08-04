@@ -1495,6 +1495,16 @@ func mergeIntoFound(found []storage.Profile, seenEmail map[string]bool, p storag
 		return found
 	}
 
+	// Snapshot before recording, then record unconditionally — regardless of
+	// which tier below ends up handling p, its own email must be marked seen
+	// so a later, unrelated candidate sharing that literal email still gets
+	// deduped by tier 3. Recording only inside tier 3's own branch (as
+	// before) missed this whenever tier 1 or tier 2 merged and returned early.
+	alreadySeenEmail := p.Email != "" && seenEmail[p.Email]
+	if p.Email != "" {
+		seenEmail[p.Email] = true
+	}
+
 	for i := range found {
 		if found[i].Nickname == p.Nickname {
 			mergeProfileFields(&found[i], p)
@@ -1511,11 +1521,8 @@ func mergeIntoFound(found []storage.Profile, seenEmail map[string]bool, p storag
 		}
 	}
 
-	if p.Email != "" && seenEmail[p.Email] && p.GHUser == "" {
+	if alreadySeenEmail && p.GHUser == "" {
 		return found
-	}
-	if p.Email != "" {
-		seenEmail[p.Email] = true
 	}
 	return append(found, p)
 }
