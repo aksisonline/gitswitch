@@ -219,7 +219,7 @@ func (m UpgradeModel) viewNotes(pw int, updateAvailable bool) string {
 		header = "  " + styleTitle.Render("You're on the latest — ") + styleCurrentVal.Render(m.currentVersion)
 	}
 
-	noteLines := renderNotes(m.notes, pw)
+	noteLines := renderNotes(m.notes)
 
 	visibleH := m.height - 12
 	if visibleH < 4 {
@@ -258,7 +258,7 @@ func (m UpgradeModel) viewNotes(pw int, updateAvailable bool) string {
 }
 
 // renderNotes does minimal markdown cleanup — same logic as viewWhatsNew.
-func renderNotes(raw string, _ int) []string {
+func renderNotes(raw string) []string {
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(colorGreen)
 	bulletStyle := lipgloss.NewStyle().Foreground(colorDim)
 	dimStyle := lipgloss.NewStyle().Foreground(colorDim)

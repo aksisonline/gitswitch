@@ -1,6 +1,7 @@
 package history
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -157,7 +158,7 @@ func TestPinUnpinRoundtrip(t *testing.T) {
 	h := newHistory(map[string]RepoHistory{
 		testRepo: rh("", map[string]int{"work": 9, "personal": 1}),
 	})
-	data, err := marshalHistory(h)
+	data, err := json.MarshalIndent(h, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +201,7 @@ func TestRecordAt_IncrementsCount(t *testing.T) {
 	h := newHistory(map[string]RepoHistory{
 		testRepo: rh("", map[string]int{"work": 2}),
 	})
-	data, err := marshalHistory(h)
+	data, err := json.MarshalIndent(h, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +238,7 @@ func TestRecordAt_DoesNotTouchPinned(t *testing.T) {
 	h := newHistory(map[string]RepoHistory{
 		testRepo: rh("personal", map[string]int{"work": 2}),
 	})
-	data, err := marshalHistory(h)
+	data, err := json.MarshalIndent(h, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,7 +330,7 @@ func TestLoadSaveRoundtrip(t *testing.T) {
 	h := newHistory(map[string]RepoHistory{
 		testRepo: rh("work", map[string]int{"work": 5, "aks": 1}),
 	})
-	data, err := marshalHistory(h)
+	data, err := json.MarshalIndent(h, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}

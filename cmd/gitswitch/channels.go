@@ -21,7 +21,7 @@ If gitswitch was installed via Homebrew, the formula will be removed first and
 replaced with the canary binary. Your profiles and settings at
 ~/.config/gitswitch/ are untouched.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if ver.IsCanaryBuild(version) {
+		if ver.IsBeta(version) {
 			fmt.Println("Already on the canary channel (" + version + ").")
 			fmt.Println("Run 'gitswitch stable' to switch back to the stable channel.")
 			return nil
@@ -38,7 +38,7 @@ var stableCmd = &cobra.Command{
 Use this to move off the canary channel. Your profiles and settings at
 ~/.config/gitswitch/ are preserved.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !ver.IsCanaryBuild(version) {
+		if !ver.IsBeta(version) {
 			fmt.Println("Already on the stable channel (" + version + ").")
 			fmt.Println("Run 'gitswitch beta' to switch to the canary channel.")
 			return nil

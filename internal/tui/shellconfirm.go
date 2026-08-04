@@ -37,20 +37,26 @@ func (m *Model) openShellConfirm(install bool) {
 	m.state = StateShellConfirm
 }
 
+// resolvedShellAlias is the alias to actually write: the configured one,
+// unless the user has disabled it (blank tells shell.Install/Reinstall to
+// skip writing an alias at all).
+func (m Model) resolvedShellAlias() string {
+	if m.shellAliasDisabled {
+		return ""
+	}
+	return m.shellAlias
+}
+
 // runShellAction performs the install or uninstall in a command.
 func (m Model) runShellAction(install bool) tea.Cmd {
 	return func() tea.Msg {
 		sh := shell.DetectShell()
 		fw := shell.DetectFramework()
 		if install {
-			alias := m.shellAlias
-			if m.shellAliasDisabled {
-				alias = ""
-			}
-			res, err := shell.Install(sh, fw, alias)
+			res, err := shell.Install(sh, fw, m.resolvedShellAlias())
 			return shellDoneMsg{installed: true, result: res, err: err}
 		}
-		res, err := shell.Uninstall(sh, fw)
+		res, err := shell.Uninstall(sh)
 		return shellDoneMsg{installed: false, result: res, err: err}
 	}
 }
@@ -61,11 +67,7 @@ func (m Model) reinstallShellCmd() tea.Cmd {
 	return func() tea.Msg {
 		sh := shell.DetectShell()
 		fw := shell.DetectFramework()
-		alias := m.shellAlias
-		if m.shellAliasDisabled {
-			alias = ""
-		}
-		res, err := shell.Reinstall(sh, fw, alias)
+		res, err := shell.Reinstall(sh, fw, m.resolvedShellAlias())
 		return shellDoneMsg{installed: true, result: res, err: err}
 	}
 }

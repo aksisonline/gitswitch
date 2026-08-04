@@ -165,7 +165,7 @@ func TestNewDetectsRepoPin(t *testing.T) {
 	}
 	t.Chdir(repo)
 
-	m, err := New(st, "v0.0.0-test")
+	m, err := New(st, "v0.0.0-test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestNewPersistedArcadeModeShowsIntro(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, err := New(st, "v0.0.0-test")
+	m, err := New(st, "v0.0.0-test", "")
 	if err != nil {
 		t.Fatal(err)
 	}

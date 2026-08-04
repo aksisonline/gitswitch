@@ -136,90 +136,14 @@ jobs:
           echo "new_tag=$NEW_TAG" >> "$GITHUB_OUTPUT"
           echo "version=${NEW_TAG#v}" >> "$GITHUB_OUTPUT"
 
-  release:
-    name: Build and release
-    needs: version
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - goos: darwin
-            goarch: amd64
-            ext: ""
-          - goos: darwin
-            goarch: arm64
-            ext: ""
-          - goos: linux
-            goarch: amd64
-            ext: ""
-          - goos: linux
-            goarch: arm64
-            ext: ""
-          - goos: windows
-            goarch: amd64
-            ext: ".exe"
-          - goos: windows
-            goarch: arm64
-            ext: ".exe"
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Build binary
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          BASE="gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}"
-          OUTPUT="${BASE}${{ matrix.ext }}"
-          go build -trimpath -ldflags="-s -w -X main.version=${{ needs.version.outputs.new_tag }}" -o "$OUTPUT" ./cmd/gitswitch
-          sha256sum "$OUTPUT" > "${BASE}.sha256"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
-            gitswitch-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
-
   publish:
     name: Create release and tag
-    needs: [check, version, release]
+    needs: [check, version]
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Prepare release files
-        run: |
-          mkdir -p release
-          find artifacts -type f \( -name "gitswitch-*" -o -name "*.sha256" \) -exec mv {} release/ \;
-          cd release
-          cat gitswitch-*.sha256 > checksums.txt 2>/dev/null || echo "No checksums"
-          ls -la
-
-      - name: Include install scripts
-        run: |
-          cp .github/install.ps1 release/install.ps1
-          cp .github/install.cmd release/install.cmd
-
-      - name: Update install script with version
-        run: |
-          sed -i 's|VERSION="${1:-v[^"]*}"|VERSION="${1:-${{ needs.version.outputs.new_tag }}}"|' .github/install.sh
 
       - name: Create git tag
         run: |
@@ -357,34 +281,23 @@ jobs:
 
   notify-website:
     name: Rebuild gitswitch.dev
-    needs: [version, release]
+    needs: [check, version, publish]
     runs-on: ubuntu-latest
-    if: success()
+    # Two cases collapsed into one job: a real release just published, or a
+    # manual dispatch with nothing to release (still worth a rebuild, e.g.
+    # to pick up a docs-only change). version/publish are skipped (not
+    # failed) in the second case, so always() + an explicit result check is
+    # needed — a plain if: success() would skip this job in that case too.
+    if: always() && (needs.publish.result == 'success' || (github.event_name == 'workflow_dispatch' && needs.check.outputs.should_release == 'false'))
     continue-on-error: true
 
     steps:
       - name: Trigger website rebuild
         run: |
+          VERSION="${{ needs.check.outputs.should_release == 'true' && needs.version.outputs.new_tag || needs.check.outputs.latest_tag }}"
           curl -fsSL -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${{ secrets.WEBSITE_DISPATCH_PAT }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/aksisonline/gitswitch-web-v3/dispatches \
-            -d '{"event_type":"gitswitch-release","client_payload":{"version":"${{ needs.version.outputs.new_tag }}"}}'
-
-  notify-website-manual:
-    name: Rebuild gitswitch.dev (manual)
-    needs: check
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && needs.check.outputs.should_release == 'false'
-    continue-on-error: true
-
-    steps:
-      - name: Trigger website rebuild with latest tag
-        run: |
-          curl -fsSL -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.WEBSITE_DISPATCH_PAT }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/aksisonline/gitswitch-web-v3/dispatches \
-            -d '{"event_type":"gitswitch-release","client_payload":{"version":"${{ needs.check.outputs.latest_tag }}"}}'
+            -d "{\"event_type\":\"gitswitch-release\",\"client_payload\":{\"version\":\"$VERSION\"}}"

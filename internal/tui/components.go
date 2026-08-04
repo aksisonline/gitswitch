@@ -96,11 +96,7 @@ func itemInnerW(pw int) int {
 // Uses spaces for padding. ANSI codes in s are NOT counted — pass already-rendered
 // strings only when measuring with lipgloss.Width separately.
 func padTo(s string, n int) string {
-	w := lipgloss.Width(s)
-	if w >= n {
-		return s
-	}
-	return s + strings.Repeat(" ", n-w)
+	return lipgloss.PlaceHorizontal(n, lipgloss.Left, s)
 }
 
 // titleWithRight builds a line1 string: title left-aligned, right widget right-aligned,

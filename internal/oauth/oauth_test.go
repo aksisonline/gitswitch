@@ -44,6 +44,27 @@ func TestFetchVerifiedEmailsUserEmailsHappyPath(t *testing.T) {
 	}
 }
 
+// fetchUser takes verified[0] as THE email for a new profile, so the primary
+// verified email must sort first regardless of its position in the API
+// response — this used to be primaryEmail's whole job before it got folded
+// into FetchVerifiedEmails.
+func TestFetchVerifiedEmailsPrimarySortsFirst(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `[
+			{"email": "secondary@example.com", "verified": true, "primary": false},
+			{"email": "primary@example.com", "verified": true, "primary": true},
+			{"email": "another@example.com", "verified": true, "primary": false}
+		]`)
+	}))
+	defer srv.Close()
+	withTestServer(t, srv)
+
+	got := FetchVerifiedEmails("token", srv.Listener.Addr().String())
+	if len(got) != 3 || got[0] != "primary@example.com" {
+		t.Fatalf("got %v, want primary@example.com first", got)
+	}
+}
+
 func TestFetchVerifiedEmailsFallsBackToPublicUserEmail(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

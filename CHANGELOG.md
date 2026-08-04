@@ -12,6 +12,7 @@ Format: `[version] — date — summary`
 
 ### Under the Hood
 - **The Windows install command is shorter too** — `irm https://get.gitswitch.dev/install.ps1 | iex` replaces the long `raw.githubusercontent.com/.../install.ps1` URL, matching the shortened curl command from the previous release. Behaves identically; get.gitswitch.dev proxies the same script.
+- **Housekeeping pass** — removed dead code, a one-call-site dependency, and a release-workflow step that built and uploaded binaries nothing ever downloaded. No behavior change.
 
 ## [v0.4.1] — 2026-08-03
 

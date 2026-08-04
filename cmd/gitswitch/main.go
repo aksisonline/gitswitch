@@ -53,8 +53,8 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:           "gitswitch [nickname]",
-	Short:         "Set up git and switch between GitHub accounts on one machine",
+	Use:   "gitswitch [nickname]",
+	Short: "Set up git and switch between GitHub accounts on one machine",
 	Long: `Run without arguments to open the profile picker. First run on a machine with
 no profiles yet checks for git/gh automatically and offers to install them,
 then walks you through connecting a GitHub account — nothing else to run first.`,
@@ -73,11 +73,11 @@ then walks you through connecting a GitHub account — nothing else to run first
 				return err
 			}
 		}
-		var tuiOpts []tui.Option
+		var whatsNewBody string
 		if show, notes := ver.ShouldShowWhatsNew(store.ConfigDir(), version); show {
-			tuiOpts = append(tuiOpts, tui.WithWhatsNew(notes))
+			whatsNewBody = notes
 		}
-		m, err := tui.New(store, version, tuiOpts...)
+		m, err := tui.New(store, version, whatsNewBody)
 		if err != nil {
 			return err
 		}
@@ -99,61 +99,90 @@ then walks you through connecting a GitHub account — nothing else to run first
 				fmt.Println()
 			}
 			if final.LaunchOAuth {
-				fmt.Println()
-				fmt.Println("  ┌──────────────────────────────────────────┐")
-				fmt.Println("  │  gitswitch · Log in with GitHub          │")
-				fmt.Println("  └──────────────────────────────────────────┘")
-				token, user, err := gsoauth.Login("", "")
-				if err != nil {
-					fmt.Printf("\n  ✗  %v\n\n", err)
-					return nil
-				}
-				nickname := user.Login
-				ref := fmt.Sprintf("gitswitch:%s:github.com", nickname)
-				secrets := secretsStore.Default()
-				if secrets.Available() {
-					if err := secrets.Set(ref, token); err != nil {
-						fmt.Printf("  ⚠  Could not store token in keychain: %v\n", err)
-					}
-				}
-				name := user.Name
-				if name == "" {
-					name = user.Login
-				}
-				if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
-					// Merge OAuth fields onto existing profile — keep SSH/GPG keys.
-					existing, _ := store.Get(nickname)
-					_ = store.Update(nickname, mergeOAuthUpdate(existing, storage.Profile{
-						Nickname: nickname,
-						UserName: name,
-						Email:    user.Email,
-						GHUser:   user.Login,
-						TokenRef: ref,
-					}))
-				} else {
-					_ = store.Update(nickname, storage.Profile{
-						Nickname: nickname,
-						UserName: name,
-						Email:    user.Email,
-						GHUser:   user.Login,
-						TokenRef: ref,
-					})
-				}
-				profiles, _ := store.Load()
-				if len(profiles) == 1 {
-					_ = store.SetActive(nickname)
-				}
-				fmt.Printf("\n  ✓  Logged in as %s (github.com)\n", user.Login)
-				fmt.Printf("  ✓  Profile %q created\n", nickname)
-				if secrets.Available() {
-					fmt.Println("  ✓  Token stored in keychain")
-				}
-				registerWithGH("", token)
-				fmt.Printf("\n  Next: run  gs switch %s  to activate\n\n", nickname)
+				return completeLogin("", "", "")
 			}
 		}
 		return nil
 	},
+}
+
+// completeLogin runs gitswitch's own branded OAuth device flow, creates or
+// updates a profile from the result, and registers the token with the gh
+// CLI. nickname, when empty, defaults to the GitHub username. Shared by the
+// onboarding wizard's "Log in with GitHub" step (rootCmd) and the explicit
+// `login` command — same flow, only the host/clientID/nickname inputs differ.
+// Login failures are printed, not returned, matching both callers' original
+// behavior of never surfacing an OAuth error as a cobra usage error.
+func completeLogin(host, clientID, nickname string) error {
+	fmt.Println()
+	fmt.Println("  ┌──────────────────────────────────────────┐")
+	fmt.Println("  │  gitswitch · Log in with GitHub          │")
+	fmt.Println("  └──────────────────────────────────────────┘")
+
+	token, user, err := gsoauth.Login(host, clientID)
+	if err != nil {
+		fmt.Println()
+		fmt.Printf("  ✗  %v\n\n", err)
+		return nil
+	}
+
+	if nickname == "" {
+		nickname = user.Login
+	}
+
+	displayHost := host
+	if displayHost == "" {
+		displayHost = "github.com"
+	}
+	ref := fmt.Sprintf("gitswitch:%s:%s", nickname, displayHost)
+
+	secrets := secretsStore.Default()
+	if secrets.Available() {
+		if err := secrets.Set(ref, token); err != nil {
+			fmt.Printf("  ⚠  Could not store token in keychain: %v\n", err)
+		}
+	}
+
+	name := user.Name
+	if name == "" {
+		name = user.Login
+	}
+	if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
+		// Profile exists — merge OAuth fields, keep SSH/GPG keys.
+		existing, _ := store.Get(nickname)
+		_ = store.Update(nickname, mergeOAuthUpdate(existing, storage.Profile{
+			Nickname: nickname,
+			UserName: name,
+			Email:    user.Email,
+			GHUser:   user.Login,
+			TokenRef: ref,
+		}))
+	} else {
+		_ = store.Update(nickname, storage.Profile{
+			Nickname: nickname,
+			UserName: name,
+			Email:    user.Email,
+			GHUser:   user.Login,
+			TokenRef: ref,
+		})
+	}
+
+	// Make first profile active
+	profiles, _ := store.Load()
+	if len(profiles) == 1 {
+		_ = store.SetActive(nickname)
+	}
+
+	fmt.Println()
+	fmt.Printf("  ✓  Logged in as %s (%s)\n", user.Login, displayHost)
+	fmt.Printf("  ✓  Profile %q created\n", nickname)
+	if secrets.Available() {
+		fmt.Println("  ✓  Token stored in keychain")
+	}
+	registerWithGH(host, token)
+	fmt.Println()
+	fmt.Printf("  Next: run  gs switch %s  to activate\n\n", nickname)
+	return nil
 }
 
 // mergeOAuthUpdate builds the profile to save after a login/re-login: the fresh
@@ -507,8 +536,8 @@ var pacmanCmd = &cobra.Command{
 			return err
 		}
 		// tui.New reads prefs.ArcadeMode straight off disk, including the intro
-		// trigger, so no option is needed here.
-		m, err := tui.New(store, version)
+		// trigger, so no What's New body is needed here.
+		m, err := tui.New(store, version, "")
 		if err != nil {
 			return err
 		}
@@ -574,7 +603,7 @@ var upgradeCmd = &cobra.Command{
 			fmt.Println("New features available in this version.")
 			fmt.Println("Launching setup to activate them...")
 			fmt.Println()
-			opts, err := wizard.Run(wizard.Config{HTTPSDefault: true}, os.Stdout)
+			opts, err := wizard.Run(wizard.Config{HTTPSDefault: true})
 			if err == nil && opts.InstallHTTPS {
 				if herr := git.InstallCredentialHelper(); herr != nil {
 					fmt.Printf("  warning: could not register HTTPS credential helper: %v\n", herr)
@@ -625,7 +654,7 @@ checked the result.`,
 			fmt.Printf(" (commits currently authored by %s only)", from)
 		}
 		fmt.Println(".")
-		if !yes && !confirm("Proceed?") {
+		if !yes && !confirmPrompt("Proceed? [y/N] ") {
 			fmt.Println("Aborted.")
 			return nil
 		}
@@ -636,7 +665,7 @@ checked the result.`,
 		fmt.Println("✓ History rewritten.")
 
 		if push {
-			if !yes && !confirm("Force-push (--force-with-lease) now?") {
+			if !yes && !confirmPrompt("Force-push (--force-with-lease) now? [y/N] ") {
 				fmt.Println("Skipped push — history rewritten locally only. Push manually when ready.")
 				return nil
 			}
@@ -652,14 +681,6 @@ checked the result.`,
 }
 
 // confirm prompts the user with a y/N question on stdin.
-func confirm(question string) bool {
-	fmt.Printf("%s [y/N] ", question)
-	var resp string
-	fmt.Scanln(&resp)
-	resp = strings.ToLower(strings.TrimSpace(resp))
-	return resp == "y" || resp == "yes"
-}
-
 // promptInstallTool shows the exact command needed to install a missing tool,
 // asks for confirmation (skipped when yes is true), and runs it. Returns nil
 // with no action taken if the tool has no InstallCommand for this platform
@@ -669,7 +690,7 @@ func promptInstallTool(label string, t *prereqs.ToolCheck, yes bool) error {
 		return nil
 	}
 	fmt.Printf("  About to run: %s\n", strings.Join(t.InstallCommand, " "))
-	if !yes && !confirm("  Proceed?") {
+	if !yes && !confirmPrompt("  Proceed? [y/N] ") {
 		fmt.Println("  Skipped.")
 		return nil
 	}
@@ -946,7 +967,7 @@ prompts (for scripts and CI).`,
 			ShellOverride: shellFlag,
 			Yes:           yes,
 			HTTPSDefault:  httpsDefault,
-		}, os.Stdout)
+		})
 		if err != nil {
 			return fmt.Errorf("setup interrupted: %w", err)
 		}
@@ -1057,83 +1078,7 @@ var loginCmd = &cobra.Command{
 		host, _ := cmd.Flags().GetString("host")
 		clientID, _ := cmd.Flags().GetString("client-id")
 		profileName, _ := cmd.Flags().GetString("profile")
-
-		fmt.Println()
-		fmt.Println("  ┌──────────────────────────────────────────┐")
-		fmt.Println("  │  gitswitch · Log in with GitHub          │")
-		fmt.Println("  └──────────────────────────────────────────┘")
-
-		token, user, err := gsoauth.Login(host, clientID)
-		if err != nil {
-			fmt.Println()
-			fmt.Printf("  ✗  %v\n\n", err)
-			return nil
-		}
-
-		nickname := profileName
-		if nickname == "" {
-			nickname = user.Login
-		}
-
-		// Store token in OS keychain
-		ref := fmt.Sprintf("gitswitch:%s:%s", nickname, host)
-		if host == "" {
-			ref = fmt.Sprintf("gitswitch:%s:github.com", nickname)
-		}
-		secrets := secretsStore.Default()
-		if secrets.Available() {
-			if err := secrets.Set(ref, token); err != nil {
-				fmt.Printf("  ⚠  Could not store token in keychain: %v\n", err)
-			}
-		}
-
-		// Create profile
-		name := user.Name
-		if name == "" {
-			name = user.Login
-		}
-		if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
-			// Profile exists — merge OAuth fields, keep SSH/GPG keys.
-			existing, _ := store.Get(nickname)
-			_ = store.Update(nickname, mergeOAuthUpdate(existing, storage.Profile{
-				Nickname: nickname,
-				UserName: name,
-				Email:    user.Email,
-				GHUser:   user.Login,
-				TokenRef: ref,
-			}))
-		} else {
-			// Set TokenRef on the newly created profile
-			_ = store.Update(nickname, storage.Profile{
-				Nickname: nickname,
-				UserName: name,
-				Email:    user.Email,
-				GHUser:   user.Login,
-				TokenRef: ref,
-			})
-		}
-
-		// Make first profile active
-		profiles, _ := store.Load()
-		if len(profiles) == 1 {
-			_ = store.SetActive(nickname)
-		}
-
-		fmt.Println()
-		fmt.Printf("  ✓  Logged in as %s (%s)\n", user.Login, func() string {
-			if host == "" {
-				return "github.com"
-			}
-			return host
-		}())
-		fmt.Printf("  ✓  Profile %q created\n", nickname)
-		if secrets.Available() {
-			fmt.Println("  ✓  Token stored in keychain")
-		}
-		registerWithGH(host, token)
-		fmt.Println()
-		fmt.Printf("  Next: run  gs switch %s  to activate\n\n", nickname)
-		return nil
+		return completeLogin(host, clientID, profileName)
 	},
 }
 
@@ -1155,9 +1100,7 @@ var uninstallCmd = &cobra.Command{
 			sh = shell.DetectShell()
 		}
 
-		fw := shell.DetectFramework()
-
-		result, err := shell.Uninstall(sh, fw)
+		result, err := shell.Uninstall(sh)
 		if err != nil {
 			return fmt.Errorf("uninstall failed: %w", err)
 		}

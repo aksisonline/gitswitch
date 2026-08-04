@@ -19,15 +19,6 @@ type Config struct {
 	Global bool
 }
 
-// SwitchResult holds the outcome of a profile switch.
-type SwitchResult struct {
-	Warnings []string
-}
-
-func (r *SwitchResult) addWarning(msg string) {
-	r.Warnings = append(r.Warnings, msg)
-}
-
 func New(global bool) *Config {
 	return &Config{Global: global}
 }

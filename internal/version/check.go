@@ -120,19 +120,6 @@ func tagExists(ctx context.Context, version string) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// ClearVersionCache removes the on-disk version cache so the next check always hits GitHub.
-func ClearVersionCache(configDir string) error {
-	return os.Remove(filepath.Join(configDir, "version-check.json"))
-}
-
-// CurrentVersionExists checks whether the given version has a published release on GitHub.
-// Returns true on network error to avoid spurious forced upgrades.
-func CurrentVersionExists(v string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	return tagExists(ctx, v)
-}
-
 // FetchLatestVersionFresh always fetches from GitHub API, bypassing the cache.
 func FetchLatestVersionFresh() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -238,10 +225,6 @@ func fetchLatestReleaseForBeta(ctx context.Context) (Release, error) {
 	return best, nil
 }
 
-func saveCache(cachePath, version string) error {
-	return saveCacheRelease(cachePath, Release{Version: version})
-}
-
 func saveCacheRelease(cachePath string, rel Release) error {
 	data, err := json.Marshal(cache{LatestVersion: rel.Version, ReleaseNotes: rel.Notes, CheckedAt: time.Now()})
 	if err != nil {
@@ -308,16 +291,8 @@ func splitVersion(v string) (parts [3]int, betaN int) {
 
 // parseSemver parses "v0.2.0" into [0,2,0], ignoring any pre-release suffix.
 func parseSemver(v string) [3]int {
-	v = strings.TrimPrefix(v, "v")
-	if idx := strings.IndexByte(v, '-'); idx >= 0 {
-		v = v[:idx]
-	}
-	parts := strings.SplitN(v, ".", 3)
-	var result [3]int
-	for i := 0; i < len(parts) && i < 3; i++ {
-		fmt.Sscanf(parts[i], "%d", &result[i])
-	}
-	return result
+	parts, _ := splitVersion(v)
+	return parts
 }
 
 // UpgradeCommand returns a configured exec.Cmd for upgrading to targetVersion.

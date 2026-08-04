@@ -85,39 +85,17 @@ func fetchUser(token, host string) (GHUser, error) {
 		return GHUser{}, err
 	}
 
-	email, err := primaryEmail(apiBase, token)
-	if err != nil {
-		// Non-fatal: fall back to noreply address.
-		email = u.Login + "@users.noreply.github.com"
+	email := u.Login + "@users.noreply.github.com"
+	if verified := FetchVerifiedEmails(token, host); len(verified) > 0 {
+		email = verified[0]
 	}
 
 	return GHUser{Login: u.Login, Name: u.Name, Email: email}, nil
 }
 
-func primaryEmail(apiBase, token string) (string, error) {
-	data, err := ghGet(apiBase+"/user/emails", token)
-	if err != nil {
-		return "", err
-	}
-	var emails []struct {
-		Email    string `json:"email"`
-		Primary  bool   `json:"primary"`
-		Verified bool   `json:"verified"`
-	}
-	if err := json.Unmarshal(data, &emails); err != nil {
-		return "", err
-	}
-	for _, e := range emails {
-		if e.Primary && e.Verified {
-			return e.Email, nil
-		}
-	}
-	return "", fmt.Errorf("no primary verified email found")
-}
-
 // FetchVerifiedEmails best-effort resolves every verified email address for
-// the account owning token on host, for cross-referencing a gh-CLI account
-// against a git-config profile during onboarding detection. Tries
+// the account owning token on host, primary email first (so callers that
+// just want "the" email — like fetchUser, below — can take out[0]). Tries
 // /user/emails first (all verified emails — needs the user:email scope,
 // which a plain `gh auth login` token commonly lacks); falls back to
 // /user's public profile email, which GitHub returns to any authenticated
@@ -129,14 +107,23 @@ func FetchVerifiedEmails(token, host string) []string {
 	if data, err := ghGet(apiBase+"/user/emails", token); err == nil {
 		var emails []struct {
 			Email    string `json:"email"`
+			Primary  bool   `json:"primary"`
 			Verified bool   `json:"verified"`
 		}
 		if json.Unmarshal(data, &emails) == nil {
 			var out []string
+			primaryIdx := -1
 			for _, e := range emails {
-				if e.Verified && e.Email != "" {
-					out = append(out, e.Email)
+				if !e.Verified || e.Email == "" {
+					continue
 				}
+				if e.Primary {
+					primaryIdx = len(out)
+				}
+				out = append(out, e.Email)
+			}
+			if primaryIdx > 0 {
+				out[0], out[primaryIdx] = out[primaryIdx], out[0]
 			}
 			if len(out) > 0 {
 				return out
