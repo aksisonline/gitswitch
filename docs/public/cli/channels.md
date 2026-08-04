@@ -2,7 +2,6 @@
 title: Versions & Release Channels
 description: Check your version, upgrade, and switch between stable and canary builds
 ---
-
 ## What am I on?
 
 ```bash

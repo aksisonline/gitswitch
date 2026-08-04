@@ -2,7 +2,6 @@
 title: Open Source + Work
 description: A company account and a public one, kept strictly apart
 ---
-
 Two accounts: `alice-corp` for the day job, `alice` for your own open source. The stakes here are slightly different from the other setups — you really don't want a company email in a public commit log, or a personal account opening a PR on an internal repo.
 
 ## Set up

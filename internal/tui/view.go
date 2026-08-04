@@ -754,7 +754,7 @@ func (m Model) viewWhatsNew(pw int) string {
 	dimStyle := lipgloss.NewStyle().Foreground(colorDim)
 
 	header := titleStyle.Render("  What's New in " + m.currentVersion)
-	noteLines := renderNotes(m.whatsNewBody, pw)
+	noteLines := renderNotes(m.whatsNewBody)
 
 	visibleH := m.height - 10
 	if visibleH < 4 {

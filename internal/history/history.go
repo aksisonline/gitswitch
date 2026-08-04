@@ -281,21 +281,7 @@ func GetPinned(repoKey string) string {
 // GetRepoKey resolves the repo key for the current working directory.
 // Tries git remote URL first, falls back to absolute repo root path.
 func GetRepoKey() string {
-	out, err := exec.Command("git", "remote", "get-url", "origin").Output()
-	if err == nil {
-		key := strings.TrimSpace(string(out))
-		if key != "" {
-			return key
-		}
-	}
-	out, err = exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	if err == nil {
-		key := strings.TrimSpace(string(out))
-		if key != "" {
-			return key
-		}
-	}
-	return ""
+	return GetRepoKeyForPath(".")
 }
 
 // GetRepoKeyForPath resolves the repo key for a given directory path.
@@ -315,11 +301,6 @@ func GetRepoKeyForPath(dir string) string {
 		}
 	}
 	return ""
-}
-
-// marshalHistory encodes a History to JSON bytes (used by tests).
-func marshalHistory(h *History) ([]byte, error) {
-	return json.MarshalIndent(h, "", "  ")
 }
 
 // loadFromPath reads a History from an explicit file path (used by tests).

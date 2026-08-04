@@ -2,7 +2,6 @@
 title: Session Isolation
 description: Two terminals, two GitHub accounts, no fighting
 ---
-
 ## The problem
 
 `gh` remembers exactly one "active" account for your whole machine. So this happens:

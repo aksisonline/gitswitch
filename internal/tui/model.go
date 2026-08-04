@@ -174,15 +174,6 @@ var formSubtitles = [6]string{
 	"for gh auth switch — optional, leave blank to skip",
 }
 
-type Option func(*Model)
-
-func WithWhatsNew(body string) Option {
-	return func(m *Model) {
-		m.whatsNewBody = body
-		m.state = StateWhatsNew
-	}
-}
-
 // refreshRepoScope re-reads the repo gitswitch was launched from: its key, and
 // which identity git will actually author with there. Called at startup and after
 // anything that writes git config, so the glyphs never go stale.
@@ -237,7 +228,9 @@ func (m Model) scopeGlyph(p storage.Profile) string {
 	return "·"
 }
 
-func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, error) {
+// New builds the TUI model. whatsNewBody, when non-empty, opens straight to
+// the What's New screen with that release-notes body instead of the list.
+func New(store *storage.Store, currentVersion, whatsNewBody string) (*Model, error) {
 	profiles, err := store.Load()
 	if err != nil {
 		return nil, err
@@ -277,8 +270,9 @@ func New(store *storage.Store, currentVersion string, opts ...Option) (*Model, e
 		autoPinDisabled:         prefs.AutoPinDisabled,
 	}
 	m.refreshRepoScope()
-	for _, opt := range opts {
-		opt(m)
+	if whatsNewBody != "" {
+		m.whatsNewBody = whatsNewBody
+		m.state = StateWhatsNew
 	}
 	// Arcade mode persists across launches (via `gitswitch pacman`), so the intro
 	// must trigger from the persisted flag, not just the one-shot toggle option —

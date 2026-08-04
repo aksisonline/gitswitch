@@ -2,7 +2,6 @@
 title: Scopes — who you are, and why
 description: Global, repo, and terminal identities — how git picks one, and how to tell at a glance
 ---
-
 Three different things can decide who a commit is from. Knowing which one is in charge is the difference between "I think this is right" and "I know this is right".
 
 ## The three scopes

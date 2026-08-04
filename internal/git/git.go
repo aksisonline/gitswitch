@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,19 +10,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/aksisonline/gitswitch/internal/oauth"
 )
 
 type Config struct {
 	Global bool
-}
-
-// SwitchResult holds the outcome of a profile switch.
-type SwitchResult struct {
-	Warnings []string
-}
-
-func (r *SwitchResult) addWarning(msg string) {
-	r.Warnings = append(r.Warnings, msg)
 }
 
 func New(global bool) *Config {
@@ -275,6 +270,7 @@ func GetGHUser() string {
 // GHAccount is one account listed by `gh auth status`.
 type GHAccount struct {
 	Login  string
+	Host   string // e.g. "github.com"; defaults to that when not parseable
 	Active bool
 }
 
@@ -294,15 +290,20 @@ func ListGHUsers() []GHAccount {
 		// "  ✓ Logged in to github.com account <username> (keyring)"
 		// or older: "  ✓ account <username> ..."
 		fields := strings.Fields(line)
-		var login string
+		var login, host string
 		for j, f := range fields {
 			if f == "account" && j+1 < len(fields) {
 				login = fields[j+1]
-				break
+			}
+			if f == "to" && j+1 < len(fields) {
+				host = fields[j+1]
 			}
 		}
 		if login == "" {
 			continue
+		}
+		if host == "" {
+			host = "github.com"
 		}
 		active := false
 		// "Active account: true" is usually on the next non-empty line(s).
@@ -316,19 +317,62 @@ func ListGHUsers() []GHAccount {
 				break
 			}
 		}
-		// Deduplicate by login (status can repeat per host).
+		// Deduplicate by (login, host) — `gh auth status`'s text can repeat an
+		// entry, but the same login can also legitimately exist on two
+		// different hosts (github.com and a GHES instance), and Host now
+		// matters for token/email lookups, so login alone would wrongly
+		// drop one of those as a "duplicate" of the other.
 		dup := false
 		for _, u := range users {
-			if u.Login == login {
+			if u.Login == login && u.Host == host {
 				dup = true
 				break
 			}
 		}
 		if !dup {
-			users = append(users, GHAccount{Login: login, Active: active})
+			users = append(users, GHAccount{Login: login, Host: host, Active: active})
 		}
 	}
 	return users
+}
+
+// ghTokenFor mirrors credential.ghAuthToken's mechanism (duplicated, not
+// imported, to avoid a cycle: internal/credential already imports
+// internal/git). Same silent-empty-on-failure contract — never a hard error.
+// Bounded by a timeout: detectExistingProfiles waits on all of these during
+// onboarding, so a hung `gh` subprocess (e.g. a keychain-unlock prompt with
+// nowhere to show it) must not stall the wizard indefinitely — the HTTP
+// timeout in oauth.FetchVerifiedEmails doesn't help if it never gets called.
+func ghTokenFor(host, login string) string {
+	if !IsGHInstalled() {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "gh", "auth", "token", "--hostname", host, "--user", login).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// VerifiedEmailsFor best-effort resolves the verified GitHub email(s) for a
+// gh-CLI-logged-in account, so onboarding detection can recognize when this
+// account and a git-config profile are the same person. Returns nil on any
+// failure (gh missing, no token for host, insufficient scope, network/API
+// error) — never blocks, never errors.
+func VerifiedEmailsFor(login, host string) []string {
+	if login == "" {
+		return nil
+	}
+	if host == "" {
+		host = "github.com"
+	}
+	token := ghTokenFor(host, login)
+	if token == "" {
+		return nil
+	}
+	return oauth.FetchVerifiedEmails(token, host)
 }
 
 // GetSignKey reads user.signingkey from the given scope.

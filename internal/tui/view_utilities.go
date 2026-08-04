@@ -32,61 +32,55 @@ func (m Model) viewUtilitiesTab(pw int) string {
 	return top + stylePanelBorder(pw).Render(header+items+footer)
 }
 
+// utilItemSpec describes one utility toggle's copy (normal and arcade-mode)
+// and how to read its current on/off state from the model.
+type utilItemSpec struct {
+	title, arcadeTitle string
+	desc, arcadeDesc   string
+	enabled            func(m Model) bool
+}
+
+var utilItemSpecs = [4]utilItemSpec{
+	{
+		title: "Shell Integration", arcadeTitle: "SHELL HOOK",
+		desc:       "Auto-switch identity when you cd into a pinned repo.",
+		arcadeDesc: "Auto-switch on cd. Works like a cheat code for repos.",
+		enabled:    func(m Model) bool { return m.shellEnabled },
+	},
+	{
+		title: "Session Isolation", arcadeTitle: "GH CO-OP MODE",
+		desc:       "Per-repo git identity + gh account — needed for pins to work.",
+		arcadeDesc: "No more fighting over one shared gh account. Every terminal plays its own.",
+		enabled:    func(m Model) bool { return m.ghWrapperEnabled },
+	},
+	{
+		title: "HTTPS Credential Helper", arcadeTitle: "CREDENTIAL HELPER",
+		desc:       "Route HTTPS git pushes through the active profile's gh account.",
+		arcadeDesc: "HTTPS auth. Automatic. No 401 game-overs.",
+		enabled:    func(m Model) bool { return m.credentialHelperEnabled },
+	},
+	{
+		title: "Auto-pin Repeat Repos", arcadeTitle: "AUTO-CLAIM",
+		desc:       "Pin the account after 3 uses in the same repo.",
+		arcadeDesc: "Play a repo 3 times with an account — it's yours.",
+		enabled:    func(m Model) bool { return !m.autoPinDisabled },
+	},
+}
+
 func (m Model) utilItem(pw, iw, idx int) string {
+	if idx < 0 || idx >= len(utilItemSpecs) {
+		return ""
+	}
+	spec := utilItemSpecs[idx]
 	focused := m.utilityFocus == idx
 
-	switch idx {
-	case 0: // Shell Integration
-		title := "Shell Integration"
-		desc := "Auto-switch identity when you cd into a pinned repo."
-		if m.arcadeMode {
-			title = "SHELL HOOK"
-			desc = "Auto-switch on cd. Works like a cheat code for repos."
-		}
-		toggle := renderToggle(m.shellEnabled)
-		line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)
-		line2 := lipgloss.NewStyle().Foreground(colorDim).Render(truncate(desc, iw))
-		line2 = padTo(line2, iw)
-		return renderItemBox(pw, focused, false, line1, line2)
-
-	case 1: // Session Isolation
-		title := "Session Isolation"
-		desc := "Per-repo git identity + gh account — needed for pins to work."
-		if m.arcadeMode {
-			title = "GH CO-OP MODE"
-			desc = "No more fighting over one shared gh account. Every terminal plays its own."
-		}
-		toggle := renderToggle(m.ghWrapperEnabled)
-		line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)
-		line2 := lipgloss.NewStyle().Foreground(colorDim).Render(truncate(desc, iw))
-		line2 = padTo(line2, iw)
-		return renderItemBox(pw, focused, false, line1, line2)
-
-	case 2: // HTTPS Credential Helper
-		title := "HTTPS Credential Helper"
-		desc := "Route HTTPS git pushes through the active profile's gh account."
-		if m.arcadeMode {
-			title = "CREDENTIAL HELPER"
-			desc = "HTTPS auth. Automatic. No 401 game-overs."
-		}
-		toggle := renderToggle(m.credentialHelperEnabled)
-		line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)
-		line2 := lipgloss.NewStyle().Foreground(colorDim).Render(truncate(desc, iw))
-		line2 = padTo(line2, iw)
-		return renderItemBox(pw, focused, false, line1, line2)
-
-	case 3: // Auto-pin Repeat Repos
-		title := "Auto-pin Repeat Repos"
-		desc := "Pin the account after 3 uses in the same repo."
-		if m.arcadeMode {
-			title = "AUTO-CLAIM"
-			desc = "Play a repo 3 times with an account — it's yours."
-		}
-		toggle := renderToggle(!m.autoPinDisabled)
-		line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)
-		line2 := lipgloss.NewStyle().Foreground(colorDim).Render(truncate(desc, iw))
-		line2 = padTo(line2, iw)
-		return renderItemBox(pw, focused, false, line1, line2)
+	title, desc := spec.title, spec.desc
+	if m.arcadeMode {
+		title, desc = spec.arcadeTitle, spec.arcadeDesc
 	}
-	return ""
+	toggle := renderToggle(spec.enabled(m))
+	line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)
+	line2 := lipgloss.NewStyle().Foreground(colorDim).Render(truncate(desc, iw))
+	line2 = padTo(line2, iw)
+	return renderItemBox(pw, focused, false, line1, line2)
 }

@@ -2,7 +2,6 @@
 title: Two GitHub Accounts
 description: Personal and work on one machine, start to finish
 ---
-
 The most common setup, and the one gitswitch was built for. Two GitHub accounts — `alice` (personal) and `alice-corp` (work) — on one laptop.
 
 No SSH keys to generate. No keys to paste into a settings page. No `~/.ssh/config` host aliases.

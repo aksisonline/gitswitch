@@ -2,7 +2,6 @@
 title: HTTPS Push Routing
 description: Make git push over HTTPS use the right account's token, per repo
 ---
-
 If your remotes are `https://github.com/...` URLs (they are, if you cloned by copy-pasting from the GitHub UI), then `git push` doesn't care about your commit identity at all — it asks a **credential helper** for a username and password. Your keychain usually answers with whatever it happened to save first. That's how you end up pushing to a work repo as your personal account.
 
 gitswitch fixes this by answering that question itself, correctly, per repo.

@@ -19,7 +19,6 @@ import (
 	"github.com/aksisonline/gitswitch/internal/shell"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-isatty"
 )
 
 // ── palette — mirrors main TUI normal/default theme ──────────────────────────
@@ -55,11 +54,13 @@ type Config struct {
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 // Run runs the wizard and returns the user's choices.
-func Run(cfg Config, _ io.Writer) (Options, error) {
+func Run(cfg Config) (Options, error) {
 	sh, fw := resolveShell(cfg.ShellOverride)
 	opts := Options{Shell: sh, Framework: fw, InstallShell: true, InstallHTTPS: cfg.HTTPSDefault, InstallGHWrapper: true}
 
-	interactive := isatty.IsTerminal(os.Stdin.Fd()) && !cfg.Yes && cfg.ShellOverride == ""
+	stat, _ := os.Stdin.Stat()
+	isTerminal := stat.Mode()&os.ModeCharDevice != 0
+	interactive := isTerminal && !cfg.Yes && cfg.ShellOverride == ""
 	if !interactive {
 		return opts, nil
 	}

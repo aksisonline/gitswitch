@@ -2,7 +2,6 @@
 title: Commit Identity
 description: What a switch actually writes, and how git decides who you are
 ---
-
 ## Switching
 
 ```bash

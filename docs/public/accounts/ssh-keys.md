@@ -2,7 +2,6 @@
 title: SSH Keys
 description: Force exactly the right key per account — no more agent roulette
 ---
-
 By default, SSH offers your agent's keys one after another until something works. If two of your GitHub accounts each have a key loaded, "works" and "the one you meant" are not the same thing. That's how a push lands on the wrong account.
 
 gitswitch pins it down.

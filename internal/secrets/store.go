@@ -12,8 +12,6 @@ const service = "gitswitch"
 // Store is the interface for token storage backends.
 type Store interface {
 	Set(ref, token string) error
-	Get(ref string) (string, error)
-	Delete(ref string) error
 	Available() bool
 }
 
@@ -51,22 +49,8 @@ func (k *KeychainStore) Set(ref, token string) error {
 	return keyring.Set(service, ref, token)
 }
 
-func (k *KeychainStore) Get(ref string) (string, error) {
-	token, err := keyring.Get(service, ref)
-	if err != nil {
-		return "", err
-	}
-	return token, nil
-}
-
-func (k *KeychainStore) Delete(ref string) error {
-	return keyring.Delete(service, ref)
-}
-
 // noopStore is a no-op fallback used when no backend is available.
 type noopStore struct{}
 
-func (n *noopStore) Available() bool              { return false }
-func (n *noopStore) Set(_, _ string) error        { return errors.New("no secret store available") }
-func (n *noopStore) Get(_ string) (string, error) { return "", errors.New("no secret store available") }
-func (n *noopStore) Delete(_ string) error        { return nil }
+func (n *noopStore) Available() bool       { return false }
+func (n *noopStore) Set(_, _ string) error { return errors.New("no secret store available") }

@@ -2,7 +2,6 @@
 title: GitHub CLI Sync
 description: Keeping the gh CLI's account in step with your git identity
 ---
-
 Your commit identity and your `gh` account are two different things. gitswitch can keep them together.
 
 ## `--gh-user`

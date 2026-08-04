@@ -2,7 +2,6 @@
 title: Configuration
 description: Every file gitswitch reads or writes, and the one environment variable
 ---
-
 ## The config directory
 
 ```

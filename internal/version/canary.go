@@ -6,11 +6,6 @@ import (
 	"time"
 )
 
-// IsCanaryBuild reports whether the given version is a pre-release (-beta.N) build.
-func IsCanaryBuild(v string) bool {
-	return IsBeta(v)
-}
-
 // FetchLatestCanaryVersion returns the most recent pre-release tag from GitHub.
 // Returns an error if no pre-release exists.
 func FetchLatestCanaryVersion() (string, error) {

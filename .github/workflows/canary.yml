@@ -218,7 +218,6 @@ jobs:
       - name: Include install scripts
         run: |
           cp .github/install.ps1 release/install.ps1
-          cp .github/install.cmd release/install.cmd
 
       - name: Create git tag
         run: |

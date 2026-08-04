@@ -627,7 +627,7 @@ func installP10k(sh Shell, home string, alias string) (string, error) {
 // Reinstall removes the existing integration block and writes a fresh one.
 // Use this to apply alias changes without requiring a manual uninstall/install cycle.
 func Reinstall(sh Shell, fw Framework, alias string) (string, error) {
-	if _, err := Uninstall(sh, fw); err != nil {
+	if _, err := Uninstall(sh); err != nil {
 		return "", fmt.Errorf("reinstall (uninstall phase): %w", err)
 	}
 	return Install(sh, fw, alias)
@@ -637,7 +637,7 @@ func Reinstall(sh Shell, fw Framework, alias string) (string, error) {
 // provided shell, removes it from starship.toml if present, and removes the
 // OMZ plugin file if present.
 // Returns a human-readable description of what was removed.
-func Uninstall(sh Shell, _ Framework) (string, error) {
+func Uninstall(sh Shell) (string, error) {
 	home, _ := os.UserHomeDir()
 	var removed []string
 

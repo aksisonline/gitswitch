@@ -1,7 +1,6 @@
 package prereqs
 
 import (
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"runtime"
@@ -36,11 +35,6 @@ func Check() CheckResult {
 // AllOK returns true when all hard requirements are met.
 func (r CheckResult) AllOK() bool {
 	return r.Git.OK
-}
-
-func (r CheckResult) JSON() []byte {
-	b, _ := json.MarshalIndent(r, "", "  ")
-	return b
 }
 
 // PrintWarnings writes human-readable prereq status to stdout.

@@ -2,7 +2,6 @@
 title: Multi-client Freelancer
 description: Three clients, three identities, zero mental overhead
 ---
-
 Three clients, each expecting commits from a different email, plus your own personal account. This is the setup that goes wrong most often — and the one pins solve most completely.
 
 ## Set up
