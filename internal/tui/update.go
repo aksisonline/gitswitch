@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/history"
@@ -1457,45 +1458,76 @@ func (m Model) detectExistingConfigsCmd() tea.Cmd {
 	}
 }
 
+// mergeProfileFields copies any field set in src into dst wherever dst is
+// still empty. Shared by every merge tier in mergeIntoFound.
+func mergeProfileFields(dst *storage.Profile, src storage.Profile) {
+	if dst.UserName == "" {
+		dst.UserName = src.UserName
+	}
+	if dst.Email == "" {
+		dst.Email = src.Email
+	}
+	if dst.SignKey == "" {
+		dst.SignKey = src.SignKey
+	}
+	if dst.SSHKey == "" {
+		dst.SSHKey = src.SSHKey
+	}
+	if dst.GHUser == "" {
+		dst.GHUser = src.GHUser
+	}
+}
+
+// mergeIntoFound is detectExistingProfiles' candidate-merge logic, extracted
+// so it's unit-testable without shelling out to git/gh. verifiedEmails is
+// the GitHub-API cross-reference tier — pass nil for candidates that don't
+// have one (e.g. the git-config candidate itself).
+//
+// Tiers, in order — each is additive, none can un-fire an earlier one:
+//  1. exact Nickname collision (existing behavior)
+//  2. a verifiedEmails entry matches an already-found candidate's Email —
+//     this is what lets a gh account and a git-config profile that are
+//     really the same person merge, instead of showing as two candidates
+//     just because their nickname/email happened not to coincide
+//  3. literal Email string coincidence via seenEmail (existing behavior)
+func mergeIntoFound(found []storage.Profile, seenEmail map[string]bool, p storage.Profile, verifiedEmails []string) []storage.Profile {
+	if p.Nickname == "" {
+		return found
+	}
+
+	for i := range found {
+		if found[i].Nickname == p.Nickname {
+			mergeProfileFields(&found[i], p)
+			return found
+		}
+	}
+
+	for _, ve := range verifiedEmails {
+		for i := range found {
+			if found[i].Email != "" && strings.EqualFold(found[i].Email, ve) {
+				mergeProfileFields(&found[i], p)
+				return found
+			}
+		}
+	}
+
+	if p.Email != "" && seenEmail[p.Email] && p.GHUser == "" {
+		return found
+	}
+	if p.Email != "" {
+		seenEmail[p.Email] = true
+	}
+	return append(found, p)
+}
+
 // detectExistingProfiles scans git config, gh accounts, and ~/.ssh for
 // identities the user can import. Used by the onboarding wizard.
 func detectExistingProfiles() []storage.Profile {
 	var found []storage.Profile
 	seenEmail := map[string]bool{}
 
-	add := func(p storage.Profile) {
-		if p.Nickname == "" {
-			return
-		}
-		// Already have this nickname — merge missing fields into the first hit.
-		for i := range found {
-			if found[i].Nickname != p.Nickname {
-				continue
-			}
-			if found[i].UserName == "" {
-				found[i].UserName = p.UserName
-			}
-			if found[i].Email == "" {
-				found[i].Email = p.Email
-			}
-			if found[i].SignKey == "" {
-				found[i].SignKey = p.SignKey
-			}
-			if found[i].SSHKey == "" {
-				found[i].SSHKey = p.SSHKey
-			}
-			if found[i].GHUser == "" {
-				found[i].GHUser = p.GHUser
-			}
-			return
-		}
-		if p.Email != "" && seenEmail[p.Email] && p.GHUser == "" {
-			return
-		}
-		if p.Email != "" {
-			seenEmail[p.Email] = true
-		}
-		found = append(found, p)
+	add := func(p storage.Profile, verifiedEmails ...string) {
+		found = mergeIntoFound(found, seenEmail, p, verifiedEmails)
 	}
 
 	cfg := git.New(true)
@@ -1511,7 +1543,26 @@ func detectExistingProfiles() []storage.Profile {
 		})
 	}
 
-	for _, acct := range git.ListGHUsers() {
+	// Best-effort cross-reference: for each gh-CLI account, fetch its
+	// verified GitHub email(s) concurrently (one goroutine per account,
+	// each writing only its own slice index — no mutex needed) so a match
+	// against the git-config candidate above merges them into one profile
+	// instead of surfacing as two. Silently empty on any failure (gh
+	// missing, insufficient token scope, no network) — falls through to
+	// today's nickname/email-string behavior with no regression.
+	ghAccounts := git.ListGHUsers()
+	verified := make([][]string, len(ghAccounts))
+	var wg sync.WaitGroup
+	for i, acct := range ghAccounts {
+		wg.Add(1)
+		go func(i int, acct git.GHAccount) {
+			defer wg.Done()
+			verified[i] = git.VerifiedEmailsFor(acct.Login, acct.Host)
+		}(i, acct)
+	}
+	wg.Wait()
+
+	for i, acct := range ghAccounts {
 		nick := acct.Login
 		if nick == "" {
 			continue
@@ -1521,7 +1572,7 @@ func detectExistingProfiles() []storage.Profile {
 			UserName: nick,
 			Email:    nick + "@users.noreply.github.com",
 			GHUser:   acct.Login,
-		})
+		}, verified[i]...)
 	}
 
 	// Attach first SSH key found to the first profile if none set yet;

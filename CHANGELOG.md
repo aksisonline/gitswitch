@@ -7,6 +7,9 @@ Format: `[version] — date — summary`
 
 ## [Unreleased]
 
+### What's New
+- **The setup wizard now recognizes when a `gh` account and your git config are the same person** — instead of showing them as two separate things to import, it checks your verified GitHub email and merges them into one profile automatically. Works whenever GitHub can tell us the email (your account has a public profile email, or you signed in through gitswitch's own login); otherwise it falls back to exactly today's behavior, nothing worse than before.
+
 ### Under the Hood
 - **The Windows install command is shorter too** — `irm https://get.gitswitch.dev/install.ps1 | iex` replaces the long `raw.githubusercontent.com/.../install.ps1` URL, matching the shortened curl command from the previous release. Behaves identically; get.gitswitch.dev proxies the same script.
 

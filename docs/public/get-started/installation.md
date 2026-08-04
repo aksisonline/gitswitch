@@ -71,7 +71,10 @@ gitswitch doctor
 gitswitch
 ```
 
-That's the whole "then set it up" step — first run on a machine with no profiles checks for git/gh and offers to install what's missing, then opens a short wizard that gets you a working account.
+That's the whole "then set it up" step. You don't have to do anything except run this and answer the one prompt it gives you — gitswitch figures out which of two situations you're in automatically:
+
+- **Fresh machine, nothing installed yet?** It checks for `git` and `gh`, offers to install both itself — you don't need to know which package manager your OS uses, gitswitch does — then walks you through logging in to GitHub once. That's the only thing you do.
+- **Already have `git` configured, or already logged into `gh`?** gitswitch finds your existing setup — git config, any `gh` accounts, keys under `~/.ssh/` — and offers to import it as a profile instead of asking you to type anything in by hand. It also recognizes when a `gh` account and your git config are the same person (by checking your verified GitHub email), so you don't end up with two separate half-profiles to sort out.
 
 Want shell integration too (prompt segment, nudges, HTTPS push routing, Session Isolation)? That's a separate, optional step:
 

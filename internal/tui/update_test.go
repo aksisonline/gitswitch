@@ -265,3 +265,80 @@ func TestFormFieldAt(t *testing.T) {
 		t.Error("formFieldAt(nil lines) should report not-found")
 	}
 }
+
+// TestMergeIntoFoundNicknameCollision pins the existing behavior: two
+// candidates sharing a nickname merge into one, missing fields filled in.
+func TestMergeIntoFoundNicknameCollision(t *testing.T) {
+	found := []storage.Profile{{Nickname: "alice", Email: "alice@gmail.com"}}
+	seen := map[string]bool{"alice@gmail.com": true}
+
+	found = mergeIntoFound(found, seen, storage.Profile{
+		Nickname: "alice",
+		GHUser:   "alice-corp",
+	}, nil)
+
+	if len(found) != 1 {
+		t.Fatalf("expected merge, got %d profiles", len(found))
+	}
+	if found[0].GHUser != "alice-corp" {
+		t.Errorf("expected GHUser filled in from nickname-collision merge, got %q", found[0].GHUser)
+	}
+}
+
+// TestMergeIntoFoundVerifiedEmailMatch is the new tier: a gh account whose
+// nickname and placeholder email don't coincide with the git-config
+// candidate must still merge when its verified GitHub email matches.
+func TestMergeIntoFoundVerifiedEmailMatch(t *testing.T) {
+	found := []storage.Profile{{Nickname: "alice", Email: "alice@gmail.com"}}
+	seen := map[string]bool{"alice@gmail.com": true}
+
+	found = mergeIntoFound(found, seen, storage.Profile{
+		Nickname: "alice-corp",
+		Email:    "alice-corp@users.noreply.github.com",
+		GHUser:   "alice-corp",
+	}, []string{"someone-else@example.com", "Alice@Gmail.com"}) // case-insensitive match
+
+	if len(found) != 1 {
+		t.Fatalf("expected verified-email match to merge into one profile, got %d", len(found))
+	}
+	if found[0].GHUser != "alice-corp" {
+		t.Errorf("expected GHUser set via verified-email merge, got %q", found[0].GHUser)
+	}
+	if found[0].Nickname != "alice" {
+		t.Errorf("merge must keep the earlier candidate's nickname, got %q", found[0].Nickname)
+	}
+}
+
+// TestMergeIntoFoundVerifiedEmailNoMatch confirms a non-matching verified
+// email just appends a new candidate, same as if none had been fetched.
+func TestMergeIntoFoundVerifiedEmailNoMatch(t *testing.T) {
+	found := []storage.Profile{{Nickname: "alice", Email: "alice@gmail.com"}}
+	seen := map[string]bool{"alice@gmail.com": true}
+
+	found = mergeIntoFound(found, seen, storage.Profile{
+		Nickname: "bob-corp",
+		Email:    "bob-corp@users.noreply.github.com",
+		GHUser:   "bob-corp",
+	}, []string{"bob@work.com"})
+
+	if len(found) != 2 {
+		t.Fatalf("expected no match to append as a separate candidate, got %d profiles", len(found))
+	}
+}
+
+// TestMergeIntoFoundLiteralEmailCoincidence pins the existing fallback tier:
+// a second candidate with no GHUser and an already-seen literal email is
+// dropped rather than appended.
+func TestMergeIntoFoundLiteralEmailCoincidence(t *testing.T) {
+	found := []storage.Profile{{Nickname: "alice", Email: "alice@gmail.com"}}
+	seen := map[string]bool{"alice@gmail.com": true}
+
+	found = mergeIntoFound(found, seen, storage.Profile{
+		Nickname: "alice-dup",
+		Email:    "alice@gmail.com",
+	}, nil)
+
+	if len(found) != 1 {
+		t.Fatalf("expected literal-email coincidence with no GHUser to be dropped, got %d profiles", len(found))
+	}
+}

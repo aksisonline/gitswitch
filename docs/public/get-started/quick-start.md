@@ -18,7 +18,10 @@ Below is what actually happens, in case you like knowing.
 gitswitch
 ```
 
-On a machine with no profiles yet, this checks for `git` and `gh` before anything else and offers to install whichever's missing, then opens a short wizard — it scans your `gh` logins and `~/.ssh/` keys and offers to import what it finds, or log in with GitHub fresh.
+On a machine with no profiles yet, this checks for `git` and `gh` before anything else. Two paths from there, and you don't have to pick — gitswitch figures out which one applies:
+
+- **Nothing set up yet** — it installs `git`/`gh` for you, then you just log in with GitHub. Done.
+- **Already have git config or a `gh` login** — it scans those plus `~/.ssh/` and offers to import what it finds as a profile, matching a `gh` account to your git config by verified email when they're really the same person, instead of asking you to sort out duplicates.
 
 You can also do the login step directly, any time, instead of through the wizard:
 
