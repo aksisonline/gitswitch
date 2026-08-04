@@ -2,7 +2,6 @@
 title: AI Coding Agents
 description: Stop your agent committing as the wrong person — and fix it when it already did
 ---
-
 Claude Code, Cursor, and friends run `git commit` for you. They don't know which of your accounts belongs in this repo, and they won't run `gitswitch` first unless something tells them to. An agent working across a client repo and your day job in one session will happily attribute everything to whichever account happens to be active.
 
 Two commands exist for exactly this.

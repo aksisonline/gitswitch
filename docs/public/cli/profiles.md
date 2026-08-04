@@ -2,7 +2,6 @@
 title: Account Fields
 description: What an account contains, what each field does, and the file it lives in
 ---
-
 An account (also called a profile) is a nickname plus the git settings that go with it.
 
 | Field | YAML key | Required | Example |

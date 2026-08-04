@@ -2,7 +2,6 @@
 title: Connecting Accounts
 description: gitswitch login, the browser flow, and where your tokens live
 ---
-
 An "account" (or profile) in gitswitch is a named bundle: a nickname, a git name and email, and optionally an SSH key, a signing key, and a GitHub username. The fastest way to create one is to let GitHub fill it in for you.
 
 ## `gitswitch login`

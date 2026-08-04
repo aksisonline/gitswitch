@@ -2,7 +2,6 @@
 title: Commands
 description: Every gitswitch command and flag
 ---
-
 `gitswitch --help` groups commands the same way this page does.
 
 | | |

@@ -2,7 +2,6 @@
 title: Agent Aided Setup
 description: One URL. Give it to your agent and it takes care of everything.
 ---
-
 Give your coding agent this URL:
 
 ```

@@ -2,7 +2,6 @@
 title: Commit Signing
 description: A signing key per account — GPG, or the SSH key you already have
 ---
-
 Signed commits get the green **Verified** badge on GitHub and prove a commit really came from you. Each of your accounts probably needs its own key — gitswitch swaps them along with everything else.
 
 You have two options, and gitswitch supports both without a flag to choose between them: it looks at the key you gave it and figures it out.

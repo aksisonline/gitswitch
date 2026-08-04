@@ -2,7 +2,6 @@
 title: Installation
 description: Install gitswitch on macOS or Linux
 ---
-
 gitswitch is a single Go binary. macOS and Linux, Intel and Apple Silicon/ARM.
 
 ## Homebrew
@@ -56,8 +55,8 @@ Already on latest version.
 
 | | |
 |---|---|
-| **`git`** | Required. Missing? The first time you run bare `gitswitch` on a machine with no profiles yet, it offers to install it for you — no separate step needed. |
-| **`gh`** ([GitHub CLI](https://cli.github.com)) | Optional, but recommended. gitswitch works fine without it — but [HTTPS push routing](/docs/routing/https) and [Session Isolation](/docs/routing/session-isolation) get their tokens from `gh`, so those two features install but stay inert until `gh` is set up. That first-run check offers to install it too. |
+| **`git`** | Required. gitswitch installs it for you on first run if it's missing. |
+| **`gh`** ([GitHub CLI](https://cli.github.com)) | Optional, but recommended — [HTTPS push routing](/docs/routing/https) and [Session Isolation](/docs/routing/session-isolation) need it. Same first-run offer. |
 
 Check both at any time:
 
@@ -71,10 +70,10 @@ gitswitch doctor
 gitswitch
 ```
 
-That's the whole "then set it up" step. You don't have to do anything except run this and answer the one prompt it gives you — gitswitch figures out which of two situations you're in automatically:
+That's it — one command handles both cases:
 
-- **Fresh machine, nothing installed yet?** It checks for `git` and `gh`, offers to install both itself — you don't need to know which package manager your OS uses, gitswitch does — then walks you through logging in to GitHub once. That's the only thing you do.
-- **Already have `git` configured, or already logged into `gh`?** gitswitch finds your existing setup — git config, any `gh` accounts, keys under `~/.ssh/` — and offers to import it as a profile instead of asking you to type anything in by hand. It also recognizes when a `gh` account and your git config are the same person (by checking your verified GitHub email), so you don't end up with two separate half-profiles to sort out.
+- **Nothing installed** — installs `git`/`gh` itself, then you log in with GitHub once.
+- **Already set up** — imports your git config, `gh` accounts, and SSH keys, matching a `gh` account to your git config by verified email so you don't get duplicates.
 
 Want shell integration too (prompt segment, nudges, HTTPS push routing, Session Isolation)? That's a separate, optional step:
 

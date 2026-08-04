@@ -2,7 +2,6 @@
 title: Quick Start
 description: From zero to "I never think about this again" in about two minutes
 ---
-
 Two commands. That's the whole thing.
 
 ```bash
@@ -18,10 +17,10 @@ Below is what actually happens, in case you like knowing.
 gitswitch
 ```
 
-On a machine with no profiles yet, this checks for `git` and `gh` before anything else. Two paths from there, and you don't have to pick — gitswitch figures out which one applies:
+On a machine with no profiles yet, this checks for `git`/`gh` first, then picks one of two paths automatically:
 
-- **Nothing set up yet** — it installs `git`/`gh` for you, then you just log in with GitHub. Done.
-- **Already have git config or a `gh` login** — it scans those plus `~/.ssh/` and offers to import what it finds as a profile, matching a `gh` account to your git config by verified email when they're really the same person, instead of asking you to sort out duplicates.
+- **Nothing set up yet** — installs `git`/`gh`, then you log in with GitHub. Done.
+- **Already have git config or a `gh` login** — imports it, matching a `gh` account to your git config by verified email so you don't get duplicates.
 
 You can also do the login step directly, any time, instead of through the wizard:
 

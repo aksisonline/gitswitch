@@ -2,7 +2,6 @@
 title: Shell Integration
 description: Prompt segment, nudges on cd, tab completion, and the gs alias
 ---
-
 ```bash
 gitswitch shell
 ```

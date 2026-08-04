@@ -2,7 +2,6 @@
 title: New to Git
 description: One account, zero tutorials — gitswitch is still worth it on day one
 ---
-
 You don't need a second GitHub account for gitswitch to be worth installing. If this is your first repo, gitswitch is the fastest way to get git and GitHub actually working — no tutorials on SSH keys, no hand-editing `.gitconfig`.
 
 ## What you'd normally have to do

@@ -2,7 +2,6 @@
 title: Introduction
 description: gitswitch keeps every commit and every push on the right account — automatically
 ---
-
 **Every commit goes out as the right you. Automatically.**
 
 New to git entirely? Skip the tutorials on SSH keys and `.gitconfig`. Install gitswitch and run it — the first time, on a machine with no profiles yet, it checks for git and the GitHub CLI and offers to install whichever's missing, then walks you through connecting a GitHub account. You're set up correctly without reading a single guide, and you don't need a second account for any of this to be worth it. See [gitswitch for git beginners](/docs/guides/beginners).

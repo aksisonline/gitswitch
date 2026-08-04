@@ -2,7 +2,6 @@
 title: Troubleshooting
 description: Start with gitswitch doctor, then find your symptom below
 ---
-
 ## Start here
 
 ```bash

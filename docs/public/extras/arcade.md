@@ -2,7 +2,6 @@
 title: Arcade Mode
 description: The one where a git tool has a high score
 ---
-
 You found it. Congratulations.
 
 ```bash

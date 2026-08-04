@@ -2,7 +2,6 @@
 title: Pins & Identity Awareness
 description: Claim a repo for one account, or let gitswitch learn your habits and nudge you
 ---
-
 Two ways to stop using the wrong account in a repo. Pinning is the deliberate one. Learning is the one that works even when you never got around to it.
 
 ## Pin a repo
