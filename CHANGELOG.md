@@ -7,6 +7,8 @@ Format: `[version] — date — summary`
 
 ## [Unreleased]
 
+## [v0.4.3] — 2026-08-04
+
 ### What's New
 - **The setup wizard now recognizes when a `gh` account and your git config are the same person** — it checks your verified GitHub email and merges them into one profile instead of showing you two things to sort out.
 
