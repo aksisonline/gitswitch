@@ -1,0 +1,53 @@
+{
+  "name": "gitswitch",
+  "displayName": "gitswitch",
+  "description": "Status bar widget for switching and pinning git identities managed by gitswitch",
+  "version": "0.1.0",
+  "publisher": "aksisonline",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aksisonline/git-switcher"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "gitswitch.switchProfile",
+        "title": "gitswitch: Switch Profile"
+      },
+      {
+        "command": "gitswitch.pinProfile",
+        "title": "gitswitch: Pin Profile to This Repo"
+      },
+      {
+        "command": "gitswitch.unpin",
+        "title": "gitswitch: Unpin This Repo"
+      }
+    ],
+    "configuration": {
+      "title": "gitswitch",
+      "properties": {
+        "gitswitch.binaryPath": {
+          "type": "string",
+          "default": "gitswitch",
+          "description": "Path to the gitswitch binary (default assumes it's on PATH)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "vscode:prepublish": "bun run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

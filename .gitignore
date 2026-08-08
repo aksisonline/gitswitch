@@ -17,3 +17,10 @@ checksums.txt
 # skill build artifacts
 *.skill
 docs/.never_gonna_give_you_up/
+extensions/vscode/out/
+extensions/vscode/node_modules/
+extensions/vscode/*.vsix
+extensions/jetbrains/.gradle/
+extensions/jetbrains/build/
+extensions/jetbrains/.idea/
+extensions/jetbrains/.intellijPlatform/
