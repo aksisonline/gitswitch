@@ -11,6 +11,9 @@ release/
 artifacts/
 checksums.txt
 
+# Conductor local (machine-specific) settings — .conductor/settings.toml stays committable
+.conductor/settings.local.toml
+
 # skill build artifacts
 *.skill
 docs/.never_gonna_give_you_up/
