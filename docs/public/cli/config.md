@@ -27,7 +27,6 @@ profiles:
     email: alice@company.com
     ssh_key: ~/.ssh/id_work
     gh_user: alice-corp
-    token_ref: gitswitch:work:github.com
     active: true
 ```
 
@@ -95,13 +94,7 @@ If this file is ever corrupted, gitswitch copies it to `history.json.bak` and st
 
 ## Where tokens live
 
-Not in any of these files. `gitswitch login` puts tokens in your OS keychain — macOS Keychain (local, never iCloud-synced), Windows Credential Manager, or the Linux Secret Service — filed under `gitswitch:<nickname>:<host>`. The account records only that reference.
-
-## Environment variables
-
-| | |
-|---|---|
-| `GITSWITCH_SECRETS_BACKEND=none` | Don't touch the keychain at all. gitswitch stores no tokens; everything else works normally. |
+Not in any of these files, and not anywhere gitswitch manages itself. `gitswitch login` hands off to `gh auth login`, so the `gh` CLI's own credential storage owns every token — gitswitch never sees or stores one.
 
 ## What gitswitch writes to your git config
 

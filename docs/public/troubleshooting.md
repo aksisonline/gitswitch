@@ -165,7 +165,7 @@ rm -rf ~/.config/gitswitch     # accounts, history, preferences
 gitswitch shell
 ```
 
-Tokens in your OS keychain aren't removed by that — delete `gitswitch:*` entries in Keychain Access / your secret store if you want those gone too.
+Tokens aren't removed by that — they live in the `gh` CLI's own credential store, not gitswitch's. To remove them, run `gh auth logout <username>` for each account, or `gh auth logout` to clear every account on a host, then delete the entries from Keychain Access / your secret store if anything remains.
 
 ## Still stuck
 

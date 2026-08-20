@@ -260,10 +260,10 @@ Both confirm first and never touch `~/.config/gitswitch/`. See [Versions & Relea
 ## `login`
 
 ```bash
-gitswitch login [--profile <nickname>] [--host <hostname>] [--client-id <id>]
+gitswitch login [--profile <nickname>] [--host <hostname>]
 ```
 
-GitHub device flow in your browser. Creates an account with your name, email, and username filled in, and stores the token in your OS keychain. Also registers the account with the `gh` CLI itself (`gh auth login --with-token`), so Session Isolation and HTTPS routing can actually use it. Re-running it on an existing account refreshes the token and keeps your SSH/signing keys. See [Connecting Accounts](/docs/accounts/accounts).
+Delegates to `gh auth login` (the real GitHub CLI's own login command) to authenticate with GitHub, then reads the resulting account back via `gh`. Creates an account with your name, email, and username filled in — no custom OAuth app or separate registration step needed since `gh` owns the account the moment it authenticates. Re-running it on an existing account refreshes your login and keeps your SSH/signing keys. See [Connecting Accounts](/docs/accounts/accounts).
 
 ## `skills`
 
@@ -327,6 +327,5 @@ gitswitch recommend [--path <dir>]    # print the recommended account, if any
 | `~/.config/gitswitch/config.yaml` | Your accounts |
 | `~/.config/gitswitch/config.json` | UI preferences — theme, alias, arcade high score |
 | `~/.config/gitswitch/history.json` | Per-repo usage counts and pin records |
-| OS keychain | Tokens from `gitswitch login` |
 
 Full detail in [Configuration](/docs/cli/config).

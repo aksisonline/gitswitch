@@ -40,12 +40,11 @@ Once git and `gh` are there:
 gitswitch login
 ```
 
-Opens GitHub in your browser (device flow — you type a short code, GitHub does the rest), then fills in your name, email, and GitHub account automatically:
+Hands off to `gh auth login` (browser, device code, or token — whichever `gh` offers you), then fills in your name, email, and GitHub account automatically:
 
 ```
 ✓  Logged in as yourname (github.com)
 ✓  Profile "yourname" created
-✓  Token stored in keychain
 ```
 
 That's it. `git commit` and `git push` now work, correctly attributed, with no SSH key you had to generate or paste anywhere.

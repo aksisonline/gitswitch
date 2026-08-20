@@ -1,4 +1,4 @@
-package oauth
+package ghapi
 
 import (
 	"fmt"

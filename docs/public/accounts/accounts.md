@@ -15,22 +15,13 @@ gitswitch login
   │  gitswitch · Log in with GitHub          │
   └──────────────────────────────────────────┘
 
-  Open this URL in your browser:
-
-    https://github.com/login/device
-
-  Then enter the code:
-
-    A1B2-C3D4
-
-  Waiting for authorization...
+  (gh auth login runs here — browser, device code, or token, whichever gh offers)
 
   ✓  Logged in as alice-corp (github.com)
   ✓  Profile "alice-corp" created
-  ✓  Token stored in keychain
 ```
 
-That's the GitHub **device flow** — you approve gitswitch in your browser, gitswitch never sees your password, and there's no PAT to create, copy, or accidentally paste into Slack.
+gitswitch delegates credential storage entirely to GitHub CLI — you approve in your browser, gitswitch never sees your password, and the token lives in `gh`'s secure store, not anywhere gitswitch manages.
 
 Your name, email, and GitHub username come back from the API and become the profile. The nickname defaults to your GitHub username.
 
@@ -40,7 +31,6 @@ Your name, email, and GitHub username come back from the API and become the prof
 |---|---|
 | `--profile <nickname>` | Pick the nickname yourself instead of using the GitHub username |
 | `--host <hostname>` | GitHub Enterprise Server, e.g. `--host github.acme.com`. Defaults to `github.com` |
-| `--client-id <id>` | Use your own OAuth app instead of the built-in one |
 
 Run it once per account:
 
@@ -50,10 +40,6 @@ gitswitch login --profile work
 ```
 
 The first profile you create becomes your active identity automatically.
-
-### Scopes it asks for
-
-`repo`, `read:user`, `user:email`, `gist`, `workflow` — enough to read your profile and to push, create PRs, and touch Actions workflows as that account.
 
 ### Logging in again
 
@@ -86,7 +72,7 @@ gitswitch add work "Alice Smith" alice@company.com \
 
 ## Where your tokens live
 
-In your operating system's keychain. Never in a file, never in plaintext, never anywhere gitswitch could send them.
+gitswitch stores nothing. GitHub CLI (`gh`) owns all credential storage — tokens live in your OS keychain, never in a file, never in plaintext. gitswitch just reads back your logged-in GitHub identity via `gh` after you've authenticated.
 
 | Platform | Store |
 |---|---|
@@ -94,15 +80,7 @@ In your operating system's keychain. Never in a file, never in plaintext, never 
 | Linux | Secret Service: GNOME Keyring, KeePassXC, anything libsecret-compatible |
 | Windows | Credential Manager |
 
-Each token is filed under `gitswitch:<nickname>:<host>`, and the profile records only that *reference* — not the secret.
-
-Don't want gitswitch touching your keychain at all?
-
-```bash
-export GITSWITCH_SECRETS_BACKEND=none
-```
-
-gitswitch then stores no tokens. Everything else keeps working; you just won't have a gitswitch-managed token for that account.
+If you revoke gitswitch entirely but keep `gh`, your tokens stay safe in `gh` — it manages them independently.
 
 ## Editing and removing
 

@@ -17,7 +17,6 @@ type Profile struct {
 	SignKey  string `json:"sign_key,omitempty"  yaml:"sign_key,omitempty"`
 	SSHKey   string `json:"ssh_key,omitempty"   yaml:"ssh_key,omitempty"`
 	GHUser   string `json:"gh_user,omitempty"   yaml:"gh_user,omitempty"`
-	TokenRef string `json:"token_ref,omitempty" yaml:"token_ref,omitempty"`
 	Active   bool   `json:"active"     yaml:"active"`
 }
 
@@ -242,11 +241,6 @@ func (s *Store) Update(nickname string, updated Profile) error {
 	for i, p := range profiles {
 		if p.Nickname == nickname {
 			updated.Active = p.Active
-			// TokenRef is never on the edit form — preserve it when callers omit it
-			// so OAuth keychain links survive profile edits.
-			if updated.TokenRef == "" {
-				updated.TokenRef = p.TokenRef
-			}
 			profiles[i] = updated
 			return s.Save(profiles)
 		}

@@ -14,11 +14,12 @@
 #      Resolve anything it flags before moving on.
 #
 #   2. gitswitch login
-#      GitHub's OAuth device flow: it prints a URL and a short code. A
-#      human has to open that URL in a browser and approve it — an agent
-#      can't complete this step on its own. Show the user the URL and
-#      code, ask them to approve it, then wait; the command blocks until
-#      they do (or it times out). Don't try to script around it.
+#      Hands off to `gh auth login`, which prompts however gh offers —
+#      a browser approval, a URL and short code, or a token. A human has
+#      to complete that prompt — an agent can't click through a browser
+#      or approve a device code on someone's behalf. Show the user
+#      whatever gh prints, ask them to approve it, then wait; the command
+#      blocks until they do (or it times out). Don't try to script around it.
 #
 #   3. gitswitch doctor --json   (again, to confirm)
 #      "profiles" should now be >= 1 and "gh": {"installed": true}. If

@@ -12,7 +12,6 @@ An account (also called a profile) is a nickname plus the git settings that go w
 | SSH key path | `ssh_key` | no | `~/.ssh/id_work` |
 | Signing key | `sign_key` | no | `ABCD1234EF567890` or `~/.ssh/id_work.pub` |
 | GitHub username | `gh_user` | no | `alice-corp` |
-| Keychain reference | `token_ref` | auto | `gitswitch:work:github.com` |
 
 ## Field by field
 
@@ -47,10 +46,6 @@ No signing key clears **both**, so a stale `gpg.format=ssh` never breaks the nex
 
 Your GitHub username — not your email, not your display name. On switch it runs `gh auth switch --user <username>` (best-effort), and it's what [HTTPS routing](/docs/routing/https) and [Session Isolation](/docs/routing/session-isolation) use to find the right token. See [GitHub CLI Sync](/docs/routing/github-sync).
 
-### `token_ref`
-
-Set for you by `gitswitch login`. It's a *reference* to a keychain entry, never the token itself. Editing an account keeps it, so fixing a typo won't log you out.
-
 ## Creating
 
 ```bash
@@ -84,7 +79,6 @@ profiles:
     ssh_key: ~/.ssh/id_work
     sign_key: ABCD1234EF567890
     gh_user: alice-corp
-    token_ref: gitswitch:work:github.com
     active: true
 ```
 

@@ -18,9 +18,9 @@ Nothing to copy-paste, no separate manifest to keep in sync with the installer. 
 
 ## Why a human still shows up once
 
-GitHub's OAuth device flow (`gitswitch login`) is deliberately a human-in-the-loop step: it prints a URL and a short code, and a person has to open that in a browser and approve it. An agent can't click through a browser on someone's behalf, and scripting around it (scraping the page, automating the browser) is exactly what device flow exists to prevent. The install script's own comments tell the agent this — surface the URL and code, ask the human to approve it, then wait; the command blocks until they do.
+`gitswitch login` hands off to `gh auth login`, which is deliberately a human-in-the-loop step: it prints a URL and a code (or opens a browser), and a person has to approve it. An agent can't click through a browser on someone's behalf, and scripting around it is exactly what this exists to prevent. The install script's own comments tell the agent this — surface whatever prompt `gh` shows, ask the human to approve it, then wait; the command blocks until they do.
 
-Once that's done, gitswitch also registers the new account with the `gh` CLI itself, so Session Isolation and HTTPS push routing have something to find immediately — no extra step for the agent or the human.
+Once that's done, the account is already registered with the `gh` CLI — `gh auth login` is what did the logging in — so Session Isolation and HTTPS push routing have something to find immediately, no extra step for the agent or the human.
 
 ## Next
 

@@ -57,8 +57,8 @@ func PrintWarnings(r CheckResult) {
 		fmt.Println()
 		fmt.Println("  ⚠  gh CLI not found")
 		fmt.Println()
-		fmt.Println("     Without it, gitswitch can't sync your GitHub auth.")
-		fmt.Println("     Install it (optional but recommended):")
+		fmt.Println("     Without it, gitswitch login won't work (switching identities still will).")
+		fmt.Println("     Install it:")
 		printInstallHint(r.GH)
 		fmt.Println()
 	}
