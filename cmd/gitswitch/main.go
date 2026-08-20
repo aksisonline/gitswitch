@@ -12,9 +12,7 @@ import (
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/history"
 	wizard "github.com/aksisonline/gitswitch/internal/install"
-	gsoauth "github.com/aksisonline/gitswitch/internal/oauth"
 	"github.com/aksisonline/gitswitch/internal/prereqs"
-	secretsStore "github.com/aksisonline/gitswitch/internal/secrets"
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
 	"github.com/aksisonline/gitswitch/internal/tui"
@@ -99,71 +97,100 @@ then walks you through connecting a GitHub account — nothing else to run first
 				fmt.Println()
 			}
 			if final.LaunchOAuth {
-				return completeLogin("", "", "")
+				return completeLogin("", "")
 			}
 		}
 		return nil
 	},
 }
 
-// completeLogin runs gitswitch's own branded OAuth device flow, creates or
-// updates a profile from the result, and registers the token with the gh
-// CLI. nickname, when empty, defaults to the GitHub username. Shared by the
+// completeLogin hands off straight to `gh auth login`, then builds or
+// updates a profile from whichever account it left active on host.
+// nickname, when empty, defaults to the GitHub username. Shared by the
 // onboarding wizard's "Log in with GitHub" step (rootCmd) and the explicit
-// `login` command — same flow, only the host/clientID/nickname inputs differ.
-// Login failures are printed, not returned, matching both callers' original
-// behavior of never surfacing an OAuth error as a cobra usage error.
-func completeLogin(host, clientID, nickname string) error {
+// `login` command — same flow, only the host/nickname inputs differ. Login
+// failures are printed, not returned, matching both callers' original
+// behavior of never surfacing a login error as a cobra usage error.
+func completeLogin(host, nickname string) error {
 	fmt.Println()
 	fmt.Println("  ┌──────────────────────────────────────────┐")
 	fmt.Println("  │  gitswitch · Log in with GitHub          │")
 	fmt.Println("  └──────────────────────────────────────────┘")
+	fmt.Println()
 
-	token, user, err := gsoauth.Login(host, clientID)
-	if err != nil {
-		fmt.Println()
-		fmt.Printf("  ✗  %v\n\n", err)
+	if !git.IsGHInstalled() {
+		fmt.Println("  ✗  gh CLI is required for gitswitch login — install it and try again")
 		return nil
-	}
-
-	if nickname == "" {
-		nickname = user.Login
 	}
 
 	displayHost := host
 	if displayHost == "" {
 		displayHost = "github.com"
 	}
-	ref := fmt.Sprintf("gitswitch:%s:%s", nickname, displayHost)
 
-	secrets := secretsStore.Default()
-	if secrets.Available() {
-		if err := secrets.Set(ref, token); err != nil {
-			fmt.Printf("  ⚠  Could not store token in keychain: %v\n", err)
-		}
+	// Capture the active account(s) before login so we can tell which
+	// account gh just authenticated afterwards — on a host that already
+	// has an active account, gh may leave the old one active, and we must
+	// not misattribute the new profile to it.
+	before := git.ListGHUsers()
+
+	args := []string{"auth", "login", "--scopes", "user:email"}
+	if host != "" {
+		args = append(args, "--hostname", host)
+	}
+	c := exec.Command("gh", args...)
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := c.Run(); err != nil {
+		fmt.Println()
+		fmt.Printf("  ✗  gh auth login failed: %v\n\n", err)
+		return nil
 	}
 
-	name := user.Name
+	acct, ok := pickLoggedInAccount(before, git.ListGHUsers(), displayHost)
+	if !ok {
+		fmt.Println()
+		fmt.Println("  ⚠  Logged in, but couldn't detect the new account — run `gh auth status` to check")
+		return nil
+	}
+
+	if nickname == "" {
+		nickname = acct.Login
+	}
+
+	// verifiedEmail is "" when the lookup fails (missing scope, network error,
+	// timeout) — kept separate from the noreply fallback below so a failed
+	// lookup on re-login doesn't clobber an already-correct profile email
+	// (mergeOAuthUpdate only preserves the existing value when this is blank).
+	// IdentityFor fetches the gh token once and reuses it for both the name
+	// and email lookups — a single `gh auth token` subprocess per account.
+	name, verified := git.IdentityFor(acct.Login, displayHost)
+	verifiedEmail := ""
+	if len(verified) > 0 {
+		verifiedEmail = verified[0]
+	}
+	email := verifiedEmail
+	if email == "" {
+		email = acct.Login + "@users.noreply.github.com"
+	}
 	if name == "" {
-		name = user.Login
+		name = acct.Login
 	}
-	if err := store.Add(nickname, name, user.Email, "", "", user.Login); err != nil {
-		// Profile exists — merge OAuth fields, keep SSH/GPG keys.
+
+	if err := store.Add(nickname, name, email, "", "", acct.Login); err != nil {
+		// Profile exists — merge fresh login fields, keep SSH/GPG keys.
 		existing, _ := store.Get(nickname)
 		_ = store.Update(nickname, mergeOAuthUpdate(existing, storage.Profile{
 			Nickname: nickname,
 			UserName: name,
-			Email:    user.Email,
-			GHUser:   user.Login,
-			TokenRef: ref,
+			Email:    verifiedEmail,
+			GHUser:   acct.Login,
 		}))
 	} else {
 		_ = store.Update(nickname, storage.Profile{
 			Nickname: nickname,
 			UserName: name,
-			Email:    user.Email,
-			GHUser:   user.Login,
-			TokenRef: ref,
+			Email:    email,
+			GHUser:   acct.Login,
 		})
 	}
 
@@ -174,15 +201,51 @@ func completeLogin(host, clientID, nickname string) error {
 	}
 
 	fmt.Println()
-	fmt.Printf("  ✓  Logged in as %s (%s)\n", user.Login, displayHost)
+	fmt.Printf("  ✓  Logged in as %s (%s)\n", acct.Login, displayHost)
 	fmt.Printf("  ✓  Profile %q created\n", nickname)
-	if secrets.Available() {
-		fmt.Println("  ✓  Token stored in keychain")
-	}
-	registerWithGH(host, token)
 	fmt.Println()
 	fmt.Printf("  Next: run  gs switch %s  to activate\n\n", nickname)
 	return nil
+}
+
+// activeAccountForHost picks the account in accounts that is active on
+// host — git.GetGHUser() won't do here since it returns the first active
+// account across ALL hosts, wrong when other hosts already have accounts
+// active.
+
+// pickLoggedInAccount returns the account on host that gh just
+// authenticated via `gh auth login`. A newly-activated account (active
+// afterwards but not before) wins, so logging in a second account on a
+// host that already had one active doesn't misattribute the new profile
+// to the previously-active account. When the same account was merely
+// re-authenticated, it was active both before and after, so the
+// currently-active one is returned as a fallback.
+func pickLoggedInAccount(before, after []git.GHAccount, host string) (git.GHAccount, bool) {
+	beforeActive := make(map[string]bool)
+	for _, a := range before {
+		if a.Host == host && a.Active {
+			beforeActive[a.Login] = true
+		}
+	}
+	for _, a := range after {
+		if a.Host == host && a.Active && !beforeActive[a.Login] {
+			return a, true
+		}
+	}
+	for _, a := range after {
+		if a.Host == host && a.Active {
+			return a, true
+		}
+	}
+	return git.GHAccount{}, false
+}
+func activeAccountForHost(accounts []git.GHAccount, host string) (git.GHAccount, bool) {
+	for _, a := range accounts {
+		if a.Host == host && a.Active {
+			return a, true
+		}
+	}
+	return git.GHAccount{}, false
 }
 
 // mergeOAuthUpdate builds the profile to save after a login/re-login: the fresh
@@ -1076,9 +1139,8 @@ var loginCmd = &cobra.Command{
 	Short: "Connect a GitHub account",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		host, _ := cmd.Flags().GetString("host")
-		clientID, _ := cmd.Flags().GetString("client-id")
 		profileName, _ := cmd.Flags().GetString("profile")
-		return completeLogin(host, clientID, profileName)
+		return completeLogin(host, profileName)
 	},
 }
 
@@ -1175,7 +1237,7 @@ var doctorCmd = &cobra.Command{
 		if r.GH.Installed {
 			fmt.Printf("  %s  gh  %s\n", ok, r.GH.Version)
 		} else {
-			fmt.Printf("  %s  gh   not found (optional)\n", warn)
+			fmt.Printf("  %s  gh   not found (required for gitswitch login)\n", warn)
 		}
 
 		// HTTPS routing: being registered is not enough — another tool's per-host
@@ -1258,7 +1320,6 @@ func main() {
 	doctorCmd.Flags().Bool("json", false, "Output machine-readable JSON")
 	doctorCmd.Flags().BoolP("yes", "y", false, "Skip install confirmation prompts")
 	loginCmd.Flags().String("host", "", "GitHub host (default: github.com)")
-	loginCmd.Flags().String("client-id", "", "OAuth app client ID (overrides built-in)")
 	loginCmd.Flags().String("profile", "", "Profile nickname to create (default: GitHub username)")
 	reauthorCmd.Flags().String("to", "", "Profile nickname to attribute commits to (required)")
 	reauthorCmd.Flags().String("from", "", "Only rewrite commits currently authored by this email")

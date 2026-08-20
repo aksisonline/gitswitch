@@ -21,7 +21,7 @@ func (m Model) viewWizardWelcome(pw int) string {
 		greeting = sep + "  First time here. Let's get you set up."
 		prereqs = "\n\n  " + styleBrand.Render("You'll need:") +
 			"\n  " + styleBrand.Render("  ·  git   (you have it — you're reading this)") +
-			"\n  " + styleBrand.Render("  ·  gh    (GitHub CLI, optional but recommended)")
+			"\n  " + styleBrand.Render("  ·  gh    (GitHub CLI, required for  gitswitch login)")
 		ctaBorderStyle = lipgloss.NewStyle().Bold(true).Foreground(colorPurple)
 	}
 
@@ -190,11 +190,11 @@ func (m Model) viewWizardAddMore(pw int) string {
 
 	var oauthLabel, manualLabel, doneLabel string
 	if m.arcadeMode {
-		oauthLabel = "LOG IN WITH GITHUB  [OAuth]"
+		oauthLabel = "LOG IN WITH GITHUB"
 		manualLabel = "ADD MANUALLY"
 		doneLabel = "DONE, OPEN GITSWITCH"
 	} else {
-		oauthLabel = "Log in with GitHub  [OAuth device flow]"
+		oauthLabel = "Log in with GitHub"
 		manualLabel = "Add manually"
 		doneLabel = "Done, open gitswitch"
 	}

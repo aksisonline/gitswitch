@@ -1,4 +1,8 @@
-package oauth
+// Package ghapi is a minimal GitHub REST client used to fill in profile
+// details (name, verified email) for accounts already authenticated via the
+// gh CLI — it never authenticates anything itself, callers hand it a token
+// obtained elsewhere (gh auth token).
+package ghapi
 
 import (
 	"encoding/json"
@@ -7,90 +11,29 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	ghOAuth "github.com/cli/oauth"
 )
-
-const defaultClientID = "Ov23li75EL8QeU1iIfkR"
 
 // httpClient bounds every GitHub API call — ghGet previously used
 // http.DefaultClient with no timeout, so an unreachable/slow API could hang
-// a caller indefinitely (the OAuth login flow, and now the onboarding
-// identity cross-reference, which must never stall the wizard).
+// a caller indefinitely (the onboarding identity cross-reference, which
+// must never stall the wizard).
 var httpClient = &http.Client{Timeout: 3 * time.Second}
 
-// Scopes requested during device flow.
-var defaultScopes = []string{"repo", "read:user", "user:email", "gist", "workflow"}
-
-// GHUser holds the GitHub user fields fetched after auth.
-type GHUser struct {
-	Login string
-	Name  string
-	Email string
-}
-
-// Login runs the GitHub device flow and returns the access token and user info.
-// host is "github.com" for github.com or a GHES hostname.
-// clientID overrides the baked-in default when non-empty.
-func Login(host, clientID string) (token string, user GHUser, err error) {
-	if clientID == "" {
-		clientID = defaultClientID
-	}
-	if host == "" {
-		host = "github.com"
-	}
-
-	ghHost, err := ghOAuth.NewGitHubHost("https://" + host)
+// FetchName best-effort resolves the GitHub profile "name" field for the
+// account owning token on host. Returns "" on any failure — never an
+// error, same contract as FetchVerifiedEmails.
+func FetchName(token, host string) string {
+	data, err := ghGet(apiBaseURL(host)+"/user", token)
 	if err != nil {
-		return "", GHUser{}, fmt.Errorf("invalid host %q: %w", host, err)
-	}
-	flow := &ghOAuth.Flow{
-		Host:     ghHost,
-		ClientID: clientID,
-		Scopes:   defaultScopes,
-		DisplayCode: func(code, verificationURL string) error {
-			fmt.Println()
-			fmt.Printf("  Open this URL in your browser:\n\n    %s\n\n", verificationURL)
-			fmt.Printf("  Then enter the code:\n\n    %s\n\n", code)
-			fmt.Println("  Waiting for authorization...")
-			return nil
-		},
-	}
-
-	accessToken, err := flow.DetectFlow()
-	if err != nil {
-		return "", GHUser{}, fmt.Errorf("authorization failed: %w", err)
-	}
-	token = accessToken.Token
-
-	user, err = fetchUser(token, host)
-	if err != nil {
-		return token, GHUser{}, fmt.Errorf("token obtained but could not fetch user info: %w", err)
-	}
-	return token, user, nil
-}
-
-func fetchUser(token, host string) (GHUser, error) {
-	apiBase := apiBaseURL(host)
-
-	userJSON, err := ghGet(apiBase+"/user", token)
-	if err != nil {
-		return GHUser{}, err
+		return ""
 	}
 	var u struct {
-		Login string `json:"login"`
-		Name  string `json:"name"`
+		Name string `json:"name"`
 	}
-	if err := json.Unmarshal(userJSON, &u); err != nil {
-		return GHUser{}, err
+	if json.Unmarshal(data, &u) != nil {
+		return ""
 	}
-
-	email := u.Login + "@users.noreply.github.com"
-	if verified := FetchVerifiedEmails(token, host); len(verified) > 0 {
-		email = verified[0]
-	}
-
-	return GHUser{Login: u.Login, Name: u.Name, Email: email}, nil
+	return u.Name
 }
 
 // FetchVerifiedEmails best-effort resolves every verified email address for

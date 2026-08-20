@@ -2,7 +2,7 @@
 
 A terminal UI for managing multiple local git identities. Switch the name, email, SSH key, and GitHub account that are used for your commits — instantly, without touching config files manually.
 
-**New to git entirely?** Just run `gitswitch` — the first run on a machine with no profiles checks whether git and the GitHub CLI (`gh`) are installed and offers to install whichever's missing, then walks you through connecting a GitHub account via OAuth and filling in your name, email, and keys — no SSH keys to generate by hand, nothing to paste into a settings page. You don't need a second account for this to be worth it.
+**New to git entirely?** Just run `gitswitch` — the first run on a machine with no profiles checks whether git and the GitHub CLI (`gh`) are installed and offers to install whichever's missing, then walks you through connecting a GitHub account via the GitHub CLI (`gh auth login`) and filling in your name, email, and keys — no SSH keys to generate by hand, nothing to paste into a settings page. You don't need a second account for this to be worth it.
 
 ![gitswitch TUI](https://img.shields.io/badge/built%20with-Go-00ADD8?style=flat-square&logo=go)
 ![license](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)

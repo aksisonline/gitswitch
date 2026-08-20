@@ -1551,20 +1551,25 @@ func detectExistingProfiles() []storage.Profile {
 	}
 
 	// Best-effort cross-reference: for each gh-CLI account, fetch its
-	// verified GitHub email(s) concurrently (one goroutine per account,
-	// each writing only its own slice index — no mutex needed) so a match
-	// against the git-config candidate above merges them into one profile
-	// instead of surfacing as two. Silently empty on any failure (gh
-	// missing, insufficient token scope, no network) — falls through to
-	// today's nickname/email-string behavior with no regression.
+	// display name and verified GitHub email(s) concurrently (one
+	// goroutine per account, each writing only its own slice index — no
+	// mutex needed) so a match against the git-config candidate above
+	// merges them into one profile instead of surfacing as two, and the
+	// candidate's user.name can be the real display name rather than the
+	// bare handle — same as `gitswitch login`. IdentityFor makes one
+	// `gh auth token` call per account and reuses it for both lookups.
+	// Silently empty on any failure (gh missing, insufficient token
+	// scope, no network) — falls through to today's nickname/email-string
+	// behavior with no regression.
 	ghAccounts := git.ListGHUsers()
+	names := make([]string, len(ghAccounts))
 	verified := make([][]string, len(ghAccounts))
 	var wg sync.WaitGroup
 	for i, acct := range ghAccounts {
 		wg.Add(1)
 		go func(i int, acct git.GHAccount) {
 			defer wg.Done()
-			verified[i] = git.VerifiedEmailsFor(acct.Login, acct.Host)
+			names[i], verified[i] = git.IdentityFor(acct.Login, acct.Host)
 		}(i, acct)
 	}
 	wg.Wait()
@@ -1574,9 +1579,13 @@ func detectExistingProfiles() []storage.Profile {
 		if nick == "" {
 			continue
 		}
+		userName := names[i]
+		if userName == "" {
+			userName = nick
+		}
 		add(storage.Profile{
 			Nickname: nick,
-			UserName: nick,
+			UserName: userName,
 			Email:    nick + "@users.noreply.github.com",
 			GHUser:   acct.Login,
 		}, verified[i]...)

@@ -28,22 +28,11 @@ You can also do the login step directly, any time, instead of through the wizard
 gitswitch login
 ```
 
-Opens a GitHub login in your browser (device flow — you paste a short code, GitHub does the rest):
+Opens a GitHub login prompt (browser, device code, or token — whichever `gh` offers):
 
 ```
-  Open this URL in your browser:
-
-    https://github.com/login/device
-
-  Then enter the code:
-
-    A1B2-C3D4
-
-  Waiting for authorization...
-
   ✓  Logged in as alice-corp (github.com)
   ✓  Profile "alice-corp" created
-  ✓  Token stored in keychain
 ```
 
 Your name, email, and GitHub username are filled in for you. Run it again for each account you have:

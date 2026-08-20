@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aksisonline/gitswitch/internal/oauth"
+	"github.com/aksisonline/gitswitch/internal/ghapi"
 )
 
 type Config struct {
@@ -342,7 +342,7 @@ func ListGHUsers() []GHAccount {
 // Bounded by a timeout: detectExistingProfiles waits on all of these during
 // onboarding, so a hung `gh` subprocess (e.g. a keychain-unlock prompt with
 // nowhere to show it) must not stall the wizard indefinitely — the HTTP
-// timeout in oauth.FetchVerifiedEmails doesn't help if it never gets called.
+// timeout in ghapi.FetchVerifiedEmails doesn't help if it never gets called.
 func ghTokenFor(host, login string) string {
 	if !IsGHInstalled() {
 		return ""
@@ -356,23 +356,26 @@ func ghTokenFor(host, login string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// VerifiedEmailsFor best-effort resolves the verified GitHub email(s) for a
-// gh-CLI-logged-in account, so onboarding detection can recognize when this
-// account and a git-config profile are the same person. Returns nil on any
-// failure (gh missing, no token for host, insufficient scope, network/API
-// error) — never blocks, never errors.
-func VerifiedEmailsFor(login, host string) []string {
+// IdentityFor best-effort resolves both the display name and verified
+// email(s) for a gh-CLI-logged-in account with a single `gh auth token`
+// call — the only resolver for this, so no caller can accidentally spawn
+// two token subprocesses for one account. Callers that need only one half
+// ignore the other return; the extra API request is cheap next to the
+// subprocess spawn it replaces. Never blocks, never errors: any failure
+// (gh missing, no token for host, insufficient scope, network/API error)
+// returns zero values.
+func IdentityFor(login, host string) (name string, verifiedEmails []string) {
 	if login == "" {
-		return nil
+		return "", nil
 	}
 	if host == "" {
 		host = "github.com"
 	}
 	token := ghTokenFor(host, login)
 	if token == "" {
-		return nil
+		return "", nil
 	}
-	return oauth.FetchVerifiedEmails(token, host)
+	return ghapi.FetchName(token, host), ghapi.FetchVerifiedEmails(token, host)
 }
 
 // GetSignKey reads user.signingkey from the given scope.

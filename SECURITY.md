@@ -25,8 +25,8 @@ If you'd rather not use GitHub, email **hello@aksisonline.com** with:
 
 In scope:
 
-- Credential/token handling (`internal/secrets`, `internal/oauth`, the
-  HTTPS credential helper, keychain storage).
+- Credential/token handling (`internal/credential`, `internal/ghapi`, the
+  HTTPS credential helper — token storage itself is owned by the `gh` CLI).
 - SSH/GPG key handling and git config writes (`internal/git`).
 - Shell integration snippets (`internal/shell`) — anything that could turn
   installed shell hooks into arbitrary code execution.
