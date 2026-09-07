@@ -1,15 +1,17 @@
-# gitswitch
+<p align="center">
+  <img src="https://gitswitch.dev/og-image.png" alt="gitswitch — Git, done right">
+</p>
 
-A terminal UI for managing multiple local git identities. Switch the name, email, SSH key, and GitHub account that are used for your commits — instantly, without touching config files manually.
+<h1 align="center">gitswitch</h1>
 
-**New to git entirely?** Just run `gitswitch` — the first run on a machine with no profiles checks whether git and the GitHub CLI (`gh`) are installed and offers to install whichever's missing, then walks you through connecting a GitHub account via the GitHub CLI (`gh auth login`) and filling in your name, email, and keys — no SSH keys to generate by hand, nothing to paste into a settings page. You don't need a second account for this to be worth it.
+<p align="center">
+  <a href="https://github.com/aksisonline/gitswitch/releases"><img src="https://shieldcn.dev/github/release/aksisonline/gitswitch.svg" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://shieldcn.dev/github/license/aksisonline/gitswitch.svg" alt="License"></a>
+</p>
 
-![gitswitch TUI](https://img.shields.io/badge/built%20with-Go-00ADD8?style=flat-square&logo=go)
-![license](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)
+Manage your git identities without touching config files. Switch the name, email, SSH key, and GitHub account used for your commits — instantly. Docs live at the [site](https://gitswitch.dev); this repo's `docs/` is their source.
 
-> **Credits:** Switching logic (SSH key management, `gh auth switch` integration, profile state detection) is inspired by [dankozlowski/git-switcher](https://github.com/dankozlowski/git-switcher). The TUI, profile storage, and CLI design are original to this project.
-
-**→ [Full CLI reference](docs/cli.md)**
+**New to git entirely?** Run `gitswitch` — the first run checks git and `gh` are installed (offers to install them), then walks you through connecting a GitHub account and filling in name, email, and keys. You don't need a second account for this to be worth it.
 
 ---
 
@@ -73,33 +75,36 @@ gitswitch
 Opens a full terminal UI. First run auto-imports your existing `git config` as a `default` profile.
 
 ```
-╭──────────────────────────────────────────────────────╮
-│  ✦  Gitswitch                                        │
-│     identity manager for git                        │
-│                                                      │
-│  Current  username  ·  user@gmail.com                │
-│                                                      │
-│     ·  default       user@default.com                │
-│  ❯  ✓  aksisonline   user@gmail.com                  │
-│     ·  work          user@company.com                │
-│                                                      │
-│  ────────────────────────────────────────────────    │
-│  ↑/↓ navigate  ·  enter switch  ·  a add             │
-│  e edit  ·  ? cli tips  ·  c theme  ·  q quit        │
-╰──────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────╮
+│  ◆  Gitswitch   identity manager for git                     │
+│                                                              │
+│   Accounts    Utilities   Settings                           │
+│                                                              │
+│  Current  aks  ·  gh:aksisonline                             │
+│                                                              │
+│ ❯ ✓ aks             gh:aksisonline                           │
+│   · work            gh:abhiramkanna-edirq                    │
+│                                                              │
+│ ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄   │
+│  ↑/↓ navigate  ·  enter switch  ·  p pin to repo             │
+│  a add  ·  e edit  ·  ? cli tips  ·  q quit  ·  1/2/3 tabs   │
+╰──────────────────────────────────────────────────────────────╯
 ```
 
 **Keys:**
 | Key | Action |
 |-----|--------|
-| `↑` / `↓` or `k` / `j` | Navigate profiles |
+| `↑`/`↓` (or `k`/`j`) | Navigate profiles |
 | `enter` | Switch to selected profile |
-| `a` | Add new profile |
-| `e` | Edit selected profile |
-| `ctrl+d` (in edit) | Delete profile |
-| `c` | Cycle color theme (12 palettes) |
-| `?` | Show CLI quick reference |
+| `p` | Pin the selected profile to the current repo |
+| `a` | Add a profile |
+| `e` | Edit the selected profile |
+| `v` | Toggle emails ↔ usernames |
+| `?` | CLI quick reference |
 | `q` | Quit |
+| `1`/`2`/`3` | Accounts / Utilities / Settings tabs |
+
+---
 
 ### Quick switch (no UI)
 
