@@ -132,6 +132,7 @@ func TestCommandAllowsMissingGit(t *testing.T) {
 	}{
 		{"bare invocation", []string{"gitswitch"}, true},
 		{"doctor", []string{"gitswitch", "doctor"}, true},
+		{"snake", []string{"gitswitch", "snake"}, true},
 		{"add", []string{"gitswitch", "add"}, false},
 	}
 	for _, c := range cases {

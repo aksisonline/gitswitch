@@ -26,15 +26,15 @@ var version = "dev"
 
 var store *storage.Store
 
-// commandAllowsMissingGit is true when it's safe for gitswitch to start
-// without git on PATH: `doctor`, whose whole job is checking/installing it,
-// and bare invocation (no subcommand), which now runs the same check-and-install
-// step itself before the TUI launches (see ensurePrereqsBootstrap).
+// commandAllowsMissingGit is true when a command can run without Git: `doctor`,
+// whose whole job is checking/installing it; bare invocation, which runs the
+// same check-and-install step before the TUI launches; and the self-contained
+// hidden snake game.
 func commandAllowsMissingGit(args []string) bool {
 	if len(args) == 1 {
 		return true
 	}
-	return args[1] == "doctor"
+	return args[1] == "doctor" || args[1] == "snake"
 }
 
 func init() {
@@ -1282,7 +1282,7 @@ var doctorCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, shellCmd, uninstallCmd, skillsCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, loginCmd, betaCmd, stableCmd, reauthorCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, shellCmd, uninstallCmd, skillsCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, loginCmd, betaCmd, stableCmd, reauthorCmd, snakeCmd)
 
 	rootCmd.AddGroup(
 		&cobra.Group{ID: "identity", Title: "Identity:"},
