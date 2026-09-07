@@ -4,8 +4,8 @@ package snake
 import "math/rand"
 
 const (
-	Width  = 30
-	Height = 18
+	Width  = 28
+	Height = 15
 )
 
 // Point identifies one square on the game board.
