@@ -331,6 +331,9 @@ func quickSwitch(nickname string) error {
 		fmt.Printf("warning: %s\n", warn)
 	}
 	fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
+	if msg := xcodeAutoSync(p); msg != "" {
+		fmt.Printf("%s %s\n", styleOK("✓"), msg)
+	}
 	return nil
 }
 
@@ -410,6 +413,9 @@ var switchCmd = &cobra.Command{
 			fmt.Printf("warning: %s\n", warn)
 		}
 		fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
+		if msg := xcodeAutoSync(p); msg != "" {
+			fmt.Printf("%s %s\n", styleOK("✓"), msg)
+		}
 		return nil
 	},
 }
@@ -831,6 +837,7 @@ var pinCmd = &cobra.Command{
 		}
 		fmt.Printf("%s Pinned '%s' to this repo — %s <%s> (local git config; global identity unchanged)\n",
 			styleOK("✓"), p.Nickname, p.UserName, p.Email)
+		xcodeAutoBind(cwd, p)
 		return nil
 	},
 }
@@ -849,6 +856,8 @@ var unpinCmd = &cobra.Command{
 		if err := history.Unpin(repoKey); err != nil {
 			return err
 		}
+		cwd, _ := os.Getwd()
+		xcodeAutoUnbind(cwd)
 		fmt.Printf("%s Unpinned — this repo now uses the global identity\n", styleOK("✓"))
 		return nil
 	},
@@ -1321,7 +1330,8 @@ var doctorCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, guardCmd, recordCmd, recommendCmd, shellCmd, uninstallCmd, skillsCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, loginCmd, betaCmd, stableCmd, reauthorCmd, snakeCmd)
+	tui.AfterSwitch = func(p storage.Profile) { xcodeAutoSync(&p) }
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, guardCmd, recordCmd, recommendCmd, shellCmd, uninstallCmd, skillsCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, loginCmd, betaCmd, stableCmd, reauthorCmd, snakeCmd, xcodeCmd)
 
 	rootCmd.AddGroup(
 		&cobra.Group{ID: "identity", Title: "Identity:"},
@@ -1332,7 +1342,7 @@ func main() {
 	for _, c := range []*cobra.Command{addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd} {
 		c.GroupID = "identity"
 	}
-	for _, c := range []*cobra.Command{pinCmd, unpinCmd, guardCmd, shellCmd, uninstallCmd, doctorCmd} {
+	for _, c := range []*cobra.Command{pinCmd, unpinCmd, guardCmd, xcodeCmd, shellCmd, uninstallCmd, doctorCmd} {
 		c.GroupID = "isolation"
 	}
 	for _, c := range []*cobra.Command{versionCmd, upgradeCmd, betaCmd, stableCmd} {
