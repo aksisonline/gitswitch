@@ -246,6 +246,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.state {
 	case StateWhatsNew:
 		if km, ok := msg.(tea.KeyMsg); ok {
+			maxScroll := m.maxWhatsNewScroll()
 			switch km.String() {
 			case "ctrl+c", "q":
 				return m, tea.Quit
@@ -254,7 +255,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.whatsNewScroll--
 				}
 			case "down", "j", " ":
-				m.whatsNewScroll++
+				if m.whatsNewScroll < maxScroll {
+					m.whatsNewScroll++
+				}
+			case "pgup":
+				m.whatsNewScroll -= notesViewportHeight(m.height)
+				if m.whatsNewScroll < 0 {
+					m.whatsNewScroll = 0
+				}
+			case "pgdown":
+				m.whatsNewScroll += notesViewportHeight(m.height)
+				if m.whatsNewScroll > maxScroll {
+					m.whatsNewScroll = maxScroll
+				}
 			default:
 				// any other key dismisses
 				ver.MarkVersionSeen(m.store.ConfigDir(), m.currentVersion)
@@ -1128,6 +1141,13 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			} else if !up && m.wizardStep < len(m.detectedProfiles)-1 {
 				m.wizardStep++
 			}
+		case StateWhatsNew:
+			maxScroll := m.maxWhatsNewScroll()
+			if up && m.whatsNewScroll > 0 {
+				m.whatsNewScroll--
+			} else if !up && m.whatsNewScroll < maxScroll {
+				m.whatsNewScroll++
+			}
 		}
 		return m, nil
 	}
@@ -1167,6 +1187,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case StateWhatsNew:
+		ver.MarkVersionSeen(m.store.ConfigDir(), m.currentVersion)
 		m.state = StateList
 		m.splashSeen020 = true
 		_ = m.savePrefs()
@@ -1701,4 +1722,14 @@ func (m Model) updateUpdatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+
+func (m Model) maxWhatsNewScroll() int {
+	total := len(renderNotes(m.whatsNewBody, m.panelWidth()))
+	vis := notesViewportHeight(m.height)
+	if total > vis {
+		return total - vis
+	}
+	return 0
 }
