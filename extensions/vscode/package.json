@@ -4,6 +4,7 @@
   "description": "Status bar widget for switching, pinning, and guarding git identities managed by gitswitch",
   "version": "0.1.1",
   "publisher": "aksisonline",
+  "icon": "icon.png",
   "license": "Apache-2.0",
   "homepage": "https://gitswitch.dev",
   "repository": {
