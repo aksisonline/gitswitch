@@ -296,10 +296,12 @@ Delegates to `gh auth login` (the real GitHub CLI's own login command) to authen
 ## `skills`
 
 ```bash
-gitswitch skills [--scope user|project] [--offline]
+gitswitch skills [--scope user|project] [--offline] [--check] [--update]
 ```
 
-Installs the gitswitch skill, embedded in the binary. Tries [skills.sh](https://www.skills.sh) first (works with Claude Code, Cursor, Codex, and more); falls back to installing directly for Claude Code and the shared `.agents/skills` convention when `--offline` is passed or `npx` isn't available. `user` → `~/.claude/skills/`, `~/.agents/skills/` (default), `project` → `.claude/skills/`, `.agents/skills/`.
+Installs or updates the gitswitch skill, embedded in the binary. Tries [skills.sh](https://www.skills.sh) first (works with Claude Code, Cursor, Codex, and more); falls back to installing directly for Claude Code and the shared `.agents/skills` convention when `--offline` is passed or `npx` isn't available. `user` → `~/.claude/skills/`, `~/.agents/skills/` (default), `project` → `.claude/skills/`, `.agents/skills/`.
+
+Use `--check` to verify whether installed skill files match the current binary, or `--update` to rewrite all installed skill files. `gitswitch upgrade` updates installed skills automatically.
 
 ## `reauthor`
 
