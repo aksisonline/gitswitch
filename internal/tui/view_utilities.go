@@ -4,11 +4,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Utility items (indices match utilityFocus and the 5-relY mouse grid):
+// Utility items (indices match utilityFocus and the 4-row mouse grid):
 //   0 = Shell Integration       (toggleable)
 //   1 = Session Isolation       (toggleable)
 //   2 = HTTPS Credential Helper (toggleable)
 //   3 = Auto-pin Repeat Repos   (toggleable)
+//   4 = Pre-commit Guard        (toggleable)
 
 func (m Model) viewUtilitiesTab(pw int) string {
 	var top string
@@ -20,7 +21,7 @@ func (m Model) viewUtilitiesTab(pw int) string {
 	iw := itemInnerW(pw)
 
 	// Build each item box
-	items := m.utilItem(pw, iw, 0) + m.utilItem(pw, iw, 1) + m.utilItem(pw, iw, 2) + m.utilItem(pw, iw, 3)
+	items := m.utilItem(pw, iw, 0) + m.utilItem(pw, iw, 1) + m.utilItem(pw, iw, 2) + m.utilItem(pw, iw, 3) + m.utilItem(pw, iw, 4)
 
 	sep := "\n\n"
 	footer := sep + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
@@ -40,7 +41,7 @@ type utilItemSpec struct {
 	enabled            func(m Model) bool
 }
 
-var utilItemSpecs = [4]utilItemSpec{
+var utilItemSpecs = [5]utilItemSpec{
 	{
 		title: "Shell Integration", arcadeTitle: "SHELL HOOK",
 		desc:       "Auto-switch identity when you cd into a pinned repo.",
@@ -64,6 +65,12 @@ var utilItemSpecs = [4]utilItemSpec{
 		desc:       "Pin the account after 3 uses in the same repo.",
 		arcadeDesc: "Play a repo 3 times with an account — it's yours.",
 		enabled:    func(m Model) bool { return !m.autoPinDisabled },
+	},
+	{
+		title: "Pre-commit Guard", arcadeTitle: "COMMIT GUARD",
+		desc:       "Refuse wrong-author commits before they enter git history.",
+		arcadeDesc: "Blocks wrong-account commits before they hit git log.",
+		enabled:    func(m Model) bool { return m.guardEnabled },
 	},
 }
 
