@@ -30,22 +30,27 @@ func (m Model) viewUpdatePrompt(pw int) string {
 		body = sep +
 			"  " + styleBrand.Render("  "+m.latestVersion+" is ready to install.")
 
-		// Release notes block
-		if m.releaseNotes != "" {
+		// Release notes block (cleaned & capped so the prompt never overflows)
+		if cleaned := cleanReleaseNotes(m.releaseNotes); cleaned != "" {
 			body += sep + "  " + styleItemDim.Render("What's new:") + "\n"
 			noteStyle := lipgloss.NewStyle().Foreground(colorDim)
-			for _, line := range strings.Split(m.releaseNotes, "\n") {
-				line = strings.TrimRight(line, "\r")
+			maxLines := 6
+			shown := 0
+			for _, line := range strings.Split(cleaned, "\n") {
+				line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#"))
 				if line == "" {
 					continue
 				}
-				// Trim markdown heading markers, render as plain text
-				line = strings.TrimLeft(line, "#")
-				line = strings.TrimSpace(line)
-				if line == "" {
-					continue
+				line = strings.ReplaceAll(line, "**", "")
+				if idx := strings.Index(line, " by @"); idx > 0 && strings.Contains(line[idx:], "http") {
+					line = strings.TrimSpace(line[:idx])
+				}
+				if shown >= maxLines {
+					body += "  " + noteStyle.Render("  …") + "\n"
+					break
 				}
 				body += "  " + noteStyle.Render(truncate(line, iw-4)) + "\n"
+				shown++
 			}
 		} else {
 			body += sep +

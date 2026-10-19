@@ -230,17 +230,9 @@ jobs:
         run: |
           NEW_TAG="${{ needs.version.outputs.new_tag }}"
 
-          # Pull the [Unreleased] section out of CHANGELOG.md so the beta
-          # actually says what's in it, instead of shipping empty boilerplate.
-          awk '
-            /^## \[Unreleased\]/ { flag=1; next }
-            /^## \[/ { if (flag) exit }
-            flag { print }
-          ' CHANGELOG.md > /tmp/changelog-snippet.md
-
           sed "s/__TAG__/$NEW_TAG/g" .github/release-templates/beta-install.md > /tmp/notes-install.md
 
-          cat .github/release-templates/beta-header.md /tmp/changelog-snippet.md /tmp/notes-install.md > /tmp/release-notes.md
+          cat .github/release-templates/beta-header.md /tmp/notes-install.md > /tmp/release-notes.md
 
       - name: Create GitHub prerelease
         uses: softprops/action-gh-release@v2

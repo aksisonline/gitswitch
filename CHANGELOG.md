@@ -8,7 +8,12 @@ Format: `[version] — date — summary`
 ## [Unreleased]
 
 ### What's New
+- **Pre-commit identity guard & IDE extensions** — blocks mis-attributed commits before they happen and adds native VS Code and JetBrains status-bar extensions.
 - **A hidden `gitswitch snake` game** — take a quick terminal break without needing Git or a configured profile.
+
+## [v0.4.4] — 2026-08-20
+
+### What's New
 - **`gitswitch login` now hands off straight to `gh`'s own login flow instead of a separate branded one** — you get whatever login method `gh` offers (browser, device code, or a token) instead of gitswitch's own device-code screen. The `--client-id` flag is gone since there's no longer a custom OAuth app; `--host` and `--profile` still work the same way. gitswitch no longer stores a token anywhere itself — `gh` already does.
 - **The setup wizard now recognizes when a `gh` account and your git config are the same person** — it checks your verified GitHub email and merges them into one profile instead of showing you two things to sort out.
 
