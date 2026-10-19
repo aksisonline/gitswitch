@@ -5,7 +5,7 @@
 
     <description><![CDATA[
         Status bar widget for <a href="https://github.com/aksisonline/git-switcher">gitswitch</a> —
-        see and switch your active git identity without leaving the IDE. Requires the
+        see, switch, pin, and guard your active git identity without leaving the IDE. Requires the
         <code>gitswitch</code> CLI on your PATH.
     ]]></description>
 
@@ -25,6 +25,8 @@
                     text="Pin Profile to This Repo" description="Pin a git identity to this repo's local config"/>
             <action id="gitswitch.Unpin" class="dev.gitswitch.plugin.UnpinAction"
                     text="Unpin This Repo" description="Remove this repo's pinned identity"/>
+            <action id="gitswitch.ToggleGuard" class="dev.gitswitch.plugin.ToggleGuardAction"
+                    text="Toggle Pre-commit Guard" description="Enable or disable the global pre-commit identity guard hook"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </group>
     </actions>

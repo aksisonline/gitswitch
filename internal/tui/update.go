@@ -42,6 +42,12 @@ type ghWrapperDoneMsg struct {
 	err       error
 }
 
+// guardDoneMsg reports the result of toggling the global pre-commit guard hook.
+type guardDoneMsg struct {
+	enabled bool
+	err     error
+}
+
 // pinDoneMsg reports the result of pinning or releasing this repo's identity.
 // A nil profile means the pin was removed.
 type pinDoneMsg struct {
@@ -163,6 +169,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.statusMsg = "Session Isolation removed — restart your shell to apply"
 				m.PendingReloadCmd = ""
+			}
+			m.statusIsErr = false
+		}
+		return m, nil
+	}
+	if grd, ok := msg.(guardDoneMsg); ok {
+		if grd.err != nil {
+			m.statusMsg = fmt.Sprintf("pre-commit guard: %v", grd.err)
+			m.statusIsErr = true
+		} else {
+			m.guardEnabled = grd.enabled
+			if grd.enabled {
+				m.statusMsg = "pre-commit guard enabled"
+			} else {
+				m.statusMsg = "pre-commit guard disabled"
 			}
 			m.statusIsErr = false
 		}
@@ -293,7 +314,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor--
 				}
 			case 1:
-				m.utilityFocus = (m.utilityFocus + 3) % 4
+				m.utilityFocus = (m.utilityFocus + 4) % 5
 			case 2:
 				if m.settingsFocus > 0 {
 					m.settingsFocus--
@@ -308,7 +329,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor++
 				}
 			case 1:
-				m.utilityFocus = (m.utilityFocus + 1) % 4
+				m.utilityFocus = (m.utilityFocus + 1) % 5
 			case 2:
 				if m.settingsFocus < 2 {
 					m.settingsFocus++
@@ -349,6 +370,9 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.statusIsErr = false
 					return m, nil
+				}
+				if m.utilityFocus == 4 {
+					return m, m.toggleGuardCmd()
 				}
 			case 2: // Settings
 				if m.settingsFocus == 0 {
@@ -797,6 +821,23 @@ func (m Model) toggleCredentialHelperCmd() tea.Cmd {
 	}
 }
 
+// toggleGuardCmd installs or removes the global pre-commit identity guard hook.
+func (m Model) toggleGuardCmd() tea.Cmd {
+	wasEnabled := m.guardEnabled
+	return func() tea.Msg {
+		var err error
+		if wasEnabled {
+			err = git.UninstallGuardHook()
+		} else {
+			err = git.InstallGuardHook()
+		}
+		if err != nil {
+			return guardDoneMsg{enabled: wasEnabled, err: err}
+		}
+		return guardDoneMsg{enabled: git.IsGuardHookInstalled()}
+	}
+}
+
 // toggleGHWrapperCmd installs or removes the `gh` CLI wrapper function,
 // mirroring `gitswitch shell`/`uninstall`'s gh-wrapper handling. Unlike the
 // credential helper, this writes to the shell rc file, so — like shell
@@ -991,7 +1032,7 @@ func (m Model) profileRowStart(arcadeOff int) int {
 // itemBoxAt maps a relY to a Utilities/Settings item-box index. Each
 // renderItemBox occupies exactly 4 rows, the first box starting right
 // under the tab strip. maxIdx is the highest valid index for the tab being
-// hit-tested (3 for Utilities' 4 boxes, 2 for Settings' 3).
+// hit-tested (4 for Utilities' 5 boxes, 2 for Settings' 3).
 func itemBoxAt(relY, arcadeOff, maxIdx int) (int, bool) {
 	start := 4 + arcadeOff
 	if relY < start {
@@ -1102,7 +1143,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				m.cursor = idx
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff, 3); ok {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 4); ok {
 				m.utilityFocus = idx
 			}
 		case 2:
@@ -1283,7 +1324,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				return m, m.switchProfileCmd(m.profiles[idx])
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff, 3); ok {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 4); ok {
 				m.utilityFocus = idx
 				switch idx {
 				case 0:
@@ -1301,6 +1342,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 						m.statusMsg = "auto-pin enabled"
 					}
 					m.statusIsErr = false
+				case 4:
+					return m, m.toggleGuardCmd()
 				}
 			}
 		case 2:

@@ -9,6 +9,7 @@ interface CurrentProfile {
   user_name?: string;
   email?: string;
   scope: string;
+  guard_active?: boolean;
 }
 
 interface Profile {
@@ -64,8 +65,10 @@ export function activate(context: vscode.ExtensionContext) {
       statusBarItem.text = "$(person) gitswitch: no profile";
       statusBarItem.tooltip = "Click to switch git identity";
     } else {
-      statusBarItem.text = `$(person) ${current.nickname}`;
-      statusBarItem.tooltip = `${current.user_name} <${current.email}> (${SCOPE_LABEL[current.scope] ?? current.scope})\nClick to switch git identity`;
+      const pinMarker = current.scope === "repo" ? " ●" : "";
+      const guardLabel = current.guard_active ? " · guard active" : "";
+      statusBarItem.text = `$(person) ${current.nickname}${pinMarker}`;
+      statusBarItem.tooltip = `${current.user_name} <${current.email}> (${SCOPE_LABEL[current.scope] ?? current.scope}${guardLabel})\nClick to switch git identity`;
     }
     statusBarItem.show();
   }
@@ -121,6 +124,20 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage("gitswitch: unpinned this repo");
       } catch (err) {
         vscode.window.showErrorMessage(`gitswitch unpin failed: ${(err as Error).message}`);
+      }
+    }),
+
+    vscode.commands.registerCommand("gitswitch.toggleGuard", async () => {
+      try {
+        const current = await getCurrent();
+        const subcmd = current?.guard_active ? "disable" : "enable";
+        await run(["guard", subcmd]);
+        await refresh();
+        vscode.window.showInformationMessage(
+          `gitswitch: pre-commit guard ${subcmd === "enable" ? "enabled" : "disabled"}`
+        );
+      } catch (err) {
+        vscode.window.showErrorMessage(`gitswitch guard failed: ${(err as Error).message}`);
       }
     })
   );

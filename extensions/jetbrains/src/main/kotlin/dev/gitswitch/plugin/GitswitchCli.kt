@@ -10,6 +10,7 @@ data class CurrentProfile(
     @SerializedName("user_name") val userName: String? = null,
     val email: String? = null,
     val scope: String = "global",
+    @SerializedName("guard_active") val guardActive: Boolean = false,
 )
 
 data class Profile(
@@ -62,4 +63,7 @@ object GitswitchCli {
     fun pin(workDir: String?, nickname: String) = run(workDir, "pin", nickname)
 
     fun unpin(workDir: String?) = run(workDir, "unpin")
+
+    fun setGuard(workDir: String?, enable: Boolean) =
+        run(workDir, "guard", if (enable) "enable" else "disable")
 }

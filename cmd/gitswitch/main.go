@@ -497,7 +497,12 @@ var currentCmd = &cobra.Command{
 				GHUser                 string `json:"gh_user,omitempty"`
 				SSHKey                 string `json:"ssh_key,omitempty"`
 				CredentialHelperActive bool   `json:"credential_helper_active"`
-			}{Scope: scopeStr, CredentialHelperActive: git.IsCredentialHelperInstalled()}
+				GuardActive            bool   `json:"guard_active"`
+			}{
+				Scope:                  scopeStr,
+				CredentialHelperActive: git.IsCredentialHelperInstalled(),
+				GuardActive:            git.IsGuardHookInstalled(),
+			}
 			if p != nil {
 				out.Nickname, out.UserName, out.Email, out.GHUser, out.SSHKey = p.Nickname, p.UserName, p.Email, p.GHUser, p.SSHKey
 			}
@@ -545,6 +550,9 @@ var currentCmd = &cobra.Command{
 		}
 		if git.IsCredentialHelperInstalled() {
 			fmt.Println("HTTPS credential helper: active")
+		}
+		if git.IsGuardHookInstalled() {
+			fmt.Println("Pre-commit guard: active")
 		}
 		return nil
 	},
@@ -666,7 +674,7 @@ var upgradeCmd = &cobra.Command{
 			fmt.Println("New features available in this version.")
 			fmt.Println("Launching setup to activate them...")
 			fmt.Println()
-			opts, err := wizard.Run(wizard.Config{HTTPSDefault: true})
+			opts, err := wizard.Run(wizard.Config{HTTPSDefault: true, GuardDefault: true})
 			if err == nil && opts.InstallHTTPS {
 				if herr := git.InstallCredentialHelper(); herr != nil {
 					fmt.Printf("  warning: could not register HTTPS credential helper: %v\n", herr)
@@ -1017,7 +1025,7 @@ is passed.`,
 
 var shellCmd = &cobra.Command{
 	Use:   "shell",
-	Short: "Set up gitswitch — shell integration and HTTPS credential routing",
+	Short: "Set up gitswitch — shell integration, HTTPS routing, and pre-commit guard",
 	Long: `Interactive setup wizard. Detects your shell, shows what each step does,
 and asks before making any changes. Use --yes to accept all defaults without
 prompts (for scripts and CI).`,
@@ -1025,11 +1033,13 @@ prompts (for scripts and CI).`,
 		shellFlag, _ := cmd.Flags().GetString("shell")
 		yes, _ := cmd.Flags().GetBool("yes")
 		httpsDefault, _ := cmd.Flags().GetBool("https")
+		guardDefault, _ := cmd.Flags().GetBool("guard")
 
 		opts, err := wizard.Run(wizard.Config{
 			ShellOverride: shellFlag,
 			Yes:           yes,
 			HTTPSDefault:  httpsDefault,
+			GuardDefault:  guardDefault,
 		})
 		if err != nil {
 			return fmt.Errorf("setup interrupted: %w", err)
@@ -1061,8 +1071,20 @@ prompts (for scripts and CI).`,
 			_, ghWrapperErr = shell.InstallGHWrapper(opts.Shell)
 		}
 
-		wizard.PrintSummary(os.Stdout, shellResult, opts.InstallShell, opts.InstallHTTPS && httpsErr == nil,
-			opts.InstallGHWrapper && ghWrapperErr == nil, httpsErr)
+		var guardErr error
+		if opts.InstallGuard {
+			guardErr = git.InstallGuardHook()
+		}
+
+		wizard.PrintSummary(
+			os.Stdout,
+			shellResult,
+			opts.InstallShell,
+			opts.InstallHTTPS && httpsErr == nil,
+			opts.InstallGHWrapper && ghWrapperErr == nil,
+			httpsErr,
+			opts.InstallGuard && guardErr == nil,
+		)
 		return nil
 	},
 }
@@ -1185,6 +1207,14 @@ var uninstallCmd = &cobra.Command{
 			}
 		}
 
+		if git.IsGuardHookInstalled() {
+			if err := git.UninstallGuardHook(); err != nil {
+				fmt.Printf("  %s could not remove pre-commit guard: %v\n", warn, err)
+			} else {
+				fmt.Printf("%s Pre-commit guard removed\n", ok)
+			}
+		}
+
 		fmt.Println("  Reload your shell (or open a new terminal) to complete removal.")
 		return nil
 	},
@@ -1199,6 +1229,7 @@ var doctorCmd = &cobra.Command{
 		r := prereqs.Check()
 		conflicts := git.CredentialHelperConflicts()
 		ghWrapperInstalled := shell.IsGHWrapperInstalled(shell.RCFile(shell.DetectShell()))
+		guardInstalled := git.IsGuardHookInstalled()
 		if jsonOut {
 			// Embedded so git/gh stay top-level, matching the pre-existing shape.
 			// Version/Profiles absorb what `gitswitch setup --agent` used to report,
@@ -1212,6 +1243,7 @@ var doctorCmd = &cobra.Command{
 					Conflicts         []git.HelperConflict `json:"conflicts,omitempty"`
 				} `json:"https"`
 				GHWrapperInstalled bool `json:"gh_wrapper_installed"`
+				GuardInstalled     bool `json:"guard_installed"`
 			}{CheckResult: r}
 			report.Version = version
 			profiles, _ := store.Load()
@@ -1219,6 +1251,7 @@ var doctorCmd = &cobra.Command{
 			report.HTTPS.RoutedByGitswitch = len(conflicts) == 0
 			report.HTTPS.Conflicts = conflicts
 			report.GHWrapperInstalled = ghWrapperInstalled
+			report.GuardInstalled = guardInstalled
 			b, err := json.MarshalIndent(report, "", "  ")
 			if err != nil {
 				return err
@@ -1264,6 +1297,12 @@ var doctorCmd = &cobra.Command{
 			fmt.Printf("  %s  Session Isolation off — bare `gh` commands use gh's single global account, and `gitswitch pin` has no effect\n", warn)
 		}
 
+		if guardInstalled {
+			fmt.Printf("  %s  Pre-commit guard active (blocks wrong-author commits)\n", ok)
+		} else {
+			fmt.Printf("  %s  Pre-commit guard off — wrong-author commits are not blocked (run: gitswitch guard enable)\n", warn)
+		}
+
 		fmt.Println()
 		prereqs.PrintWarnings(r)
 
@@ -1282,7 +1321,7 @@ var doctorCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, shellCmd, uninstallCmd, skillsCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, loginCmd, betaCmd, stableCmd, reauthorCmd, snakeCmd)
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, guardCmd, recordCmd, recommendCmd, shellCmd, uninstallCmd, skillsCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, loginCmd, betaCmd, stableCmd, reauthorCmd, snakeCmd)
 
 	rootCmd.AddGroup(
 		&cobra.Group{ID: "identity", Title: "Identity:"},
@@ -1293,7 +1332,7 @@ func main() {
 	for _, c := range []*cobra.Command{addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd} {
 		c.GroupID = "identity"
 	}
-	for _, c := range []*cobra.Command{pinCmd, unpinCmd, shellCmd, uninstallCmd, doctorCmd} {
+	for _, c := range []*cobra.Command{pinCmd, unpinCmd, guardCmd, shellCmd, uninstallCmd, doctorCmd} {
 		c.GroupID = "isolation"
 	}
 	for _, c := range []*cobra.Command{versionCmd, upgradeCmd, betaCmd, stableCmd} {
@@ -1313,6 +1352,7 @@ func main() {
 	recommendCmd.Flags().String("path", "", "Directory to check (default: current working directory)")
 	shellCmd.Flags().String("shell", "", "Shell to target: zsh, bash, or fish (default: auto-detect; also skips interactive wizard)")
 	shellCmd.Flags().Bool("https", true, "Register HTTPS credential helper (default: true; prompted interactively when omitted)")
+	shellCmd.Flags().Bool("guard", true, "Enable global pre-commit identity guard hook (default: true; prompted interactively when omitted)")
 	shellCmd.Flags().BoolP("yes", "y", false, "Accept all defaults without prompts (for scripts and CI)")
 	uninstallCmd.Flags().String("shell", "", "Shell to uninstall for: zsh, bash, or fish (default: auto-detect)")
 	skillsCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills, ~/.agents/skills) or 'project' (.claude/skills, .agents/skills)")

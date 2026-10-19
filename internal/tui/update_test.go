@@ -107,6 +107,50 @@ func TestCredentialHelperToggle(t *testing.T) {
 	}
 }
 
+func TestGuardToggle(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(home, "gitconfig"))
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	if err := os.WriteFile(filepath.Join(home, "gitconfig"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	m := Model{
+		store: storage.NewAt(t.TempDir()), state: StateList, width: 84, height: 30,
+		tabIndex: 1, utilityFocus: 4, guardEnabled: false,
+	}
+	if git.IsGuardHookInstalled() {
+		t.Fatal("guard hook should not be installed in a fresh config")
+	}
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	got := next.(Model)
+	if cmd == nil {
+		t.Fatal("enter on the guard item should return a command")
+	}
+	got2, _ := got.Update(cmd())
+	final := got2.(Model)
+	if !final.guardEnabled {
+		t.Errorf("guardEnabled = false after enabling, statusMsg=%q", final.statusMsg)
+	}
+	if !git.IsGuardHookInstalled() {
+		t.Error("git config should show guard hook installed after toggle")
+	}
+
+	// Toggle again: must remove it.
+	next, cmd = final.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	got = next.(Model)
+	next2, _ := got.Update(cmd())
+	final = next2.(Model)
+	if final.guardEnabled {
+		t.Error("guardEnabled = true after disabling")
+	}
+	if git.IsGuardHookInstalled() {
+		t.Error("git config should show guard hook removed after second toggle")
+	}
+}
+
 func TestAutoPinToggle(t *testing.T) {
 	m := Model{
 		store: storage.NewAt(t.TempDir()), state: StateList, width: 84, height: 30,

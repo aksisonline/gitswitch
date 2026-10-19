@@ -84,3 +84,18 @@ class UnpinAction : AnAction("Unpin This Repo") {
         }
     }
 }
+
+class ToggleGuardAction : AnAction("Toggle Pre-commit Guard") {
+    override fun getActionUpdateThread() = ActionUpdateThread.BGT
+    override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project ?: return
+        val workDir = project.basePath
+        runInBackground(project) {
+            val current = GitswitchCli.current(workDir)
+            val enable = !(current?.guardActive ?: false)
+            GitswitchCli.setGuard(workDir, enable)
+            refreshWidget(project)
+            notify(project, "gitswitch: pre-commit guard ${if (enable) "enabled" else "disabled"}")
+        }
+    }
+}

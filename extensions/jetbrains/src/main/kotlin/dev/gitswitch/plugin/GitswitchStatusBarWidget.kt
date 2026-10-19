@@ -28,14 +28,17 @@ class GitswitchStatusBarWidget(project: Project) : EditorBasedWidget(project), S
 
     override fun getText(): String {
         val current = GitswitchCli.current(project.basePath) ?: return "gitswitch"
-        return current.nickname ?: "no profile"
+        val nick = current.nickname ?: return "no profile"
+        val marker = if (current.scope == "repo") " ●" else ""
+        return "$nick$marker"
     }
 
     override fun getTooltipText(): String {
         val current = GitswitchCli.current(project.basePath) ?: return "gitswitch: unavailable"
         if (current.nickname == null) return "gitswitch: no active profile — click to switch"
         val scope = SCOPE_LABEL[current.scope] ?: current.scope
-        return "${current.userName} <${current.email}> ($scope)\nClick to switch git identity"
+        val guard = if (current.guardActive) " · guard active" else ""
+        return "${current.userName} <${current.email}> ($scope$guard)\nClick to switch git identity"
     }
 
     override fun getAlignment(): Float = java.awt.Component.LEFT_ALIGNMENT

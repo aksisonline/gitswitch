@@ -1,7 +1,7 @@
 {
   "name": "gitswitch",
   "displayName": "gitswitch",
-  "description": "Status bar widget for switching and pinning git identities managed by gitswitch",
+  "description": "Status bar widget for switching, pinning, and guarding git identities managed by gitswitch",
   "version": "0.1.0",
   "publisher": "aksisonline",
   "repository": {
@@ -27,6 +27,10 @@
       {
         "command": "gitswitch.unpin",
         "title": "gitswitch: Unpin This Repo"
+      },
+      {
+        "command": "gitswitch.toggleGuard",
+        "title": "gitswitch: Toggle Pre-commit Guard"
       }
     ],
     "configuration": {
