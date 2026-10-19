@@ -107,14 +107,14 @@ func ghAuthToken(host, ghUser string) (string, error) {
 
 // ResolveGHUser picks which profile's gh_user applies to repoDir/repoKey.
 //
-//  1. If the repo or this terminal's session overrides the global identity, that
-//     wins outright — commits here are authored as that profile, so pushes must
-//     use its token.
+//  1. If this terminal's session or the repo's local git config sets an
+//     identity, that wins outright — commits here are authored as that profile,
+//     so pushes and `gh` commands must use its token (including after an
+//     explicit `gitswitch switch` inside a pinned repo updates both global and
+//     local config to the same email, where ResolveIdentity reports ScopeGlobal).
 //  2. Otherwise determine the globally active profile.
 //  3. Ask history for a per-repo recommendation (pinned/learned identity for
-//     repoKey). history.Recommend returns ("",false) when the recommendation
-//     equals the active nickname, so the active profile is the natural
-//     fallback and the two branches converge on the same result.
+//     repoKey when no local git config is present).
 //
 // Returns "" if no profile applies (callers then stay silent). Shared by the
 // git credential helper (Get, below) and the `gh` CLI wrapper (cmd/gitswitch
@@ -122,6 +122,11 @@ func ghAuthToken(host, ghUser string) (string, error) {
 func ResolveGHUser(st *storage.Store, repoKey, repoDir string) string {
 	if scope, email := git.ResolveIdentity(repoDir); scope == git.ScopeRepo || scope == git.ScopeSession {
 		if p := st.GetByEmail(email); p != nil {
+			return p.GHUser
+		}
+	}
+	if localEmail := git.LocalEmail(repoDir); localEmail != "" {
+		if p := st.GetByEmail(localEmail); p != nil {
 			return p.GHUser
 		}
 	}
