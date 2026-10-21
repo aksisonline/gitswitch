@@ -10,9 +10,10 @@ Format: `[version] — date — summary`
 ## [v0.5.0] — 2026-10-21
 
 ### What's New
-- **Xcode now follows your active profile** — `gitswitch xcode` shows which GitHub accounts Xcode knows about, makes your active profile's account Xcode's default (`xcode sync`), pins a repo's remotes to its profile's account (`xcode bind`), and does both automatically on `switch`/`pin` once you run `xcode enable`. Adding a new account to Xcode is one paste: `xcode add` copies the token for you. Xcode's token storage is closed to other tools, so each account is still added once in Xcode's Settings.
+- **Xcode now follows your active profile (early)** — `gitswitch xcode` shows which GitHub accounts Xcode knows about, makes your active profile's account Xcode's default (`xcode sync`), pins a repo's remotes to its profile's account (`xcode bind`), and does both automatically on `switch`/`pin` once you run `xcode enable`. Adding a new account to Xcode is one paste: `xcode add` copies the token for you. Xcode's token storage is closed to other tools, so each account is still added once in Xcode's Settings.
 - **A pre-commit guard that refuses wrong-author commits** — `gitswitch guard enable` installs a global hook that blocks a commit before it enters history when the author doesn't match the right profile for that repo. Existing hooks (Husky, lefthook, per-repo) keep running. Also available from `gitswitch shell`, `doctor`, and the Utilities tab.
-- **VS Code and JetBrains extensions** — a status-bar widget to see and switch your identity from the editor, with pin and guard indicators.
+- **VS Code and JetBrains extensions (early)** — a status-bar widget to see and switch your identity from the editor, with pin and guard indicators.
+- **Installed AI-agent skills now stay current** — `gitswitch skills --check` tells you whether your installed skill files match the binary, `--update` rewrites them, and `gitswitch upgrade` now refreshes them automatically.
 - **A hidden `gitswitch snake` game** — take a quick terminal break without needing Git or a configured profile.
 
 ### Bug Fixes
