@@ -26,15 +26,15 @@ var version = "dev"
 
 var store *storage.Store
 
-// commandAllowsMissingGit is true when it's safe for gitswitch to start
-// without git on PATH: `doctor`, whose whole job is checking/installing it,
-// and bare invocation (no subcommand), which now runs the same check-and-install
-// step itself before the TUI launches (see ensurePrereqsBootstrap).
+// commandAllowsMissingGit is true when a command can run without Git: `doctor`,
+// whose whole job is checking/installing it; bare invocation, which runs the
+// same check-and-install step before the TUI launches; and the self-contained
+// hidden snake game.
 func commandAllowsMissingGit(args []string) bool {
 	if len(args) == 1 {
 		return true
 	}
-	return args[1] == "doctor"
+	return args[1] == "doctor" || args[1] == "snake"
 }
 
 func init() {
@@ -266,18 +266,24 @@ func mergeOAuthUpdate(existing *storage.Profile, updated storage.Profile) storag
 	return updated
 }
 
+// applyGitConfig writes a profile's git identity (name, email, signing key,
+// SSH key) into the given git config scope without touching the gh CLI.
+func applyGitConfig(cfg *git.Config, p *storage.Profile) error {
+	if err := cfg.SetUser(p.UserName, p.Email); err != nil {
+		return err
+	}
+	if err := cfg.SetSignKey(p.SignKey); err != nil {
+		return err
+	}
+	return cfg.SetSSHKey(p.SSHKey)
+}
+
 // applyProfile writes a profile's identity into one git config scope and points
 // the gh CLI at the matching account, so git and GitHub never disagree about who
 // you are. Returns a non-fatal warning (e.g. gh auth switch failed) instead of
 // printing it directly — some callers (shell hooks) must stay silent.
 func applyProfile(cfg *git.Config, p *storage.Profile) (warning string, err error) {
-	if err := cfg.SetUser(p.UserName, p.Email); err != nil {
-		return "", err
-	}
-	if err := cfg.SetSignKey(p.SignKey); err != nil {
-		return "", err
-	}
-	if err := cfg.SetSSHKey(p.SSHKey); err != nil {
+	if err := applyGitConfig(cfg, p); err != nil {
 		return "", err
 	}
 	return git.SwitchGHUser(p.GHUser), nil
@@ -315,6 +321,10 @@ func scopeMarker(s git.Scope) string {
 	return ""
 }
 
+// quickSwitch switches the active global profile and, when invoked inside a
+// repo that has a local identity or pin, also updates that repo's local git
+// config so git, gh, and HTTPS pushes in the current repo immediately use the
+// explicitly switched profile while preserving the remembered pin in history.json.
 func quickSwitch(nickname string) error {
 	p, err := store.Get(nickname)
 	if err != nil {
@@ -324,13 +334,28 @@ func quickSwitch(nickname string) error {
 	if err != nil {
 		return err
 	}
+	cwd, _ := os.Getwd()
+	repoKey := history.GetRepoKeyForPath(cwd)
+	pinnedNick := history.GetPinned(repoKey)
+	if repoKey != "" && (pinnedNick != "" || git.LocalEmail(cwd) != "") {
+		if err := applyGitConfig(git.New(false), p); err != nil {
+			return err
+		}
+	}
 	if err := store.SetActive(p.Nickname); err != nil {
 		return err
 	}
 	if warn != "" {
 		fmt.Printf("warning: %s\n", warn)
 	}
-	fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
+	if pinnedNick != "" && pinnedNick != p.Nickname {
+		fmt.Printf("%s Switched to '%s' — %s <%s> (overriding repo pin '%s')\n", styleOK("✓"), p.Nickname, p.UserName, p.Email, pinnedNick)
+	} else {
+		fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
+	}
+	if msg := xcodeAutoSync(p); msg != "" {
+		fmt.Printf("%s %s\n", styleOK("✓"), msg)
+	}
 	return nil
 }
 
@@ -395,22 +420,7 @@ var switchCmd = &cobra.Command{
 	Short: "Switch to profile",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p, err := store.Get(args[0])
-		if err != nil {
-			return err
-		}
-		warn, err := applyProfile(git.New(true), p)
-		if err != nil {
-			return err
-		}
-		if err := store.SetActive(p.Nickname); err != nil {
-			return err
-		}
-		if warn != "" {
-			fmt.Printf("warning: %s\n", warn)
-		}
-		fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
-		return nil
+		return quickSwitch(args[0])
 	},
 }
 
@@ -497,7 +507,12 @@ var currentCmd = &cobra.Command{
 				GHUser                 string `json:"gh_user,omitempty"`
 				SSHKey                 string `json:"ssh_key,omitempty"`
 				CredentialHelperActive bool   `json:"credential_helper_active"`
-			}{Scope: scopeStr, CredentialHelperActive: git.IsCredentialHelperInstalled()}
+				GuardActive            bool   `json:"guard_active"`
+			}{
+				Scope:                  scopeStr,
+				CredentialHelperActive: git.IsCredentialHelperInstalled(),
+				GuardActive:            git.IsGuardHookInstalled(),
+			}
 			if p != nil {
 				out.Nickname, out.UserName, out.Email, out.GHUser, out.SSHKey = p.Nickname, p.UserName, p.Email, p.GHUser, p.SSHKey
 			}
@@ -530,21 +545,31 @@ var currentCmd = &cobra.Command{
 			return nil
 		}
 		nick := styleOK(p.Nickname)
+		pinned := history.GetPinned(history.GetRepoKeyForPath(cwd))
 		switch scope {
 		case git.ScopeRepo:
-			fmt.Printf("%s — %s <%s>  (pinned to this repo)\n", nick, p.UserName, p.Email)
+			if pinned != "" && pinned != p.Nickname {
+				fmt.Printf("%s — %s <%s>  (overriding repo pin '%s')\n", nick, p.UserName, p.Email, pinned)
+			} else {
+				fmt.Printf("%s — %s <%s>  (pinned to this repo)\n", nick, p.UserName, p.Email)
+			}
 		case git.ScopeSession:
 			fmt.Printf("%s — %s <%s>  (this terminal's session)\n", nick, p.UserName, p.Email)
 		default:
 			fmt.Printf("%s — %s <%s>\n", nick, p.UserName, p.Email)
 		}
-		if scope != git.ScopeRepo {
-			if pinned := history.GetPinned(history.GetRepoKeyForPath(cwd)); pinned != "" {
+		if scope != git.ScopeRepo && pinned != "" {
+			if !shell.IsGHWrapperInstalled(shell.RCFile(shell.DetectShell())) {
 				fmt.Println(styleDim(fmt.Sprintf("  (pinned to '%s' — inactive, Session Isolation is off)", pinned)))
+			} else if p.Nickname != pinned {
+				fmt.Println(styleDim(fmt.Sprintf("  (pinned to '%s' — overridden by switch)", pinned)))
 			}
 		}
 		if git.IsCredentialHelperInstalled() {
 			fmt.Println("HTTPS credential helper: active")
+		}
+		if git.IsGuardHookInstalled() {
+			fmt.Println("Pre-commit guard: active")
 		}
 		return nil
 	},
@@ -659,6 +684,14 @@ var upgradeCmd = &cobra.Command{
 		fmt.Println("✓ Upgrade complete.")
 		fmt.Println()
 
+		// Auto-update installed AI agent skills if present
+		if updated, err := skill.UpdateAll(); err == nil && len(updated) > 0 {
+			for _, p := range updated {
+				fmt.Printf("  %s Updated AI agent skill at %s\n", styleOK("✓"), p)
+			}
+			fmt.Println()
+		}
+
 		// If shell is installed but credential helper is not, run the wizard
 		// immediately so the user can activate new features without a separate step.
 		sh := shell.DetectShell()
@@ -666,7 +699,7 @@ var upgradeCmd = &cobra.Command{
 			fmt.Println("New features available in this version.")
 			fmt.Println("Launching setup to activate them...")
 			fmt.Println()
-			opts, err := wizard.Run(wizard.Config{HTTPSDefault: true})
+			opts, err := wizard.Run(wizard.Config{HTTPSDefault: true, GuardDefault: true})
 			if err == nil && opts.InstallHTTPS {
 				if herr := git.InstallCredentialHelper(); herr != nil {
 					fmt.Printf("  warning: could not register HTTPS credential helper: %v\n", herr)
@@ -823,6 +856,7 @@ var pinCmd = &cobra.Command{
 		}
 		fmt.Printf("%s Pinned '%s' to this repo — %s <%s> (local git config; global identity unchanged)\n",
 			styleOK("✓"), p.Nickname, p.UserName, p.Email)
+		xcodeAutoBind(cwd, p)
 		return nil
 	},
 }
@@ -841,6 +875,8 @@ var unpinCmd = &cobra.Command{
 		if err := history.Unpin(repoKey); err != nil {
 			return err
 		}
+		cwd, _ := os.Getwd()
+		xcodeAutoUnbind(cwd)
 		fmt.Printf("%s Unpinned — this repo now uses the global identity\n", styleOK("✓"))
 		return nil
 	},
@@ -862,10 +898,12 @@ var recordCmd = &cobra.Command{
 		if repoKey == "" {
 			return nil
 		}
-		// A repo or session carrying its own identity is already decided: don't
-		// record the global profile against it (that would teach the wrong one), but
-		// do point gh at the matching account so pushes from here use the right user.
-		if scope, email := git.ResolveIdentity(path); scope == git.ScopeRepo || scope == git.ScopeSession {
+		// A repo or session carrying its own identity (or an explicit pin) is
+		// already decided: don't record the global profile against it (that would
+		// teach the wrong one or overwrite an existing pin), but do point gh at
+		// the matching account so pushes from here use the right user.
+		scope, email := git.ResolveIdentity(path)
+		if scope == git.ScopeRepo || scope == git.ScopeSession || history.GetPinned(repoKey) != "" || git.LocalEmail(path) != "" {
 			if p := store.GetByEmail(email); p != nil {
 				// ponytail: unconditional `gh auth switch` — it is idempotent, and a
 				// "is it already right?" check costs the same gh round-trip. Only
@@ -927,8 +965,30 @@ var recommendCmd = &cobra.Command{
 		if repoKey == "" {
 			return errNoRecommendation
 		}
-		// A repo or terminal with its own identity (a pin, hand-set git config, or a
-		// session) already commits correctly — never nudge it to switch globally.
+
+		scope, email := git.ResolveIdentity(path)
+		if scope == git.ScopeSession {
+			return errNoRecommendation
+		}
+
+		// If the repo is pinned in history.json, check whether its effective
+		// identity currently matches the pin. When the user overrode the pin
+		// via `gitswitch switch <other>`, the next `cd` into the repo nudges
+		// back to the pinned profile; otherwise it is already right.
+		if pinned := history.GetPinned(repoKey); pinned != "" {
+			if current := store.GetByEmail(email); current != nil && current.Nickname == pinned {
+				return errNoRecommendation
+			}
+			p, err := store.Get(pinned)
+			if err != nil {
+				return errNoRecommendation
+			}
+			fmt.Printf("%s\t%s\t%s\n", p.Nickname, p.UserName, p.Email)
+			return nil
+		}
+
+		// A hand-configured repo-local identity (with no history pin) already
+		// commits as that identity — never nudge it to switch globally.
 		if git.HasLocalIdentity(path) {
 			return errNoRecommendation
 		}
@@ -955,19 +1015,63 @@ var recommendCmd = &cobra.Command{
 
 var skillsCmd = &cobra.Command{
 	Use:   "skills",
-	Short: "Install the gitswitch skill for your AI agent",
-	Long: `Installs the gitswitch skill so an AI coding agent knows how to switch
-identities and fix wrong-account commits for you.
+	Short: "Install or update the gitswitch skill for your AI agent",
+	Long: `Installs or updates the gitswitch skill so an AI coding agent knows how to switch
+identities, enforce commit guards, sync Xcode accounts, and fix wrong-account commits.
 
 Prefers skills.sh (npx skills add), which installs into whichever
 Agent-Skills-compatible tool you have locally — Claude Code, Cursor, Codex,
 and more — without gitswitch needing to know each one's own layout. Falls
 back to installing directly for Claude Code and the shared .agents/skills
 convention (used by Codex and others) when npx isn't available or --offline
-is passed.`,
+is passed.
+
+Use --check to see if installed skills are outdated, or --update to bring all
+installed skill files up to date with the current binary's embedded skill.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		checkOnly, _ := cmd.Flags().GetBool("check")
+		updateOnly, _ := cmd.Flags().GetBool("update")
 		scope, _ := cmd.Flags().GetString("scope")
 		offline, _ := cmd.Flags().GetBool("offline")
+
+		if checkOnly {
+			outdated, upToDate := skill.IsOutdated()
+			if len(outdated) == 0 && len(upToDate) == 0 {
+				fmt.Println("No gitswitch skill installed yet. Run 'gitswitch skills' to install.")
+				return nil
+			}
+			for _, p := range upToDate {
+				fmt.Printf("%s %s (up to date)\n", styleOK("✓"), p)
+			}
+			if len(outdated) > 0 {
+				for _, p := range outdated {
+					fmt.Printf("%s %s (outdated)\n", styleWarn("!"), p)
+				}
+				fmt.Println("\nRun 'gitswitch skills --update' to bring them up to date.")
+			}
+			return nil
+		}
+
+		if updateOnly {
+			updated, err := skill.UpdateAll()
+			if err != nil {
+				return fmt.Errorf("could not update skill: %w", err)
+			}
+			if len(updated) == 0 {
+				outdated, upToDate := skill.IsOutdated()
+				if len(upToDate) > 0 && len(outdated) == 0 {
+					fmt.Printf("%s All installed gitswitch skills are already up to date.\n", styleOK("✓"))
+				} else {
+					fmt.Println("No installed gitswitch skill found. Run 'gitswitch skills' to install.")
+				}
+				return nil
+			}
+			for _, p := range updated {
+				fmt.Printf("%s Updated %s\n", styleOK("✓"), p)
+			}
+			fmt.Println("  Reload your agent (or open a new session) to activate.")
+			return nil
+		}
 
 		if !offline {
 			if _, err := exec.LookPath("npx"); err == nil {
@@ -1017,7 +1121,7 @@ is passed.`,
 
 var shellCmd = &cobra.Command{
 	Use:   "shell",
-	Short: "Set up gitswitch — shell integration and HTTPS credential routing",
+	Short: "Set up gitswitch — shell integration, HTTPS routing, and pre-commit guard",
 	Long: `Interactive setup wizard. Detects your shell, shows what each step does,
 and asks before making any changes. Use --yes to accept all defaults without
 prompts (for scripts and CI).`,
@@ -1025,11 +1129,13 @@ prompts (for scripts and CI).`,
 		shellFlag, _ := cmd.Flags().GetString("shell")
 		yes, _ := cmd.Flags().GetBool("yes")
 		httpsDefault, _ := cmd.Flags().GetBool("https")
+		guardDefault, _ := cmd.Flags().GetBool("guard")
 
 		opts, err := wizard.Run(wizard.Config{
 			ShellOverride: shellFlag,
 			Yes:           yes,
 			HTTPSDefault:  httpsDefault,
+			GuardDefault:  guardDefault,
 		})
 		if err != nil {
 			return fmt.Errorf("setup interrupted: %w", err)
@@ -1061,8 +1167,20 @@ prompts (for scripts and CI).`,
 			_, ghWrapperErr = shell.InstallGHWrapper(opts.Shell)
 		}
 
-		wizard.PrintSummary(os.Stdout, shellResult, opts.InstallShell, opts.InstallHTTPS && httpsErr == nil,
-			opts.InstallGHWrapper && ghWrapperErr == nil, httpsErr)
+		var guardErr error
+		if opts.InstallGuard {
+			guardErr = git.InstallGuardHook()
+		}
+
+		wizard.PrintSummary(
+			os.Stdout,
+			shellResult,
+			opts.InstallShell,
+			opts.InstallHTTPS && httpsErr == nil,
+			opts.InstallGHWrapper && ghWrapperErr == nil,
+			httpsErr,
+			opts.InstallGuard && guardErr == nil,
+		)
 		return nil
 	},
 }
@@ -1185,6 +1303,14 @@ var uninstallCmd = &cobra.Command{
 			}
 		}
 
+		if git.IsGuardHookInstalled() {
+			if err := git.UninstallGuardHook(); err != nil {
+				fmt.Printf("  %s could not remove pre-commit guard: %v\n", warn, err)
+			} else {
+				fmt.Printf("%s Pre-commit guard removed\n", ok)
+			}
+		}
+
 		fmt.Println("  Reload your shell (or open a new terminal) to complete removal.")
 		return nil
 	},
@@ -1199,6 +1325,7 @@ var doctorCmd = &cobra.Command{
 		r := prereqs.Check()
 		conflicts := git.CredentialHelperConflicts()
 		ghWrapperInstalled := shell.IsGHWrapperInstalled(shell.RCFile(shell.DetectShell()))
+		guardInstalled := git.IsGuardHookInstalled()
 		if jsonOut {
 			// Embedded so git/gh stay top-level, matching the pre-existing shape.
 			// Version/Profiles absorb what `gitswitch setup --agent` used to report,
@@ -1212,6 +1339,7 @@ var doctorCmd = &cobra.Command{
 					Conflicts         []git.HelperConflict `json:"conflicts,omitempty"`
 				} `json:"https"`
 				GHWrapperInstalled bool `json:"gh_wrapper_installed"`
+				GuardInstalled     bool `json:"guard_installed"`
 			}{CheckResult: r}
 			report.Version = version
 			profiles, _ := store.Load()
@@ -1219,6 +1347,7 @@ var doctorCmd = &cobra.Command{
 			report.HTTPS.RoutedByGitswitch = len(conflicts) == 0
 			report.HTTPS.Conflicts = conflicts
 			report.GHWrapperInstalled = ghWrapperInstalled
+			report.GuardInstalled = guardInstalled
 			b, err := json.MarshalIndent(report, "", "  ")
 			if err != nil {
 				return err
@@ -1264,6 +1393,12 @@ var doctorCmd = &cobra.Command{
 			fmt.Printf("  %s  Session Isolation off — bare `gh` commands use gh's single global account, and `gitswitch pin` has no effect\n", warn)
 		}
 
+		if guardInstalled {
+			fmt.Printf("  %s  Pre-commit guard active (blocks wrong-author commits)\n", ok)
+		} else {
+			fmt.Printf("  %s  Pre-commit guard off — wrong-author commits are not blocked (run: gitswitch guard enable)\n", warn)
+		}
+
 		fmt.Println()
 		prereqs.PrintWarnings(r)
 
@@ -1282,7 +1417,8 @@ var doctorCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, recordCmd, recommendCmd, shellCmd, uninstallCmd, skillsCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, loginCmd, betaCmd, stableCmd, reauthorCmd)
+	tui.AfterSwitch = func(p storage.Profile) { xcodeAutoSync(&p) }
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, guardCmd, recordCmd, recommendCmd, shellCmd, uninstallCmd, skillsCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, loginCmd, betaCmd, stableCmd, reauthorCmd, snakeCmd, xcodeCmd)
 
 	rootCmd.AddGroup(
 		&cobra.Group{ID: "identity", Title: "Identity:"},
@@ -1293,7 +1429,7 @@ func main() {
 	for _, c := range []*cobra.Command{addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd} {
 		c.GroupID = "identity"
 	}
-	for _, c := range []*cobra.Command{pinCmd, unpinCmd, shellCmd, uninstallCmd, doctorCmd} {
+	for _, c := range []*cobra.Command{pinCmd, unpinCmd, guardCmd, xcodeCmd, shellCmd, uninstallCmd, doctorCmd} {
 		c.GroupID = "isolation"
 	}
 	for _, c := range []*cobra.Command{versionCmd, upgradeCmd, betaCmd, stableCmd} {
@@ -1313,10 +1449,13 @@ func main() {
 	recommendCmd.Flags().String("path", "", "Directory to check (default: current working directory)")
 	shellCmd.Flags().String("shell", "", "Shell to target: zsh, bash, or fish (default: auto-detect; also skips interactive wizard)")
 	shellCmd.Flags().Bool("https", true, "Register HTTPS credential helper (default: true; prompted interactively when omitted)")
+	shellCmd.Flags().Bool("guard", true, "Enable global pre-commit identity guard hook (default: true; prompted interactively when omitted)")
 	shellCmd.Flags().BoolP("yes", "y", false, "Accept all defaults without prompts (for scripts and CI)")
 	uninstallCmd.Flags().String("shell", "", "Shell to uninstall for: zsh, bash, or fish (default: auto-detect)")
 	skillsCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills, ~/.agents/skills) or 'project' (.claude/skills, .agents/skills)")
 	skillsCmd.Flags().Bool("offline", false, "Skip the skills.sh (npx) install attempt and go straight to the offline installer")
+	skillsCmd.Flags().Bool("check", false, "Check if installed gitswitch skills are up to date")
+	skillsCmd.Flags().Bool("update", false, "Update all installed gitswitch skills to match this binary")
 	doctorCmd.Flags().Bool("json", false, "Output machine-readable JSON")
 	doctorCmd.Flags().BoolP("yes", "y", false, "Skip install confirmation prompts")
 	loginCmd.Flags().String("host", "", "GitHub host (default: github.com)")

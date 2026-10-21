@@ -1,0 +1,61 @@
+{
+  "name": "gitswitch-dev",
+  "displayName": "gitswitch.dev",
+  "description": "Status bar widget for switching, pinning, and guarding git identities managed by gitswitch",
+  "version": "0.1.1",
+  "publisher": "aksisonline",
+  "icon": "icon.png",
+  "license": "Apache-2.0",
+  "homepage": "https://gitswitch.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aksisonline/gitswitch"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["SCM Providers", "Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "gitswitch.switchProfile",
+        "title": "gitswitch.dev: Switch Profile"
+      },
+      {
+        "command": "gitswitch.pinProfile",
+        "title": "gitswitch.dev: Pin Profile to This Repo"
+      },
+      {
+        "command": "gitswitch.unpin",
+        "title": "gitswitch.dev: Unpin This Repo"
+      },
+      {
+        "command": "gitswitch.toggleGuard",
+        "title": "gitswitch.dev: Toggle Pre-commit Guard"
+      }
+    ],
+    "configuration": {
+      "title": "gitswitch.dev",
+      "properties": {
+        "gitswitch.binaryPath": {
+          "type": "string",
+          "default": "gitswitch",
+          "description": "Path to the gitswitch binary (default assumes it's on PATH)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "vscode:prepublish": "bun run compile",
+    "package": "cp ../../LICENSE LICENSE && npx --yes @vscode/vsce package -o gitswitch.dev-0.1.1.vsix && rm -f LICENSE"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

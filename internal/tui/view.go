@@ -754,16 +754,17 @@ func (m Model) viewWhatsNew(pw int) string {
 	dimStyle := lipgloss.NewStyle().Foreground(colorDim)
 
 	header := titleStyle.Render("  What's New in " + m.currentVersion)
-	noteLines := renderNotes(m.whatsNewBody)
+	noteLines := renderNotes(m.whatsNewBody, pw)
 
-	visibleH := m.height - 10
-	if visibleH < 4 {
-		visibleH = 4
-	}
+	visibleH := notesViewportHeight(m.height)
 	total := len(noteLines)
+	maxScroll := total - visibleH
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
 	offset := m.whatsNewScroll
-	if offset > total-visibleH {
-		offset = total - visibleH
+	if offset > maxScroll {
+		offset = maxScroll
 	}
 	if offset < 0 {
 		offset = 0
@@ -775,14 +776,19 @@ func (m Model) viewWhatsNew(pw int) string {
 
 	scrollHint := ""
 	if total > visibleH {
-		scrollHint = dimStyle.Render(fmt.Sprintf("  (%d/%d lines — ↑/↓ scroll)", offset+visibleH, total))
+		scrollHint = dimStyle.Render(fmt.Sprintf("  (%d–%d of %d lines · ↑/↓ scroll)", offset+1, end, total))
+	}
+
+	keys := [][2]string{{"any key", "continue"}}
+	if total > visibleH {
+		keys = [][2]string{{"↑/↓", "scroll"}, {"any key", "continue"}}
 	}
 
 	body := "\n" + header + "\n\n" + strings.Join(noteLines[offset:end], "\n") + "\n"
 	if scrollHint != "" {
 		body += "\n" + scrollHint
 	}
-	footer := "\n" + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{{"↑/↓", "scroll"}, {"any key", "continue"}})
+	footer := "\n" + divider(pw) + "\n" + m.footerKeys(pw, keys)
 	return stylePanelBorder(pw).Render(body + footer)
 }
 

@@ -4,14 +4,20 @@ description: Stop your agent committing as the wrong person — and fix it when 
 ---
 Claude Code, Cursor, and friends run `git commit` for you. They don't know which of your accounts belongs in this repo, and they won't run `gitswitch` first unless something tells them to. An agent working across a client repo and your day job in one session will happily attribute everything to whichever account happens to be active.
 
-Two commands exist for exactly this.
+Three commands exist for exactly this.
 
-## Prevention: pin your repos
+## Prevention: pin your repos (and enable the guard)
 
 Boring answer, best answer. A [pinned repo](/docs/routing/identity-awareness#pin-a-repo) writes the identity into the repo's own git config, so an agent doesn't have to know anything — git itself uses the right account:
 
 ```bash
 gitswitch pin work
+```
+
+And the **pre-commit guard** (installed by default during `gitswitch shell` or first-run setup, or via `gitswitch guard enable`) blocks any commit whose author doesn't match the expected profile *before* it enters git history:
+
+```bash
+gitswitch guard status --json
 ```
 
 ## `gitswitch skills` — teach your agent about this
@@ -22,13 +28,15 @@ gitswitch skills
 
 Installs the gitswitch skill for whichever AI coding agent you're using. Tries [skills.sh](https://www.skills.sh) first (`npx skills add aksisonline/gitswitch`), which places it correctly for Claude Code, Cursor, Codex, and anything else that speaks the Agent Skills format — gitswitch doesn't need to know each tool's own layout. No network, or no `npx`? It falls back to installing directly for Claude Code (`~/.claude/skills/`) and the shared `.agents/skills/` convention (Codex and others).
 
-After that, saying "I'm committing as the wrong account" gets you an actual fix instead of a hand-edited `git config`. The skill is embedded in the binary — no download, always matching your installed version.
+After that, saying "I'm committing as the wrong account" gets you an actual fix instead of a hand-edited `git config`. The skill is embedded in the binary — no download, always matching your installed version, and `gitswitch upgrade` updates any installed skill files automatically.
 
 | Flag | |
 |---|---|
 | `--scope user` | `~/.claude/skills/gitswitch/`, `~/.agents/skills/gitswitch/` — every project (default) |
 | `--scope project` | `.claude/skills/gitswitch/`, `.agents/skills/gitswitch/` — this project only |
 | `--offline` | Skip the skills.sh attempt, go straight to the offline installer |
+| `--check` | Check whether installed skill files are up to date with the current binary (exits `1` if outdated) |
+| `--update` | Update all existing installed skill files to match the current binary |
 
 Reload your agent (or start a new session) afterwards.
 
@@ -60,9 +68,11 @@ This rewrites history. If the branch is already pushed and you don't pass `--pus
 Every state-reading command speaks JSON, so an agent never has to parse prose:
 
 ```bash
-gitswitch current --json    # who am I here, and why (scope: global | repo | session)
-gitswitch list --json       # all accounts
-gitswitch doctor --json     # a one-shot manifest: version, profile count, git/gh state, is HTTPS routed, is isolation on
+gitswitch current --json        # who am I here, and why (scope: global | repo | session)
+gitswitch list --json           # all accounts
+gitswitch guard status --json   # is the pre-commit guard active, and would this repo pass?
+gitswitch xcode status --json   # macOS: Xcode GitHub accounts vs gitswitch profiles
+gitswitch doctor --json         # a one-shot manifest: version, profile count, git/gh state, is HTTPS routed, is isolation on
 ```
 
 ```json
@@ -83,7 +93,7 @@ gitswitch doctor --json     # a one-shot manifest: version, profile count, git/g
 ```bash
 gitswitch doctor --json        # 1. is the setup sane?
 gitswitch current --json       # 2. who am I in this repo?
-gitswitch pin work            # 3. wrong? claim the repo, don't just switch globally
+gitswitch pin work             # 3. wrong? claim the repo, don't just switch globally
 # ...agent commits...
 gitswitch reauthor 5 --to work --yes   # 4. if it got out ahead of you
 ```

@@ -47,6 +47,18 @@ func ThemePromptColor(index int) string {
 	return string(normalThemes[index].Primary)
 }
 
+// ThemeColorsFor returns the palette currently used by the TUI. Commands with
+// their own terminal views use it so they follow the user's selected theme too.
+func ThemeColorsFor(index int, arcade bool) ThemeColors {
+	if arcade {
+		return arcadeTheme
+	}
+	if index < 0 || index >= len(normalThemes) {
+		index = 0
+	}
+	return normalThemes[index]
+}
+
 var arcadeTheme = ThemeColors{
 	Primary:   "226", // pac yellow
 	Accent:    "214", // coin gold

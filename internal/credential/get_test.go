@@ -1,7 +1,9 @@
 package credential
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -118,6 +120,48 @@ func TestGet_LocalRepoIdentityWinsOverActiveAndHistory(t *testing.T) {
 	}
 	if gotUser != "work-gh" {
 		t.Errorf("fetcher called with ghUser %q, want work-gh (repo's local identity, matched case-insensitively)", gotUser)
+	}
+}
+
+// Regression test for #43: when `gitswitch switch` is run inside a repo pinned
+// to another profile, both global and local git config have the switched
+// profile's email (so ResolveIdentity collapses to ScopeGlobal), while
+// history.json still holds the remembered pin. ResolveGHUser must return the
+// switched profile's gh_user from local git config rather than letting the
+// history pin override it.
+func TestResolveGHUser_SwitchInsidePinnedRepoWinsOverHistoryPin(t *testing.T) {
+	st := newIsolatedStore(t)
+	gitconfig := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(gitconfig, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", gitconfig)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+	_ = st.Add("tunnckoCore", "Charlike", "charlike@example.com", "", "", "tunnckoCore")
+	_ = st.Add("olstenlarck", "Olsten", "olsten@example.com", "", "", "olstenlarck")
+	_ = st.SetActive("olstenlarck")
+
+	repoKey := "git@github.com:tunnckoCore/repo.git"
+	if err := history.Pin(repoKey, "tunnckoCore"); err != nil {
+		t.Fatal(err)
+	}
+
+	repo := t.TempDir()
+	if err := exec.Command("git", "-C", repo, "init").Run(); err != nil {
+		t.Fatal(err)
+	}
+	// Both global and local config are set to olstenlarck (the state after
+	// `gitswitch switch olstenlarck` inside the pinned repo).
+	if err := exec.Command("git", "config", "--global", "user.email", "olsten@example.com").Run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := exec.Command("git", "-C", repo, "config", "--local", "user.email", "olsten@example.com").Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := ResolveGHUser(st, repoKey, repo); got != "olstenlarck" {
+		t.Errorf("ResolveGHUser = %q, want olstenlarck (switched profile must win over history pin)", got)
 	}
 }
 

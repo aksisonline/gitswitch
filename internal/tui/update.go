@@ -42,6 +42,12 @@ type ghWrapperDoneMsg struct {
 	err       error
 }
 
+// guardDoneMsg reports the result of toggling the global pre-commit guard hook.
+type guardDoneMsg struct {
+	enabled bool
+	err     error
+}
+
 // pinDoneMsg reports the result of pinning or releasing this repo's identity.
 // A nil profile means the pin was removed.
 type pinDoneMsg struct {
@@ -168,6 +174,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if grd, ok := msg.(guardDoneMsg); ok {
+		if grd.err != nil {
+			m.statusMsg = fmt.Sprintf("pre-commit guard: %v", grd.err)
+			m.statusIsErr = true
+		} else {
+			m.guardEnabled = grd.enabled
+			if grd.enabled {
+				m.statusMsg = "pre-commit guard enabled"
+			} else {
+				m.statusMsg = "pre-commit guard disabled"
+			}
+			m.statusIsErr = false
+		}
+		return m, nil
+	}
 	if sd, ok := msg.(shellDoneMsg); ok {
 		if sd.err != nil {
 			m.statusMsg = fmt.Sprintf("shell integration: %v", sd.err)
@@ -225,6 +246,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.state {
 	case StateWhatsNew:
 		if km, ok := msg.(tea.KeyMsg); ok {
+			maxScroll := m.maxWhatsNewScroll()
 			switch km.String() {
 			case "ctrl+c", "q":
 				return m, tea.Quit
@@ -233,7 +255,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.whatsNewScroll--
 				}
 			case "down", "j", " ":
-				m.whatsNewScroll++
+				if m.whatsNewScroll < maxScroll {
+					m.whatsNewScroll++
+				}
+			case "pgup":
+				m.whatsNewScroll -= notesViewportHeight(m.height)
+				if m.whatsNewScroll < 0 {
+					m.whatsNewScroll = 0
+				}
+			case "pgdown":
+				m.whatsNewScroll += notesViewportHeight(m.height)
+				if m.whatsNewScroll > maxScroll {
+					m.whatsNewScroll = maxScroll
+				}
 			default:
 				// any other key dismisses
 				ver.MarkVersionSeen(m.store.ConfigDir(), m.currentVersion)
@@ -293,7 +327,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor--
 				}
 			case 1:
-				m.utilityFocus = (m.utilityFocus + 3) % 4
+				m.utilityFocus = (m.utilityFocus + 4) % 5
 			case 2:
 				if m.settingsFocus > 0 {
 					m.settingsFocus--
@@ -308,7 +342,7 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor++
 				}
 			case 1:
-				m.utilityFocus = (m.utilityFocus + 1) % 4
+				m.utilityFocus = (m.utilityFocus + 1) % 5
 			case 2:
 				if m.settingsFocus < 2 {
 					m.settingsFocus++
@@ -349,6 +383,9 @@ func (m Model) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.statusIsErr = false
 					return m, nil
+				}
+				if m.utilityFocus == 4 {
+					return m, m.toggleGuardCmd()
 				}
 			case 2: // Settings
 				if m.settingsFocus == 0 {
@@ -753,6 +790,11 @@ func (m *Model) startBackTransition() tea.Cmd {
 	return arcadeTickCmd()
 }
 
+// AfterSwitch, when set, runs after a successful global profile switch from the
+// TUI. The CLI wires it to the Xcode account sync so picker switches behave like
+// `gitswitch switch`. Best effort: it can't fail or block the switch.
+var AfterSwitch func(p storage.Profile)
+
 func (m Model) switchProfileCmd(p storage.Profile) tea.Cmd {
 	return func() tea.Msg {
 		cfg := git.New(true)
@@ -771,6 +813,9 @@ func (m Model) switchProfileCmd(p storage.Profile) tea.Cmd {
 		}
 		if err := m.store.SetActive(p.Nickname); err != nil {
 			return switchDoneMsg{err: err}
+		}
+		if AfterSwitch != nil {
+			AfterSwitch(p)
 		}
 		return switchDoneMsg{profile: &p, warnings: warnings}
 	}
@@ -794,6 +839,23 @@ func (m Model) toggleCredentialHelperCmd() tea.Cmd {
 			return credentialHelperDoneMsg{enabled: wasEnabled, err: err}
 		}
 		return credentialHelperDoneMsg{enabled: git.IsCredentialHelperInstalled()}
+	}
+}
+
+// toggleGuardCmd installs or removes the global pre-commit identity guard hook.
+func (m Model) toggleGuardCmd() tea.Cmd {
+	wasEnabled := m.guardEnabled
+	return func() tea.Msg {
+		var err error
+		if wasEnabled {
+			err = git.UninstallGuardHook()
+		} else {
+			err = git.InstallGuardHook()
+		}
+		if err != nil {
+			return guardDoneMsg{enabled: wasEnabled, err: err}
+		}
+		return guardDoneMsg{enabled: git.IsGuardHookInstalled()}
 	}
 }
 
@@ -991,7 +1053,7 @@ func (m Model) profileRowStart(arcadeOff int) int {
 // itemBoxAt maps a relY to a Utilities/Settings item-box index. Each
 // renderItemBox occupies exactly 4 rows, the first box starting right
 // under the tab strip. maxIdx is the highest valid index for the tab being
-// hit-tested (3 for Utilities' 4 boxes, 2 for Settings' 3).
+// hit-tested (4 for Utilities' 5 boxes, 2 for Settings' 3).
 func itemBoxAt(relY, arcadeOff, maxIdx int) (int, bool) {
 	start := 4 + arcadeOff
 	if relY < start {
@@ -1087,6 +1149,13 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			} else if !up && m.wizardStep < len(m.detectedProfiles)-1 {
 				m.wizardStep++
 			}
+		case StateWhatsNew:
+			maxScroll := m.maxWhatsNewScroll()
+			if up && m.whatsNewScroll > 0 {
+				m.whatsNewScroll--
+			} else if !up && m.whatsNewScroll < maxScroll {
+				m.whatsNewScroll++
+			}
 		}
 		return m, nil
 	}
@@ -1102,7 +1171,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				m.cursor = idx
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff, 3); ok {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 4); ok {
 				m.utilityFocus = idx
 			}
 		case 2:
@@ -1126,6 +1195,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case StateWhatsNew:
+		ver.MarkVersionSeen(m.store.ConfigDir(), m.currentVersion)
 		m.state = StateList
 		m.splashSeen020 = true
 		_ = m.savePrefs()
@@ -1283,7 +1353,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				return m, m.switchProfileCmd(m.profiles[idx])
 			}
 		case 1:
-			if idx, ok := itemBoxAt(relY, arcadeOff, 3); ok {
+			if idx, ok := itemBoxAt(relY, arcadeOff, 4); ok {
 				m.utilityFocus = idx
 				switch idx {
 				case 0:
@@ -1301,6 +1371,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 						m.statusMsg = "auto-pin enabled"
 					}
 					m.statusIsErr = false
+				case 4:
+					return m, m.toggleGuardCmd()
 				}
 			}
 		case 2:
@@ -1658,4 +1730,14 @@ func (m Model) updateUpdatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+
+func (m Model) maxWhatsNewScroll() int {
+	total := len(renderNotes(m.whatsNewBody, m.panelWidth()))
+	vis := notesViewportHeight(m.height)
+	if total > vis {
+		return total - vis
+	}
+	return 0
 }

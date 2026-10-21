@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aksisonline/gitswitch/internal/credential"
 	"github.com/aksisonline/gitswitch/internal/git"
+	"github.com/aksisonline/gitswitch/internal/history"
 )
 
 func TestActiveAccountForHost(t *testing.T) {
@@ -132,11 +134,79 @@ func TestCommandAllowsMissingGit(t *testing.T) {
 	}{
 		{"bare invocation", []string{"gitswitch"}, true},
 		{"doctor", []string{"gitswitch", "doctor"}, true},
+		{"snake", []string{"gitswitch", "snake"}, true},
 		{"add", []string{"gitswitch", "add"}, false},
 	}
 	for _, c := range cases {
 		if got := commandAllowsMissingGit(c.args); got != c.want {
 			t.Errorf("%s: commandAllowsMissingGit(%v) = %v, want %v", c.name, c.args, got, c.want)
 		}
+	}
+}
+
+// TestSwitchOverridesPinInCurrentRepo verifies issue #43: running
+// `gitswitch switch <other>` inside a pinned repo updates both global and local
+// .git/config so git commits, `gitswitch ghuser`, and HTTPS pushes immediately
+// use `<other>`, while preserving the remembered pin in history.json so the
+// next `cd` (`gitswitch recommend`) nudges back to the pinned profile.
+func TestSwitchOverridesPinInCurrentRepo(t *testing.T) {
+	st, repo := setupGuardTestEnv(t)
+	origStore := store
+	store = st
+	t.Cleanup(func() { store = origStore })
+
+	if err := st.Add("tunnckoCore", "Charlike", "charlike@example.com", "", "", "tunnckoCore"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Add("olstenlarck", "Olsten", "olsten@example.com", "", "", "olstenlarck"); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(repo)
+	repoKey := history.GetRepoKeyForPath(repo)
+
+	// Pin repo to tunnckoCore (local git config + history.json).
+	pPinned, err := st.Get("tunnckoCore")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := applyGitConfig(git.New(false), pPinned); err != nil {
+		t.Fatal(err)
+	}
+	if err := history.Pin(repoKey, "tunnckoCore"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Explicitly switch to olstenlarck while inside the pinned repo.
+	if err := quickSwitch("olstenlarck"); err != nil {
+		t.Fatalf("quickSwitch(olstenlarck): %v", err)
+	}
+
+	// 1. Local .git/config must now use olstenlarck's email so git commits use it.
+	if got := git.LocalEmail(repo); got != "olsten@example.com" {
+		t.Errorf("local email after switch = %q, want olsten@example.com", got)
+	}
+
+	// 2. `gitswitch ghuser` / credential helper must resolve olstenlarck, not tunnckoCore.
+	if got := credential.ResolveGHUser(st, repoKey, repo); got != "olstenlarck" {
+		t.Errorf("ResolveGHUser after switch = %q, want olstenlarck", got)
+	}
+
+	// 3. Remembered pin in history.json must still be tunnckoCore.
+	if got := history.GetPinned(repoKey); got != "tunnckoCore" {
+		t.Errorf("history.GetPinned = %q, want tunnckoCore", got)
+	}
+
+	// 4. `recommend` must now nudge back to tunnckoCore on the next cd.
+	if err := recommendCmd.RunE(recommendCmd, nil); err != nil {
+		t.Errorf("expected recommendCmd to recommend pinned profile tunnckoCore after override, got err: %v", err)
+	}
+
+	// 5. Switching back to tunnckoCore silences `recommend` again.
+	if err := quickSwitch("tunnckoCore"); err != nil {
+		t.Fatalf("quickSwitch(tunnckoCore): %v", err)
+	}
+	if err := recommendCmd.RunE(recommendCmd, nil); err == nil {
+		t.Errorf("expected recommendCmd to return errNoRecommendation when matching pin")
 	}
 }

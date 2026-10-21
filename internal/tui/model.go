@@ -109,7 +109,7 @@ type Model struct {
 	// Tab navigation (used when state == StateList)
 	tabIndex int // 0=Accounts 1=Utilities 2=Settings
 
-	// Utilities tab focus (0=shell, 1=gh wrapper/Session Isolation, 2=credential)
+	// Utilities tab focus (0=shell, 1=gh wrapper/Session Isolation, 2=credential, 3=auto-pin, 4=guard)
 	utilityFocus int
 	// Settings tab focus (0=config, 1=theme)
 	settingsFocus int
@@ -127,6 +127,9 @@ type Model struct {
 	// cmd/gitswitch/main.go). Zero value (false) means enabled — mirrors
 	// storage.Prefs.AutoPinDisabled.
 	autoPinDisabled bool
+	// guardEnabled reflects git.IsGuardHookInstalled() — whether the global
+	// pre-commit identity guard hook is active.
+	guardEnabled bool
 	// Accounts secondary column: false=email (default), true=GitHub username
 	showUsername bool
 
@@ -260,6 +263,7 @@ func New(store *storage.Store, currentVersion, whatsNewBody string) (*Model, err
 		shellEnabled:            shell.IsInstalled(shell.RCFile(shell.DetectShell())),
 		credentialHelperEnabled: git.IsCredentialHelperInstalled(),
 		ghWrapperEnabled:        shell.IsGHWrapperInstalled(shell.RCFile(shell.DetectShell())),
+		guardEnabled:            git.IsGuardHookInstalled(),
 		showUsername:            prefs.ShowUsername,
 		splashSeen020:           prefs.SplashSeen020,
 		hiScore:                 prefs.ArcadeHiScore,

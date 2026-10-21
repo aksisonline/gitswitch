@@ -7,7 +7,7 @@ description: Every gitswitch command and flag
 | | |
 |---|---|
 | **[Identity](#identity)** | `add` `switch` `list` `remove` `current` `init` |
-| **[Session Isolation](#session-isolation)** | `pin` `unpin` `shell` `uninstall` `doctor` |
+| **[Session Isolation](#session-isolation)** | `pin` `unpin` `guard` `xcode` `shell` `uninstall` `doctor` |
 | **[Channels](#channels)** | `version` `upgrade` `beta` `stable` |
 | **[Extras](#extras)** | `login` `skills` `reauthor` `pacman` |
 
@@ -173,6 +173,34 @@ gitswitch unpin
 
 Removes those keys from the repo's local config; the repo falls back to your global identity. Must be run inside a git repo.
 
+## `guard`
+
+Refuses a commit whose author doesn't match the right gitswitch profile *before* it enters history. Installs a global pre-commit hook (`git config --global core.hooksPath`) that chains into any existing global hooks path and each repo's own hooks, so Husky, lefthook and `pre-commit` keep working.
+
+```bash
+gitswitch guard enable    # install the hook
+gitswitch guard disable   # remove it (restores a previous core.hooksPath)
+gitswitch guard status    # hook state + whether this repo would pass (--json supported)
+gitswitch guard check     # what the hook runs
+```
+
+A commit is blocked when there is no `user.email`, the email matches no profile, the repo is pinned to a different profile, or (for unpinned repos) gitswitch has learned a different profile for it. With no profiles yet, everything is allowed.
+
+## `xcode`
+
+Keeps Xcode's own GitHub accounts (**Xcode → Settings → Accounts**) in step with gitswitch. Xcode stores tokens in a keychain group only Apple's processes can write, so each account is still added to Xcode once — gitswitch makes that one paste and then manages which account Xcode *picks*. Commit authorship needs nothing: Xcode already reads git config.
+
+```bash
+gitswitch xcode status             # Xcode's accounts vs your profiles (--json supported)
+gitswitch xcode add [nickname]     # copy the profile's gh token to the clipboard (--pat: open GitHub's token page)
+gitswitch xcode sync [nickname]    # make that profile's account Xcode's default (--dry-run to preview)
+gitswitch xcode bind [nickname]    # embed the username in this repo's https remotes
+gitswitch xcode unbind
+gitswitch xcode enable|disable     # run sync on every switch, bind/unbind on pin/unpin
+```
+
+Xcode matches a remote to an account by a username in the URL, then the repo owner, and otherwise uses the first account listed. `sync` reorders that list; `bind` pins a single repo regardless of order. SSH remotes are never rewritten. Xcode reads its accounts at launch, so restart it after a change.
+
 ## `shell`
 
 ```bash
@@ -268,10 +296,12 @@ Delegates to `gh auth login` (the real GitHub CLI's own login command) to authen
 ## `skills`
 
 ```bash
-gitswitch skills [--scope user|project] [--offline]
+gitswitch skills [--scope user|project] [--offline] [--check] [--update]
 ```
 
-Installs the gitswitch skill, embedded in the binary. Tries [skills.sh](https://www.skills.sh) first (works with Claude Code, Cursor, Codex, and more); falls back to installing directly for Claude Code and the shared `.agents/skills` convention when `--offline` is passed or `npx` isn't available. `user` → `~/.claude/skills/`, `~/.agents/skills/` (default), `project` → `.claude/skills/`, `.agents/skills/`.
+Installs or updates the gitswitch skill, embedded in the binary. Tries [skills.sh](https://www.skills.sh) first (works with Claude Code, Cursor, Codex, and more); falls back to installing directly for Claude Code and the shared `.agents/skills` convention when `--offline` is passed or `npx` isn't available. `user` → `~/.claude/skills/`, `~/.agents/skills/` (default), `project` → `.claude/skills/`, `.agents/skills/`.
+
+Use `--check` to verify whether installed skill files match the current binary, or `--update` to rewrite all installed skill files. `gitswitch upgrade` updates installed skills automatically.
 
 ## `reauthor`
 

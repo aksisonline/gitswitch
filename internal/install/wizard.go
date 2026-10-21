@@ -42,6 +42,7 @@ type Options struct {
 	InstallShell     bool
 	InstallHTTPS     bool
 	InstallGHWrapper bool
+	InstallGuard     bool
 }
 
 // Config controls wizard behaviour.
@@ -49,14 +50,22 @@ type Config struct {
 	ShellOverride string // non-empty → non-interactive
 	Yes           bool   // --yes → accept all defaults
 	HTTPSDefault  bool   // default for HTTPS step
+	GuardDefault  bool   // default for Pre-commit Guard step
 }
 
-// ── Entry point ──────────────────────────────────────────────────────────────
+// ── Entry point ───────────────────────────────────────────────────────────────
 
 // Run runs the wizard and returns the user's choices.
 func Run(cfg Config) (Options, error) {
 	sh, fw := resolveShell(cfg.ShellOverride)
-	opts := Options{Shell: sh, Framework: fw, InstallShell: true, InstallHTTPS: cfg.HTTPSDefault, InstallGHWrapper: true}
+	opts := Options{
+		Shell:            sh,
+		Framework:        fw,
+		InstallShell:     true,
+		InstallHTTPS:     cfg.HTTPSDefault,
+		InstallGHWrapper: true,
+		InstallGuard:     cfg.GuardDefault,
+	}
 
 	stat, _ := os.Stdin.Stat()
 	isTerminal := stat.Mode()&os.ModeCharDevice != 0
@@ -65,7 +74,7 @@ func Run(cfg Config) (Options, error) {
 		return opts, nil
 	}
 
-	m := newModel(sh, fw, cfg.HTTPSDefault)
+	m := newModel(sh, fw, cfg.HTTPSDefault, cfg.GuardDefault)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	result, err := p.Run()
 	if err != nil {
@@ -73,7 +82,7 @@ func Run(cfg Config) (Options, error) {
 	}
 	final, ok := result.(model)
 	if !ok || final.cancelled {
-		return Options{Shell: sh, Framework: fw, InstallShell: false, InstallHTTPS: false, InstallGHWrapper: false}, nil
+		return Options{Shell: sh, Framework: fw}, nil
 	}
 	return Options{
 		Shell:            sh,
@@ -81,11 +90,12 @@ func Run(cfg Config) (Options, error) {
 		InstallShell:     final.wantShell,
 		InstallHTTPS:     final.wantHTTPS,
 		InstallGHWrapper: final.wantGHWrapper,
+		InstallGuard:     final.wantGuard,
 	}, nil
 }
 
 // PrintSummary prints the post-install result (plain text, outside TUI).
-func PrintSummary(w io.Writer, shellResult string, shellDone, httpsDone, ghWrapperDone bool, httpsErr error) {
+func PrintSummary(w io.Writer, shellResult string, shellDone, httpsDone, ghWrapperDone bool, httpsErr error, guardDone ...bool) {
 	check := lipgloss.NewStyle().Foreground(cAccent).Render("✓")
 	skip := lipgloss.NewStyle().Foreground(cDim).Render("–")
 	warn := lipgloss.NewStyle().Foreground(cHighlight).Render("⚠")
@@ -117,19 +127,29 @@ func PrintSummary(w io.Writer, shellResult string, shellDone, httpsDone, ghWrapp
 		fmt.Fprintf(w, "  %s  Session Isolation    %s\n", skip, dim("skipped"))
 	}
 
+	guardEnabled := len(guardDone) > 0 && guardDone[0]
+	if len(guardDone) > 0 {
+		if guardEnabled {
+			fmt.Fprintf(w, "  %s  Pre-commit guard     %s\n", check, dim("enabled (blocks wrong-author commits)"))
+		} else {
+			fmt.Fprintf(w, "  %s  Pre-commit guard     %s\n", skip, dim("skipped"))
+		}
+	}
+
 	fmt.Fprintln(w)
-	if shellDone || httpsDone || ghWrapperDone {
+	if shellDone || httpsDone || ghWrapperDone || guardEnabled {
 		fmt.Fprintln(w, dim("  Reload your shell (or open a new terminal) to activate."))
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, lipgloss.NewStyle().Foreground(cWhite).Render("  Next:"))
 		key := lipgloss.NewStyle().Foreground(cPrimary).Bold(true)
 		fmt.Fprintln(w, "  "+key.Render("gitswitch current")+"   see your active profile")
 		fmt.Fprintln(w, "  "+key.Render("gitswitch pin")+"       pin a repo to always use a specific profile")
+		fmt.Fprintln(w, "  "+key.Render("gitswitch guard")+"     check or manage the pre-commit identity guard")
 		fmt.Fprintln(w)
 	}
 }
 
-// ── Bubble Tea model ─────────────────────────────────────────────────────────
+// ── Bubble Tea model ──────────────────────────────────────────────────────────
 
 type wizStep int
 
@@ -137,6 +157,7 @@ const (
 	stepShell wizStep = iota
 	stepHTTPS
 	stepGHWrapper
+	stepGuard
 	stepDone
 )
 
@@ -149,22 +170,26 @@ type model struct {
 	wantShell     bool
 	wantHTTPS     bool
 	wantGHWrapper bool
+	wantGuard     bool
 	cancelled     bool
 	blink         bool
 
 	sh               shell.Shell
 	fw               shell.Framework
 	httpsDefault     bool
+	guardDefault     bool
 	alreadyShell     bool
 	alreadyHTTPS     bool
 	alreadyGHWrapper bool
+	alreadyGuard     bool
 	ghInstalled      bool
 }
 
-func newModel(sh shell.Shell, fw shell.Framework, httpsDefault bool) model {
+func newModel(sh shell.Shell, fw shell.Framework, httpsDefault, guardDefault bool) model {
 	alreadyShell := shell.IsInstalled(shell.RCFile(sh))
 	alreadyHTTPS := git.IsCredentialHelperInstalled()
 	alreadyGHWrapper := shell.IsGHWrapperInstalled(shell.RCFile(sh))
+	alreadyGuard := git.IsGuardHookInstalled()
 
 	start := stepShell
 	if alreadyShell {
@@ -174,6 +199,9 @@ func newModel(sh shell.Shell, fw shell.Framework, httpsDefault bool) model {
 		start = stepGHWrapper
 	}
 	if alreadyShell && alreadyHTTPS && alreadyGHWrapper {
+		start = stepGuard
+	}
+	if alreadyShell && alreadyHTTPS && alreadyGHWrapper && alreadyGuard {
 		start = stepDone
 	}
 
@@ -183,12 +211,15 @@ func newModel(sh shell.Shell, fw shell.Framework, httpsDefault bool) model {
 		wantShell:        true,
 		wantHTTPS:        httpsDefault,
 		wantGHWrapper:    true,
+		wantGuard:        guardDefault,
 		sh:               sh,
 		fw:               fw,
 		httpsDefault:     httpsDefault,
+		guardDefault:     guardDefault,
 		alreadyShell:     alreadyShell,
 		alreadyHTTPS:     alreadyHTTPS,
 		alreadyGHWrapper: alreadyGHWrapper,
+		alreadyGuard:     alreadyGuard,
 		ghInstalled:      git.IsGHInstalled(),
 	}
 }
@@ -243,6 +274,10 @@ func (m model) commit() (tea.Model, tea.Cmd) {
 		m.cursor = 0
 	case stepGHWrapper:
 		m.wantGHWrapper = yes
+		m.step = stepGuard
+		m.cursor = 0
+	case stepGuard:
+		m.wantGuard = yes
 		return m, tea.Quit
 	case stepDone:
 		return m, tea.Quit
@@ -280,6 +315,8 @@ func (m model) View() string {
 		sections = append(sections, m.viewHTTPS(pw))
 	case stepGHWrapper:
 		sections = append(sections, m.viewGHWrapper(pw))
+	case stepGuard:
+		sections = append(sections, m.viewGuard(pw))
 	case stepDone:
 		sections = append(sections, m.viewAlreadyDone(pw))
 	}
@@ -467,7 +504,49 @@ func (m model) viewGHWrapper(pw int) string {
 		Render(body)
 }
 
-// ── already done ──────────────────────────────────────────────────────────────
+// ── Pre-commit Guard step ────────────────────────────────────────────────────
+
+func (m model) viewGuard(pw int) string {
+	inner := pw - 4
+	stepN := 4
+	if m.alreadyShell {
+		stepN--
+	}
+	if m.alreadyHTTPS {
+		stepN--
+	}
+	if m.alreadyGHWrapper {
+		stepN--
+	}
+
+	stepLine := m.stepBadge(stepN, m.totalSteps()) + "  " +
+		lipgloss.NewStyle().Bold(true).Foreground(cWhite).Render("Pre-commit identity guard")
+
+	bullets := m.bullets([]string{
+		"Refuses wrong-author commits before they enter git history",
+		"Catches mismatches against repo pins, learned habits, or unmanaged emails",
+		"Chains into existing .git/hooks/pre-commit (Husky, lefthook, pre-commit still run)",
+	})
+
+	ba := m.beforeAfter(inner,
+		"git commit  →  wrong email silently enters git log",
+		"git commit  →  "+lipgloss.NewStyle().Foreground(cAccent).Bold(true).Render("blocked with 1-line fix before commit lands"),
+		"Bypass once anytime with: git commit --no-verify",
+	)
+
+	prompt := m.choicePrompt("Enable pre-commit identity guard?")
+
+	body := strings.Join([]string{stepLine, "", bullets, "", ba, "", prompt}, "\n")
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(cPrimary).
+		Width(pw).
+		PaddingLeft(1).PaddingRight(1).PaddingTop(1).PaddingBottom(1).
+		Render(body)
+}
+
+// ── already done ─────────────────────────────────────────────────────────────
 
 func (m model) viewAlreadyDone(pw int) string {
 	msg := lipgloss.NewStyle().Foreground(cAccent).Bold(true).Render("✓  Already fully set up")
@@ -500,6 +579,9 @@ func (m model) totalSteps() int {
 		n++
 	}
 	if !m.alreadyGHWrapper {
+		n++
+	}
+	if !m.alreadyGuard {
 		n++
 	}
 	if n == 0 {

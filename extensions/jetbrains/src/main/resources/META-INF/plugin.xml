@@ -1,0 +1,33 @@
+<idea-plugin>
+    <id>dev.gitswitch.plugin</id>
+    <name>gitswitch</name>
+    <vendor>aksisonline</vendor>
+
+    <description><![CDATA[
+        Status bar widget for <a href="https://github.com/aksisonline/git-switcher">gitswitch</a> —
+        see, switch, pin, and guard your active git identity without leaving the IDE. Requires the
+        <code>gitswitch</code> CLI on your PATH.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <statusBarWidgetFactory implementation="dev.gitswitch.plugin.GitswitchStatusBarWidgetFactory"
+                                 id="gitswitch.statusBarWidget"/>
+        <notificationGroup id="gitswitch" displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <group id="gitswitch.ActionGroup" text="gitswitch" popup="true">
+            <action id="gitswitch.SwitchProfile" class="dev.gitswitch.plugin.SwitchProfileAction"
+                    text="Switch Profile" description="Switch the active git identity"/>
+            <action id="gitswitch.PinProfile" class="dev.gitswitch.plugin.PinProfileAction"
+                    text="Pin Profile to This Repo" description="Pin a git identity to this repo's local config"/>
+            <action id="gitswitch.Unpin" class="dev.gitswitch.plugin.UnpinAction"
+                    text="Unpin This Repo" description="Remove this repo's pinned identity"/>
+            <action id="gitswitch.ToggleGuard" class="dev.gitswitch.plugin.ToggleGuardAction"
+                    text="Toggle Pre-commit Guard" description="Enable or disable the global pre-commit identity guard hook"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </group>
+    </actions>
+</idea-plugin>
