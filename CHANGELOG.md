@@ -13,6 +13,10 @@ Format: `[version] — date — summary`
 - **VS Code and JetBrains extensions** — a status-bar widget to see and switch your identity from the editor, with pin and guard indicators.
 - **A hidden `gitswitch snake` game** — take a quick terminal break without needing Git or a configured profile.
 
+### Bug Fixes
+- **`gitswitch switch` now wins over a repo pin when you run it inside that repo** — previously the pin silently overrode your explicit choice; the output now says when it's overriding a pin.
+- **The "What's New" screen after an update only shows the latest release's notes and scrolls properly** — it used to dump older notes too and could get stuck partway down.
+
 ## [v0.4.4] — 2026-08-20
 
 ### What's New
