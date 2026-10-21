@@ -266,18 +266,24 @@ func mergeOAuthUpdate(existing *storage.Profile, updated storage.Profile) storag
 	return updated
 }
 
+// applyGitConfig writes a profile's git identity (name, email, signing key,
+// SSH key) into the given git config scope without touching the gh CLI.
+func applyGitConfig(cfg *git.Config, p *storage.Profile) error {
+	if err := cfg.SetUser(p.UserName, p.Email); err != nil {
+		return err
+	}
+	if err := cfg.SetSignKey(p.SignKey); err != nil {
+		return err
+	}
+	return cfg.SetSSHKey(p.SSHKey)
+}
+
 // applyProfile writes a profile's identity into one git config scope and points
 // the gh CLI at the matching account, so git and GitHub never disagree about who
 // you are. Returns a non-fatal warning (e.g. gh auth switch failed) instead of
 // printing it directly — some callers (shell hooks) must stay silent.
 func applyProfile(cfg *git.Config, p *storage.Profile) (warning string, err error) {
-	if err := cfg.SetUser(p.UserName, p.Email); err != nil {
-		return "", err
-	}
-	if err := cfg.SetSignKey(p.SignKey); err != nil {
-		return "", err
-	}
-	if err := cfg.SetSSHKey(p.SSHKey); err != nil {
+	if err := applyGitConfig(cfg, p); err != nil {
 		return "", err
 	}
 	return git.SwitchGHUser(p.GHUser), nil
@@ -315,6 +321,10 @@ func scopeMarker(s git.Scope) string {
 	return ""
 }
 
+// quickSwitch switches the active global profile and, when invoked inside a
+// repo that has a local identity or pin, also updates that repo's local git
+// config so git, gh, and HTTPS pushes in the current repo immediately use the
+// explicitly switched profile while preserving the remembered pin in history.json.
 func quickSwitch(nickname string) error {
 	p, err := store.Get(nickname)
 	if err != nil {
@@ -324,13 +334,25 @@ func quickSwitch(nickname string) error {
 	if err != nil {
 		return err
 	}
+	cwd, _ := os.Getwd()
+	repoKey := history.GetRepoKeyForPath(cwd)
+	pinnedNick := history.GetPinned(repoKey)
+	if repoKey != "" && (pinnedNick != "" || git.LocalEmail(cwd) != "") {
+		if err := applyGitConfig(git.New(false), p); err != nil {
+			return err
+		}
+	}
 	if err := store.SetActive(p.Nickname); err != nil {
 		return err
 	}
 	if warn != "" {
 		fmt.Printf("warning: %s\n", warn)
 	}
-	fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
+	if pinnedNick != "" && pinnedNick != p.Nickname {
+		fmt.Printf("%s Switched to '%s' — %s <%s> (overriding repo pin '%s')\n", styleOK("✓"), p.Nickname, p.UserName, p.Email, pinnedNick)
+	} else {
+		fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
+	}
 	if msg := xcodeAutoSync(p); msg != "" {
 		fmt.Printf("%s %s\n", styleOK("✓"), msg)
 	}
@@ -398,25 +420,7 @@ var switchCmd = &cobra.Command{
 	Short: "Switch to profile",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p, err := store.Get(args[0])
-		if err != nil {
-			return err
-		}
-		warn, err := applyProfile(git.New(true), p)
-		if err != nil {
-			return err
-		}
-		if err := store.SetActive(p.Nickname); err != nil {
-			return err
-		}
-		if warn != "" {
-			fmt.Printf("warning: %s\n", warn)
-		}
-		fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
-		if msg := xcodeAutoSync(p); msg != "" {
-			fmt.Printf("%s %s\n", styleOK("✓"), msg)
-		}
-		return nil
+		return quickSwitch(args[0])
 	},
 }
 
@@ -541,17 +545,24 @@ var currentCmd = &cobra.Command{
 			return nil
 		}
 		nick := styleOK(p.Nickname)
+		pinned := history.GetPinned(history.GetRepoKeyForPath(cwd))
 		switch scope {
 		case git.ScopeRepo:
-			fmt.Printf("%s — %s <%s>  (pinned to this repo)\n", nick, p.UserName, p.Email)
+			if pinned != "" && pinned != p.Nickname {
+				fmt.Printf("%s — %s <%s>  (overriding repo pin '%s')\n", nick, p.UserName, p.Email, pinned)
+			} else {
+				fmt.Printf("%s — %s <%s>  (pinned to this repo)\n", nick, p.UserName, p.Email)
+			}
 		case git.ScopeSession:
 			fmt.Printf("%s — %s <%s>  (this terminal's session)\n", nick, p.UserName, p.Email)
 		default:
 			fmt.Printf("%s — %s <%s>\n", nick, p.UserName, p.Email)
 		}
-		if scope != git.ScopeRepo {
-			if pinned := history.GetPinned(history.GetRepoKeyForPath(cwd)); pinned != "" {
+		if scope != git.ScopeRepo && pinned != "" {
+			if !shell.IsGHWrapperInstalled(shell.RCFile(shell.DetectShell())) {
 				fmt.Println(styleDim(fmt.Sprintf("  (pinned to '%s' — inactive, Session Isolation is off)", pinned)))
+			} else if p.Nickname != pinned {
+				fmt.Println(styleDim(fmt.Sprintf("  (pinned to '%s' — overridden by switch)", pinned)))
 			}
 		}
 		if git.IsCredentialHelperInstalled() {
@@ -887,10 +898,12 @@ var recordCmd = &cobra.Command{
 		if repoKey == "" {
 			return nil
 		}
-		// A repo or session carrying its own identity is already decided: don't
-		// record the global profile against it (that would teach the wrong one), but
-		// do point gh at the matching account so pushes from here use the right user.
-		if scope, email := git.ResolveIdentity(path); scope == git.ScopeRepo || scope == git.ScopeSession {
+		// A repo or session carrying its own identity (or an explicit pin) is
+		// already decided: don't record the global profile against it (that would
+		// teach the wrong one or overwrite an existing pin), but do point gh at
+		// the matching account so pushes from here use the right user.
+		scope, email := git.ResolveIdentity(path)
+		if scope == git.ScopeRepo || scope == git.ScopeSession || history.GetPinned(repoKey) != "" || git.LocalEmail(path) != "" {
 			if p := store.GetByEmail(email); p != nil {
 				// ponytail: unconditional `gh auth switch` — it is idempotent, and a
 				// "is it already right?" check costs the same gh round-trip. Only
@@ -952,8 +965,30 @@ var recommendCmd = &cobra.Command{
 		if repoKey == "" {
 			return errNoRecommendation
 		}
-		// A repo or terminal with its own identity (a pin, hand-set git config, or a
-		// session) already commits correctly — never nudge it to switch globally.
+
+		scope, email := git.ResolveIdentity(path)
+		if scope == git.ScopeSession {
+			return errNoRecommendation
+		}
+
+		// If the repo is pinned in history.json, check whether its effective
+		// identity currently matches the pin. When the user overrode the pin
+		// via `gitswitch switch <other>`, the next `cd` into the repo nudges
+		// back to the pinned profile; otherwise it is already right.
+		if pinned := history.GetPinned(repoKey); pinned != "" {
+			if current := store.GetByEmail(email); current != nil && current.Nickname == pinned {
+				return errNoRecommendation
+			}
+			p, err := store.Get(pinned)
+			if err != nil {
+				return errNoRecommendation
+			}
+			fmt.Printf("%s\t%s\t%s\n", p.Nickname, p.UserName, p.Email)
+			return nil
+		}
+
+		// A hand-configured repo-local identity (with no history pin) already
+		// commits as that identity — never nudge it to switch globally.
 		if git.HasLocalIdentity(path) {
 			return errNoRecommendation
 		}
