@@ -353,6 +353,9 @@ func quickSwitch(nickname string) error {
 	} else {
 		fmt.Printf("%s Switched to '%s' — %s <%s>\n", styleOK("✓"), p.Nickname, p.UserName, p.Email)
 	}
+	if msg := xcodeAutoSync(p); msg != "" {
+		fmt.Printf("%s %s\n", styleOK("✓"), msg)
+	}
 	return nil
 }
 
@@ -681,6 +684,14 @@ var upgradeCmd = &cobra.Command{
 		fmt.Println("✓ Upgrade complete.")
 		fmt.Println()
 
+		// Auto-update installed AI agent skills if present
+		if updated, err := skill.UpdateAll(); err == nil && len(updated) > 0 {
+			for _, p := range updated {
+				fmt.Printf("  %s Updated AI agent skill at %s\n", styleOK("✓"), p)
+			}
+			fmt.Println()
+		}
+
 		// If shell is installed but credential helper is not, run the wizard
 		// immediately so the user can activate new features without a separate step.
 		sh := shell.DetectShell()
@@ -845,6 +856,7 @@ var pinCmd = &cobra.Command{
 		}
 		fmt.Printf("%s Pinned '%s' to this repo — %s <%s> (local git config; global identity unchanged)\n",
 			styleOK("✓"), p.Nickname, p.UserName, p.Email)
+		xcodeAutoBind(cwd, p)
 		return nil
 	},
 }
@@ -863,6 +875,8 @@ var unpinCmd = &cobra.Command{
 		if err := history.Unpin(repoKey); err != nil {
 			return err
 		}
+		cwd, _ := os.Getwd()
+		xcodeAutoUnbind(cwd)
 		fmt.Printf("%s Unpinned — this repo now uses the global identity\n", styleOK("✓"))
 		return nil
 	},
@@ -1001,19 +1015,63 @@ var recommendCmd = &cobra.Command{
 
 var skillsCmd = &cobra.Command{
 	Use:   "skills",
-	Short: "Install the gitswitch skill for your AI agent",
-	Long: `Installs the gitswitch skill so an AI coding agent knows how to switch
-identities and fix wrong-account commits for you.
+	Short: "Install or update the gitswitch skill for your AI agent",
+	Long: `Installs or updates the gitswitch skill so an AI coding agent knows how to switch
+identities, enforce commit guards, sync Xcode accounts, and fix wrong-account commits.
 
 Prefers skills.sh (npx skills add), which installs into whichever
 Agent-Skills-compatible tool you have locally — Claude Code, Cursor, Codex,
 and more — without gitswitch needing to know each one's own layout. Falls
 back to installing directly for Claude Code and the shared .agents/skills
 convention (used by Codex and others) when npx isn't available or --offline
-is passed.`,
+is passed.
+
+Use --check to see if installed skills are outdated, or --update to bring all
+installed skill files up to date with the current binary's embedded skill.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		checkOnly, _ := cmd.Flags().GetBool("check")
+		updateOnly, _ := cmd.Flags().GetBool("update")
 		scope, _ := cmd.Flags().GetString("scope")
 		offline, _ := cmd.Flags().GetBool("offline")
+
+		if checkOnly {
+			outdated, upToDate := skill.IsOutdated()
+			if len(outdated) == 0 && len(upToDate) == 0 {
+				fmt.Println("No gitswitch skill installed yet. Run 'gitswitch skills' to install.")
+				return nil
+			}
+			for _, p := range upToDate {
+				fmt.Printf("%s %s (up to date)\n", styleOK("✓"), p)
+			}
+			if len(outdated) > 0 {
+				for _, p := range outdated {
+					fmt.Printf("%s %s (outdated)\n", styleWarn("!"), p)
+				}
+				fmt.Println("\nRun 'gitswitch skills --update' to bring them up to date.")
+			}
+			return nil
+		}
+
+		if updateOnly {
+			updated, err := skill.UpdateAll()
+			if err != nil {
+				return fmt.Errorf("could not update skill: %w", err)
+			}
+			if len(updated) == 0 {
+				outdated, upToDate := skill.IsOutdated()
+				if len(upToDate) > 0 && len(outdated) == 0 {
+					fmt.Printf("%s All installed gitswitch skills are already up to date.\n", styleOK("✓"))
+				} else {
+					fmt.Println("No installed gitswitch skill found. Run 'gitswitch skills' to install.")
+				}
+				return nil
+			}
+			for _, p := range updated {
+				fmt.Printf("%s Updated %s\n", styleOK("✓"), p)
+			}
+			fmt.Println("  Reload your agent (or open a new session) to activate.")
+			return nil
+		}
 
 		if !offline {
 			if _, err := exec.LookPath("npx"); err == nil {
@@ -1359,7 +1417,8 @@ var doctorCmd = &cobra.Command{
 }
 
 func main() {
-	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, guardCmd, recordCmd, recommendCmd, shellCmd, uninstallCmd, skillsCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, loginCmd, betaCmd, stableCmd, reauthorCmd, snakeCmd)
+	tui.AfterSwitch = func(p storage.Profile) { xcodeAutoSync(&p) }
+	rootCmd.AddCommand(addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd, versionCmd, upgradeCmd, pacmanCmd, pinCmd, unpinCmd, guardCmd, recordCmd, recommendCmd, shellCmd, uninstallCmd, skillsCmd, hookCheckCmd, credentialCmd, ghUserCmd, doctorCmd, loginCmd, betaCmd, stableCmd, reauthorCmd, snakeCmd, xcodeCmd)
 
 	rootCmd.AddGroup(
 		&cobra.Group{ID: "identity", Title: "Identity:"},
@@ -1370,7 +1429,7 @@ func main() {
 	for _, c := range []*cobra.Command{addCmd, switchCmd, listCmd, removeCmd, currentCmd, initCmd} {
 		c.GroupID = "identity"
 	}
-	for _, c := range []*cobra.Command{pinCmd, unpinCmd, guardCmd, shellCmd, uninstallCmd, doctorCmd} {
+	for _, c := range []*cobra.Command{pinCmd, unpinCmd, guardCmd, xcodeCmd, shellCmd, uninstallCmd, doctorCmd} {
 		c.GroupID = "isolation"
 	}
 	for _, c := range []*cobra.Command{versionCmd, upgradeCmd, betaCmd, stableCmd} {
@@ -1395,6 +1454,8 @@ func main() {
 	uninstallCmd.Flags().String("shell", "", "Shell to uninstall for: zsh, bash, or fish (default: auto-detect)")
 	skillsCmd.Flags().String("scope", "user", "Install scope: 'user' (~/.claude/skills, ~/.agents/skills) or 'project' (.claude/skills, .agents/skills)")
 	skillsCmd.Flags().Bool("offline", false, "Skip the skills.sh (npx) install attempt and go straight to the offline installer")
+	skillsCmd.Flags().Bool("check", false, "Check if installed gitswitch skills are up to date")
+	skillsCmd.Flags().Bool("update", false, "Update all installed gitswitch skills to match this binary")
 	doctorCmd.Flags().Bool("json", false, "Output machine-readable JSON")
 	doctorCmd.Flags().BoolP("yes", "y", false, "Skip install confirmation prompts")
 	loginCmd.Flags().String("host", "", "GitHub host (default: github.com)")

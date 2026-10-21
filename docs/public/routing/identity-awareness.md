@@ -1,8 +1,8 @@
 ---
 title: Pins & Identity Awareness
-description: Claim a repo for one account, or let gitswitch learn your habits and nudge you
+description: Claim a repo for one account, let gitswitch learn your habits, and block wrong-author commits
 ---
-Two ways to stop using the wrong account in a repo. Pinning is the deliberate one. Learning is the one that works even when you never got around to it.
+Three ways to stop using the wrong account in a repo. Pinning is the deliberate one. Learning is the one that works even when you never got around to it. And the pre-commit guard catches mistakes before a commit ever enters history.
 
 ## Pin a repo
 
@@ -79,6 +79,29 @@ gitswitch unpin
 
 Removes those keys from the repo's local config. Both commands need to be run inside a git repo.
 
+## Pre-commit Guard
+
+Even before you pin a repo, the pre-commit guard blocks wrong-author commits before they enter git history. It is enabled by default during `gitswitch shell` and first-run onboarding, or you can toggle it anytime in the TUI (**Utilities → Pre-commit Guard**) or via the CLI:
+
+```bash
+gitswitch guard enable          # install global pre-commit hook
+gitswitch guard status          # check hook + whether this repo passes (--json supported)
+gitswitch guard disable         # remove hook and restore any previous core.hooksPath
+```
+
+It installs a global `core.hooksPath` wrapper (`~/.config/gitswitch/hooks/pre-commit`) that chains into any previous global hooks directory and each repo's own `.git/hooks/pre-commit`, so Husky, lefthook, and `pre-commit` keep running normally.
+
+A commit is refused when:
+- No `user.email` is configured in git
+- The effective `user.email` doesn't match any stored gitswitch profile
+- The repo is pinned to a different profile than the effective git identity
+- An unpinned repo has a learned recommendation (≥ 3 visits, ≥ 60% consistency) for a different profile
+
+## IDE & Xcode Integration
+
+- **Xcode (macOS)**: `gitswitch xcode enable` keeps Xcode's default GitHub account and per-repo HTTPS remotes in sync automatically whenever you run `gitswitch switch` or `gitswitch pin`. Use `gitswitch xcode status` to see matched accounts or `gitswitch xcode add <nickname>` for one-paste token setup.
+- **VS Code & JetBrains**: Native status-bar extensions (in `extensions/vscode` and `extensions/jetbrains`) show the active profile, scope (`●` pinned / `◆` session), and pre-commit guard status right in the editor status bar, with one-click switching, pinning, and guard toggling.
+
 ## Or let it learn
 
 You won't pin everything. So gitswitch quietly keeps score.
@@ -148,5 +171,3 @@ The recommendation is only ever a reflection of recorded history. Fix it at the 
 ## Next
 
 - **[Scopes](/docs/accounts/scopes)** — global vs. repo vs. terminal
-- **[Session Isolation](/docs/routing/session-isolation)** — what makes pins take effect
-- **[Guides](/docs/guides/multi-github)** — pinning in a real two-account setup

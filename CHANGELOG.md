@@ -8,8 +8,14 @@ Format: `[version] — date — summary`
 ## [Unreleased]
 
 ### What's New
-- **Pre-commit identity guard & IDE extensions** — blocks mis-attributed commits before they happen and adds native VS Code and JetBrains status-bar extensions.
+- **Xcode now follows your active profile** — `gitswitch xcode` shows which GitHub accounts Xcode knows about, makes your active profile's account Xcode's default (`xcode sync`), pins a repo's remotes to its profile's account (`xcode bind`), and does both automatically on `switch`/`pin` once you run `xcode enable`. Adding a new account to Xcode is one paste: `xcode add` copies the token for you. Xcode's token storage is closed to other tools, so each account is still added once in Xcode's Settings.
+- **A pre-commit guard that refuses wrong-author commits** — `gitswitch guard enable` installs a global hook that blocks a commit before it enters history when the author doesn't match the right profile for that repo. Existing hooks (Husky, lefthook, per-repo) keep running. Also available from `gitswitch shell`, `doctor`, and the Utilities tab.
+- **VS Code and JetBrains extensions** — a status-bar widget to see and switch your identity from the editor, with pin and guard indicators.
 - **A hidden `gitswitch snake` game** — take a quick terminal break without needing Git or a configured profile.
+
+### Bug Fixes
+- **`gitswitch switch` now wins over a repo pin when you run it inside that repo** — previously the pin silently overrode your explicit choice; the output now says when it's overriding a pin.
+- **The "What's New" screen after an update only shows the latest release's notes and scrolls properly** — it used to dump older notes too and could get stuck partway down.
 
 ## [v0.4.4] — 2026-08-20
 

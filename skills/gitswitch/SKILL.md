@@ -6,8 +6,9 @@ description: >
   their commits showing the wrong name/email, pushing to the wrong GitHub account,
   needing to switch git profiles, wanting to check which git identity is active,
   getting attribution errors on commits, working across multiple GitHub accounts
-  (personal vs work, multiple clients), or any time the phrase "wrong account" or
-  "wrong identity" appears in a git/GitHub context. Don't wait for the user to say
+  (personal vs work, multiple clients), setting up or troubleshooting Xcode git accounts,
+  enforcing commit identities with a pre-commit guard, or any time the phrase "wrong account"
+  or "wrong identity" appears in a git/GitHub context. Don't wait for the user to say
   "gitswitch" — if the problem smells like a git identity mismatch, invoke this skill.
 ---
 
@@ -23,6 +24,8 @@ Reach for `gitswitch` whenever:
 - The user asks "which git account am I on?"
 - The user needs to add a new profile for a new job, client, or side project
 - The user is confused about why `gh` and `git` show different accounts (they're independent)
+- The user wants to prevent commits from ever landing with the wrong author (`gitswitch guard`)
+- Xcode or IDE source control is pushing or committing under the wrong GitHub account
 
 ## Step 1 — Diagnose
 
@@ -31,6 +34,7 @@ Always check what's currently active before doing anything:
 ```bash
 gitswitch current     # shows active profile name + email
 gitswitch list        # shows all profiles, ✓ marks the active one
+gitswitch doctor      # checks git, gh, credential helper, and guard status
 ```
 
 If `gitswitch` is not installed, say so clearly and offer the install instructions:
@@ -51,7 +55,7 @@ gitswitch <nickname>
 # e.g. gitswitch work
 ```
 
-That's it. One command applies `user.name`, `user.email`, the SSH key, and runs `gh auth switch` if a GitHub username is stored in the profile.
+That's it. One command applies `user.name`, `user.email`, the SSH key, runs `gh auth switch` if a GitHub username is stored in the profile, and updates Xcode preferences if Xcode auto-sync is enabled.
 
 If the user needs to pick from a list, show them `gitswitch list` output and ask which one.
 
@@ -89,6 +93,66 @@ If the user already made commits with the wrong identity, don't hand-run `git re
 
 ---
 
+## Pre-commit identity guard — `gitswitch guard`
+
+To prevent wrong-author commits from *ever* entering git history, enable the global pre-commit guard:
+
+```bash
+gitswitch guard enable    # install global pre-commit enforcement hook
+gitswitch guard disable   # uninstall hook and restore previous core.hooksPath
+gitswitch guard status    # inspect hook status and test current repo
+```
+
+### How the guard works
+- Configures `git config --global core.hooksPath ~/.config/gitswitch/hooks`.
+- Chains seamlessly into any pre-existing global hooks and each repo's `.git/hooks/pre-commit` (plus passthrough shims for all client hooks so Husky, lefthook, and `pre-commit` keep working).
+- **Refuses commits before they are created** when:
+  1. No `user.email` is configured in git.
+  2. The effective commit email matches no stored gitswitch profile.
+  3. The repository is pinned (`gitswitch pin`) to a profile whose email differs from the commit email.
+  4. The repository is unpinned (`ScopeGlobal`) and learned repo history (`history.Recommend`) expects a different profile.
+- If zero profiles exist (fresh install), commits are permitted so onboarding is never blocked.
+
+---
+
+## Xcode integration — `gitswitch xcode`
+
+Xcode manages its own GitHub accounts in **Xcode → Settings → Accounts** and stores tokens in a private, Apple-only Keychain access group. While third-party tools cannot write tokens directly, `gitswitch xcode` solves account mismatch and synchronization:
+
+```bash
+gitswitch xcode status             # see Xcode accounts vs gitswitch profiles
+gitswitch xcode add [nickname]     # copies profile's gh token to clipboard for 1-paste setup
+                                   # (--pat opens GitHub's pre-filled token page instead)
+gitswitch xcode sync [nickname]    # promotes profile to index 0 (Xcode's default account)
+gitswitch xcode bind [nickname]    # binds repo's https remotes (https://user@github.com/...)
+gitswitch xcode unbind             # removes embedded username from https remotes
+gitswitch xcode enable             # auto-sync on 'switch' and auto-bind on 'pin'
+gitswitch xcode disable            # turn off automatic syncing
+```
+
+### Why this matters for Xcode
+- **Default Account Bias:** Xcode uses the **first** account in its accounts list for organization repos and Swift Package Manager (SPM) dependency resolutions. `gitswitch xcode sync` (or auto-sync on `switch`) ensures Xcode's default always matches your active profile.
+- **Per-Project Pinning:** `gitswitch xcode bind` embeds `<gh-user>@github.com` into the repository's HTTPS remote. Xcode's `IDESourceControlAccountManager` matches the username in the URL first, ensuring that project always pushes and fetches using the pinned account.
+- **One-Paste Onboarding:** `gitswitch xcode add <nickname>` extracts the token from `gh auth token` and puts it on your clipboard so adding an account in Xcode Settings is simply: `+` → `GitHub` → Account name → ⌘V.
+
+*(Note: Xcode reads its accounts on application launch, so restart Xcode after syncing accounts).*
+
+---
+
+## Editor & IDE extensions
+
+gitswitch provides lightweight status bar widgets and identity pickers for modern editors:
+
+- **VS Code Extension** (`extensions/vscode`):
+  - Displays current profile in the status bar (`●` when repo is pinned, `[session]` when overridden).
+  - Status bar tooltip reports pre-commit guard status.
+  - Commands: `Switch Profile`, `Pin Profile to This Repo`, `Unpin This Repo`, `Toggle Pre-commit Guard`.
+- **JetBrains Plugin** (`extensions/jetbrains`):
+  - Status bar widget for IntelliJ IDEA, PyCharm, WebStorm, Android Studio, etc.
+  - Tools menu actions: `Switch Profile`, `Pin Profile to This Repo`, `Unpin This Repo`, `Toggle Pre-commit Guard`.
+
+---
+
 ## Fixing already-made commits — `gitswitch reauthor`
 
 When commits were authored under the wrong profile (before the user switched, or before a profile existed), rewrite them in one step instead of scripting `git rebase`/`git commit --amend` yourself:
@@ -114,7 +178,7 @@ Requires a clean working tree (it rebases). If a merge conflict interrupts the r
 
 ## Identity awareness — shell integration
 
-`gitswitch shell` sets up three things at once:
+`gitswitch shell` sets up shell integration, HTTPS routing, and guard hooks:
 
 ```bash
 gitswitch shell
@@ -123,6 +187,7 @@ gitswitch shell
 - **Prompt segment** — shows current git identity in your shell prompt
 - **Identity nudge** — when you `cd` into a repo, suggests the identity you usually use there
 - **Tab completion** — completes commands and profile nicknames
+- **Pre-commit guard** — optional prompt to turn on wrong-author commit enforcement
 
 Detects your prompt framework automatically (Starship, oh-my-zsh, Powerlevel10k, or raw zsh/bash/fish) and installs the right way for each. Idempotent — safe to run multiple times.
 
@@ -147,8 +212,8 @@ A pin is a **local** identity: gitswitch writes `user.name`, `user.email`,
 `user.signingkey`/`gpg.format`, and `core.sshCommand` to the repo's own
 `.git/config`, so commits here are correct no matter which profile is active
 globally. It also switches the gh CLI to the matching account, and the HTTPS
-credential helper serves this repo's pushes from it. Nothing needs to be
-switched when entering the repo, so the nudge hook stays quiet.
+credential helper serves this repo's pushes from it. If Xcode auto-sync is enabled,
+it binds the repo's remotes for Xcode as well.
 
 Prefer this over `gitswitch switch` whenever the user's problem is "this one repo
 keeps committing as the wrong person" — it fixes that repo permanently without
@@ -169,6 +234,8 @@ personal — Alice <alice@personal.dev>                      # global identity
 
 Check this in Step 1 before switching: if the repo is already pinned, a global
 `switch` will not change what commits here use, and switching is the wrong fix.
+
+---
 
 ## When HTTPS pushes use the wrong account
 
@@ -196,69 +263,6 @@ git -c credential.helper= -c credential.helper='!gitswitch credential' push
 
 ---
 
-## How the auto-recommender works
-
-`gitswitch` tracks which identity is active each time you enter a repo (via the shell cd hook). When the top identity has **≥3 entries** and **≥60% share** and differs from your current identity, it nudges:
-
-```
-gitswitch: this repo usually uses work <alice@company.com> — switch? [y/N]
-```
-
-One keypress. Defaults to N if you ignore it.
-
-To manually record the current identity for the current repo:
-```bash
-gitswitch record
-```
-
-To check what would be recommended right now:
-```bash
-gitswitch recommend     # exits 0 + prints nickname/name/email if nudge warranted
-                        # exits 1 silently if already on the right identity or no data
-```
-
----
-
-## Common scenarios
-
-### "My commits on GitHub show my personal email at my work repo"
-```bash
-gitswitch list           # find the work profile name
-gitswitch work           # switch to it
-```
-Then for future commits they'll be fine. If they need to fix the last commit:
-```bash
-git commit --amend --reset-author --no-edit
-```
-
-### "I have two GitHub accounts and keep using the wrong one"
-```bash
-gitswitch add personal "Name" personal@email.com --ssh-key ~/.ssh/id_personal --gh-user my-handle
-gitswitch add work     "Name" work@email.com     --ssh-key ~/.ssh/id_work     --gh-user my-corp-handle
-# then before each session:
-gitswitch personal   # or: gitswitch work
-```
-
-### "I want gitswitch to always remind me to use the right account in a repo"
-```bash
-gitswitch shell        # sets up the shell nudge hook
-gitswitch pin work       # better: pin it so the repo is just always correct
-```
-
-### "Is this tool the same as `gh auth switch`?"
-No — they solve different problems:
-- `gh auth switch` changes which account the **`gh` CLI** (API tokens) uses
-- `gitswitch` changes your **commit identity** (`user.name` / `user.email`) and SSH key
-
-You often need both. `gitswitch` calls `gh auth switch` automatically if you stored a `--gh-user` in the profile.
-
-### "I want to see my profiles in a UI"
-```bash
-gitswitch     # opens the interactive TUI, use ↑↓ to navigate, Enter to switch
-```
-
----
-
 ## All commands
 
 | Command | What it does |
@@ -272,14 +276,19 @@ gitswitch     # opens the interactive TUI, use ↑↓ to navigate, Enter to swit
 | `gitswitch remove <name>` | Delete a profile |
 | `gitswitch pin [name]` | Pin an identity to this repo's local git config (no name = adopt existing) |
 | `gitswitch unpin` | Remove the repo's local identity, fall back to global |
+| `gitswitch guard [enable\|disable\|status\|check]` | Manage pre-commit identity guard hook |
+| `gitswitch xcode [status\|add\|sync\|bind\|unbind\|enable\|disable]` | Sync & bind identities with Xcode's source control accounts |
+| `gitswitch reauthor <base> --to <name>` | Rewrite author identity on already-made commits |
 | `gitswitch record` | Log current identity for this repo (called by shell hooks) |
 | `gitswitch recommend` | Print recommended identity if threshold met |
+| `gitswitch doctor` | Verify git, gh, credential helper, and guard installation |
 | `gitswitch shell` | Set up shell prompt segment, nudge hook, and tab completion |
-| `gitswitch skills` | Install this skill for your AI agent (skills.sh first, offline fallback for Claude Code / .agents/skills) |
-| `gitswitch skills --scope project` | Install skill for this project only |
+| `gitswitch skills` | Install this skill for your AI agent (skills.sh first, offline fallback) |
 | `gitswitch init` | Re-import current `git config` as `default` |
 | `gitswitch version` | Show version, check for updates |
 | `gitswitch upgrade` | Upgrade to latest release |
 
-Profiles stored at `~/.config/gitswitch/profiles.json`.
+Profiles stored at `~/.config/gitswitch/config.yaml` (or migrated from `profiles.json`).
 Usage history stored at `~/.config/gitswitch/history.json`.
+Xcode auto-sync marker at `~/.config/gitswitch/xcode-sync`.
+Guard hook stored at `~/.config/gitswitch/hooks/pre-commit`.

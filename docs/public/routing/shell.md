@@ -6,13 +6,14 @@ description: Prompt segment, nudges on cd, tab completion, and the gs alias
 gitswitch shell
 ```
 
-One wizard, three steps, each explaining itself and each skippable:
+One wizard, four steps, each explaining itself and each skippable:
 
 | Step | |
 |---|---|
 | **Shell integration** | Prompt segment, identity nudge on `cd`, tab completion, and the `gs` alias — this page |
 | **HTTPS credential routing** | Right token per repo on `git push` — [HTTPS Push Routing](/docs/routing/https) |
 | **Session Isolation** | Right `gh` account per repo, and working pins — [Session Isolation](/docs/routing/session-isolation) |
+| **Pre-commit identity guard** | Blocks wrong-author commits before they enter git history — [Pins & Identity Awareness](/docs/routing/identity-awareness#pre-commit-guard) |
 
 Skip the questions:
 
@@ -20,6 +21,7 @@ Skip the questions:
 gitswitch shell --yes                # accept all defaults, for scripts and CI
 gitswitch shell --shell zsh          # target a specific shell (also skips the wizard)
 gitswitch shell --https=false        # everything except HTTPS routing
+gitswitch shell --guard=false        # everything except the pre-commit guard
 ```
 
 Then reload:
@@ -109,9 +111,9 @@ Commands and your own account nicknames:
 
 ```
 $ gitswitch <Tab>
-add  beta  claude  current  doctor  init  install  list  login  pacman  pin
-reauthor  record  recommend  remove  setup  stable  switch  uninstall  unpin
-upgrade  version
+add  beta  current  doctor  guard  init  list  login  pacman  pin
+reauthor  record  recommend  remove  shell  skills  stable  switch  uninstall
+unpin  upgrade  version  xcode
 
 $ gitswitch w<Tab>
 work
@@ -125,7 +127,7 @@ Needs zsh 5.0+, bash 4.0+, or fish 3.0+. The installed block sources it from `gi
 gitswitch uninstall
 ```
 
-Removes the marker block from your rc file (or the oh-my-zsh plugin), unregisters the HTTPS credential helper, and removes the `gh` wrapper — whichever of those were installed. Reload your shell to finish.
+Removes the marker block from your rc file (or the oh-my-zsh plugin), unregisters the HTTPS credential helper, removes the `gh` wrapper, and disables the pre-commit guard — whichever of those were installed. Reload your shell to finish.
 
 ## Troubleshooting
 
@@ -148,6 +150,6 @@ More in [Troubleshooting](/docs/troubleshooting).
 
 ## Next
 
-- **[Identity Awareness](/docs/routing/identity-awareness)** — pins, learning, nudges
+- **[Identity Awareness](/docs/routing/identity-awareness)** — pins, learning, nudges, and the pre-commit guard
 - **[HTTPS Push Routing](/docs/routing/https)** — the credential helper step
 - **[Session Isolation](/docs/routing/session-isolation)** — the `gh` wrapper step

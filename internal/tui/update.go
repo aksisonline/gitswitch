@@ -790,6 +790,11 @@ func (m *Model) startBackTransition() tea.Cmd {
 	return arcadeTickCmd()
 }
 
+// AfterSwitch, when set, runs after a successful global profile switch from the
+// TUI. The CLI wires it to the Xcode account sync so picker switches behave like
+// `gitswitch switch`. Best effort: it can't fail or block the switch.
+var AfterSwitch func(p storage.Profile)
+
 func (m Model) switchProfileCmd(p storage.Profile) tea.Cmd {
 	return func() tea.Msg {
 		cfg := git.New(true)
@@ -808,6 +813,9 @@ func (m Model) switchProfileCmd(p storage.Profile) tea.Cmd {
 		}
 		if err := m.store.SetActive(p.Nickname); err != nil {
 			return switchDoneMsg{err: err}
+		}
+		if AfterSwitch != nil {
+			AfterSwitch(p)
 		}
 		return switchDoneMsg{profile: &p, warnings: warnings}
 	}
