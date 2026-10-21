@@ -186,7 +186,7 @@ gitswitch guard check     # what the hook runs
 
 A commit is blocked when there is no `user.email`, the email matches no profile, the repo is pinned to a different profile, or (for unpinned repos) gitswitch has learned a different profile for it. With no profiles yet, everything is allowed.
 
-## `xcode`
+## `xcode` (early)
 
 Keeps Xcode's own GitHub accounts (**Xcode → Settings → Accounts**) in step with gitswitch. Xcode stores tokens in a keychain group only Apple's processes can write, so each account is still added to Xcode once — gitswitch makes that one paste and then manages which account Xcode *picks*. Commit authorship needs nothing: Xcode already reads git config.
 

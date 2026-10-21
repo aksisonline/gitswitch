@@ -97,7 +97,9 @@ A commit is refused when:
 - The repo is pinned to a different profile than the effective git identity
 - An unpinned repo has a learned recommendation (≥ 3 visits, ≥ 60% consistency) for a different profile
 
-## IDE & Xcode Integration
+## IDE & Xcode Integration (early)
+
+Both integrations are early: they work today, but expect rough edges and changes between releases.
 
 - **Xcode (macOS)**: `gitswitch xcode enable` keeps Xcode's default GitHub account and per-repo HTTPS remotes in sync automatically whenever you run `gitswitch switch` or `gitswitch pin`. Use `gitswitch xcode status` to see matched accounts or `gitswitch xcode add <nickname>` for one-paste token setup.
 - **VS Code & JetBrains**: Native status-bar extensions (in `extensions/vscode` and `extensions/jetbrains`) show the active profile, scope (`●` pinned / `◆` session), and pre-commit guard status right in the editor status bar, with one-click switching, pinning, and guard toggling.
