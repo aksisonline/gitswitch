@@ -71,7 +71,7 @@ Every state-reading command speaks JSON, so an agent never has to parse prose:
 gitswitch current --json        # who am I here, and why (scope: global | repo | session)
 gitswitch list --json           # all accounts
 gitswitch guard status --json   # is the pre-commit guard active, and would this repo pass?
-gitswitch xcode status --json   # macOS: Xcode GitHub accounts vs gitswitch profiles
+gitswitch xcode status --json   # macOS (early): Xcode GitHub accounts vs gitswitch profiles
 gitswitch doctor --json         # a one-shot manifest: version, profile count, git/gh state, is HTTPS routed, is isolation on
 ```
 
