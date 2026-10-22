@@ -7,6 +7,9 @@ Format: `[version] — date — summary`
 
 ## [Unreleased]
 
+### Bug Fixes
+- **Upgrading on Windows no longer fails when gitswitch is open elsewhere** — the installer now moves the old `gitswitch.exe`/`gs.exe` aside before writing the new one (Windows blocks overwriting a running program, but allows renaming it), and tells you to close other windows if it still can't.
+
 ## [v0.5.0] — 2026-10-21
 
 ### What's New
