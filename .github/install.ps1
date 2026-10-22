@@ -59,13 +59,29 @@ if (-not (Test-Path $INSTALL_DIR)) {
     New-Item -ItemType Directory -Path $INSTALL_DIR | Out-Null
 }
 
-$DEST = Join-Path $INSTALL_DIR "gitswitch.exe"
-Copy-Item -Force $TEMP_FILE $DEST
+$DEST    = Join-Path $INSTALL_DIR "gitswitch.exe"
+$GS_DEST = Join-Path $INSTALL_DIR "gs.exe"
+
+# Windows won't let you overwrite a running .exe, but it does let you rename one.
+# Move the old binary aside, copy the new one in, and sweep the leftovers next run.
+function Install-Binary($src, $dest) {
+    Remove-Item "$dest.old" -Force -ErrorAction SilentlyContinue
+    if (Test-Path $dest) {
+        try {
+            Rename-Item -Force $dest "$(Split-Path $dest -Leaf).old"
+        } catch {
+            Write-Error "Could not replace $dest. Close any running gitswitch/gs windows and retry."
+            exit 1
+        }
+    }
+    Copy-Item -Force $src $dest
+}
+
+Install-Binary $TEMP_FILE $DEST
 Remove-Item $TEMP_FILE -ErrorAction SilentlyContinue
 
 # ── gs alias ───────────────────────────────────────────────────────────────────
-$GS_DEST = Join-Path $INSTALL_DIR "gs.exe"
-Copy-Item -Force $DEST $GS_DEST
+Install-Binary $DEST $GS_DEST
 
 # ── PATH ───────────────────────────────────────────────────────────────────────
 $USER_PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User")
