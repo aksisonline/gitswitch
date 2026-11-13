@@ -244,3 +244,35 @@ jobs:
           body_path: /tmp/release-notes.md
           files: release/*
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Homebrew installs can only change channel through Homebrew, so every
+      # beta also publishes a `gitswitch-beta` formula to the tap (next to the
+      # stable `gitswitch` formula GoReleaser maintains). `gitswitch beta`
+      # swaps one for the other; `brew upgrade gitswitch-beta` keeps it current.
+      # Runs after the prerelease exists, so the formula never points at
+      # assets that aren't downloadable yet.
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: aksisonline/homebrew-tap
+          token: ${{ secrets.HOMEBREW_PAT }}
+          path: homebrew-tap
+
+      - name: Publish gitswitch-beta formula
+        run: |
+          NEW_TAG="${{ needs.version.outputs.new_tag }}"
+          mkdir -p homebrew-tap/Formula
+          bash .github/scripts/beta-formula.sh "$NEW_TAG" release/checksums.txt \
+            > homebrew-tap/Formula/gitswitch-beta.rb
+          ruby -c homebrew-tap/Formula/gitswitch-beta.rb
+
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/gitswitch-beta.rb
+          if git diff --cached --quiet; then
+            echo "Formula unchanged, nothing to publish."
+            exit 0
+          fi
+          git commit -m "gitswitch-beta ${NEW_TAG#v}"
+          git push

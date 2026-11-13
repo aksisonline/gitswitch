@@ -37,6 +37,16 @@ Go version: see `go.mod`. No other toolchain required.
   a status, grep the TUI views (`internal/tui/`) and CLI help text for stale
   references to it. This codebase has shipped backend features that the TUI
   kept describing as "coming soon" more than once — don't add another one.
+- **Look at the screens.** Every TUI screen is drawn on a canvas that must
+  fit the terminal (`internal/tui/layout.go`); `go test` fails if any screen
+  overflows at any supported size. To eyeball them — including the setup
+  wizard, which otherwise only shows on a fresh machine — write a text
+  contact sheet:
+  `GS_PREVIEW=/tmp/screens.txt go test ./internal/tui -run TestPreviewScreens`
+  (add `GS_PREVIEW_ARCADE=1` for arcade mode; `./internal/install` takes the
+  same variable for the `gitswitch shell` wizard).
+- **Never self-update a Homebrew install.** Anything that replaces the binary
+  must go through `ver.DetectInstall()` and run `brew` when Homebrew owns it.
 - **Tests.** Non-trivial logic (a branch, a parser, a merge/dedup routine)
   should leave at least one test behind. Trivial one-liners don't need one.
 - Run `go build ./...`, `go vet ./...`, and `go test ./...` before opening

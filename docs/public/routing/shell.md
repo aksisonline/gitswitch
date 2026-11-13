@@ -107,13 +107,13 @@ Installed with the shell integration. In the TUI's **Settings** tab you can rena
 
 ## Tab completion
 
-Commands and your own account nicknames:
+Commands, flags, and your own account nicknames (shown alongside the commands, and after `switch`, `pin` and `remove`):
 
 ```
 $ gitswitch <Tab>
-add  beta  current  doctor  guard  init  list  login  pacman  pin
-reauthor  record  recommend  remove  shell  skills  stable  switch  uninstall
-unpin  upgrade  version  xcode
+login  add  switch  list  current  remove  init  shell  doctor  pin  unpin
+guard  xcode  uninstall  version  upgrade  beta  stable  reauthor  skills
+pacman  help  completion  personal  work
 
 $ gitswitch w<Tab>
 work

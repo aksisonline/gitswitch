@@ -10,15 +10,39 @@ import (
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/shell"
 	"github.com/aksisonline/gitswitch/internal/storage"
+	ver "github.com/aksisonline/gitswitch/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
+
+// runCmd executes cmd and returns its message. Commands that start an
+// animation come back batched with the frame ticker; this unwraps the batch
+// and returns the first message that isn't a frame tick.
+func runCmd(cmd tea.Cmd) tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		return msg
+	}
+	for _, c := range batch {
+		if m := runCmd(c); m != nil {
+			if _, tick := m.(frameMsg); !tick {
+				return m
+			}
+		}
+	}
+	return nil
+}
 
 // TestProfileFormFieldTitlesMatchForm guards against the mouse map (in
 // update.go) drifting from the actual field titles (in form.go) — a rename
 // there would silently break click-to-focus without this.
 func TestProfileFormFieldTitlesMatchForm(t *testing.T) {
 	d := &profileFormData{}
-	form := newProfileForm(d, false, 60)
+	form := newProfileForm(d, false, 60, 0)
 	form.Init()
 	rendered := form.View()
 	for _, f := range profileFormFieldTitles {
@@ -84,7 +108,7 @@ func TestCredentialHelperToggle(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("enter on the credential helper item should return a command")
 	}
-	msg := cmd()
+	msg := runCmd(cmd)
 	got2, _ := got.Update(msg)
 	final := got2.(Model)
 	if !final.credentialHelperEnabled {
@@ -97,7 +121,7 @@ func TestCredentialHelperToggle(t *testing.T) {
 	// Toggle again: must remove it.
 	next, cmd = final.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got = next.(Model)
-	next2, _ := got.Update(cmd())
+	next2, _ := got.Update(runCmd(cmd))
 	final = next2.(Model)
 	if final.credentialHelperEnabled {
 		t.Error("credentialHelperEnabled = true after disabling")
@@ -129,7 +153,7 @@ func TestGuardToggle(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("enter on the guard item should return a command")
 	}
-	got2, _ := got.Update(cmd())
+	got2, _ := got.Update(runCmd(cmd))
 	final := got2.(Model)
 	if !final.guardEnabled {
 		t.Errorf("guardEnabled = false after enabling, statusMsg=%q", final.statusMsg)
@@ -141,7 +165,7 @@ func TestGuardToggle(t *testing.T) {
 	// Toggle again: must remove it.
 	next, cmd = final.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	got = next.(Model)
-	next2, _ := got.Update(cmd())
+	next2, _ := got.Update(runCmd(cmd))
 	final = next2.(Model)
 	if final.guardEnabled {
 		t.Error("guardEnabled = true after disabling")
@@ -417,5 +441,110 @@ func TestMergeIntoFoundRecordsEmailEvenWhenMergedViaEarlierTier(t *testing.T) {
 	}, nil)
 	if len(found) != 1 {
 		t.Fatalf("expected literal-email dedup to catch the merged-away candidate's email, got %d profiles", len(found))
+	}
+}
+
+// The version check lands a moment after launch. It may open the update
+// prompt only if the user hasn't touched anything yet — otherwise the screen
+// swaps under their hands and "enter to switch" becomes "enter to upgrade".
+func TestUpdatePromptNeverInterruptsTheUser(t *testing.T) {
+	base := Model{store: storage.NewAt(t.TempDir()), state: StateList, width: 80, height: 24, currentVersion: "v0.5.0"}
+	check := versionCheckMsg{latest: "v0.6.0"}
+
+	next, _ := base.Update(check)
+	if got := next.(Model); got.state != StateUpdatePrompt {
+		t.Errorf("untouched: state = %d, want the update prompt", got.state)
+	}
+
+	touched, _ := base.Update(tea.KeyMsg{Type: tea.KeyDown})
+	next, _ = touched.(Model).Update(check)
+	got := next.(Model)
+	if got.state != StateList {
+		t.Errorf("after a keypress the prompt must not open by itself (state = %d)", got.state)
+	}
+	if !got.updateAvailable {
+		t.Error("the update should still be flagged for the status line and the u key")
+	}
+	next, _ = got.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	if next.(Model).state != StateUpdatePrompt {
+		t.Error("u should open the update prompt on request")
+	}
+
+	// "Not now" is remembered for that release.
+	prompt, _ := base.Update(check)
+	skipped, _ := prompt.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if s := skipped.(Model); s.state != StateList || s.skippedUpdate != "v0.6.0" {
+		t.Fatalf("n should close the prompt and remember the release (state=%d skipped=%q)", s.state, s.skippedUpdate)
+	}
+	again := base
+	again.skippedUpdate = "v0.6.0"
+	next, _ = again.Update(check)
+	if next.(Model).state != StateList {
+		t.Error("a skipped release must not reopen the prompt on the next launch")
+	}
+}
+
+// The in-app upgrade must go through Homebrew when Homebrew owns the binary.
+func TestUpdatePromptNamesTheUpdateMechanism(t *testing.T) {
+	m := Model{store: storage.NewAt(t.TempDir()), state: StateUpdatePrompt, width: 80, height: 24,
+		currentVersion: "v0.5.0", latestVersion: "v0.6.0",
+		install: ver.Install{Method: ver.MethodBrew, Formula: ver.StableFormula}}
+	if view := ansi.Strip(m.View()); !strings.Contains(view, "brew upgrade gitswitch") {
+		t.Errorf("a Homebrew install should be told it updates with brew:\n%s", view)
+	}
+	m.install = ver.Install{}
+	if view := ansi.Strip(m.View()); strings.Contains(view, "brew") {
+		t.Errorf("a script install should not mention brew:\n%s", view)
+	}
+}
+
+// First-run setup, driven by keys: welcome → scan → (nothing found) → add
+// account → manual form. Skipping from the welcome screen must work from the
+// keyboard too — it used to be reachable only with the mouse.
+func TestSetupWizardKeyboardFlow(t *testing.T) {
+	// The scan reads git config, gh accounts and ~/.ssh — point all of them
+	// at an empty home so the test never touches (or depends on) this machine.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GH_CONFIG_DIR", filepath.Join(home, "gh"))
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(home, "gitconfig"))
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+	m := Model{store: storage.NewAt(t.TempDir()), state: StateWizardWelcome, onboarding: true}
+	key := func(m Model, k tea.KeyMsg) Model {
+		next, cmd := m.Update(k)
+		got := next.(Model)
+		if msg := runCmd(cmd); msg != nil {
+			if _, quit := msg.(tea.QuitMsg); !quit {
+				next, _ = got.Update(msg)
+				got = next.(Model)
+			}
+		}
+		return got
+	}
+	enter, down := tea.KeyMsg{Type: tea.KeyEnter}, tea.KeyMsg{Type: tea.KeyDown}
+
+	if got := key(key(m, down), enter); got.state != StateList || got.onboarding {
+		t.Errorf("'Skip for now' should leave setup (state=%d onboarding=%v)", got.state, got.onboarding)
+	}
+	if got := key(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}); got.state != StateList {
+		t.Errorf("s should skip setup, state=%d", got.state)
+	}
+
+	// Start setup: nothing to find in an empty home, so the scan goes
+	// straight to adding an account.
+	got := key(m, enter)
+	if got.state != StateWizardAddMore {
+		t.Fatalf("after an empty scan the wizard is on state %d, want Add account", got.state)
+	}
+	got.wizardStep = 1
+	if got = key(got, enter); got.state != StateAdd || got.form == nil {
+		t.Errorf("'Add manually' should open the form (state=%d form=%v)", got.state, got.form != nil)
+	}
+	// Esc from the form returns to the add-account menu while setup is running.
+	if got = key(got, tea.KeyMsg{Type: tea.KeyEsc}); got.state != StateWizardAddMore {
+		t.Errorf("esc from the form during setup went to state %d, want Add account", got.state)
 	}
 }

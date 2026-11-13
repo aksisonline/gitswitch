@@ -10,11 +10,13 @@ gitswitch is a single Go binary. macOS and Linux, Intel and Apple Silicon/ARM.
 brew install aksisonline/tap/gitswitch
 ```
 
-Recommended — it handles `PATH`, updates, and uninstall cleanly.
+Recommended — it handles `PATH`, updates, and uninstall cleanly, and gitswitch respects it: every later update goes through `brew`, never around it.
 
 ```bash
 brew upgrade gitswitch   # later
 ```
+
+Want pre-release builds? The beta channel is a second formula in the same tap — see [Release Channels](/docs/cli/channels).
 
 ## curl
 
@@ -24,10 +26,12 @@ curl -fsSL https://get.gitswitch.dev | bash
 
 Downloads the right binary for your OS and architecture into `/usr/local/bin`. Upgrade later with `gitswitch upgrade`.
 
+Pick one install method and stay with it. If Homebrew already manages gitswitch, the script stops and tells you to use `brew upgrade` instead of installing a second copy that would shadow the first.
+
 ## Go
 
 ```bash
-go install github.com/aksisonline/gitswitch@latest
+go install github.com/aksisonline/gitswitch/cmd/gitswitch@latest
 ```
 
 Requires Go 1.21+.
@@ -43,13 +47,14 @@ make install
 ## Check it worked
 
 ```bash
-gitswitch version
+gitswitch --version
 ```
 
 ```
-gitswitch v0.3.0
-Already on latest version.
+gitswitch v0.5.0
 ```
+
+`gitswitch --help` lists every command; `gitswitch <command> --help` shows that command's flags and examples.
 
 ## What you need installed
 
@@ -89,10 +94,10 @@ Then head to the [Quick Start](/docs/get-started/quick-start).
 
 ```bash
 gitswitch version    # what am I on? is there anything newer?
-gitswitch upgrade    # get it
+gitswitch upgrade    # get it — through Homebrew if that's how you installed
 ```
 
-gitswitch also tells you inside the TUI when a new release lands, and shows a "What's New" screen after a feature release. Want the pre-release builds? See [Release Channels](/docs/cli/channels).
+gitswitch also tells you inside the TUI when a new release lands (press `u`), and shows a "What's New" screen after a feature release. Want the pre-release builds? See [Release Channels](/docs/cli/channels).
 
 ## Uninstall
 

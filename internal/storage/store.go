@@ -93,6 +93,10 @@ type Prefs struct {
 	// AutoPinDisabled turns off auto-pinning the active account to a repo once
 	// it's been used there AutoPinThreshold times. Zero value = enabled (default on).
 	AutoPinDisabled bool `json:"auto_pin_disabled"`
+	// SkippedUpdate is the release the user answered "not now" to. The update
+	// prompt doesn't reopen on its own for that version; the reminder in the
+	// status line and the `u` key still work.
+	SkippedUpdate string `json:"skipped_update,omitempty"`
 }
 
 func (s *Store) prefsPath() string {

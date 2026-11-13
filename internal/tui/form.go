@@ -60,9 +60,11 @@ func huhTheme() *huh.Theme {
 }
 
 // newProfileForm builds the add/edit form bound to d. arcade only tweaks copy.
-func newProfileForm(d *profileFormData, edit bool, width int) *huh.Form {
-	if width < 32 {
-		width = 32
+// height > 0 makes the form scroll inside that many rows instead of growing
+// past the bottom of a short terminal.
+func newProfileForm(d *profileFormData, edit bool, width, height int) *huh.Form {
+	if width < 20 {
+		width = 20
 	}
 
 	form := huh.NewForm(
@@ -110,8 +112,10 @@ func newProfileForm(d *profileFormData, edit bool, width int) *huh.Form {
 	).
 		WithTheme(huhTheme()).
 		WithWidth(width).
-		WithShowHelp(true).
+		WithShowHelp(false). // the panel footer already lists the keys
 		WithShowErrors(true)
-
+	if height > 0 {
+		form = form.WithHeight(height)
+	}
 	return form
 }

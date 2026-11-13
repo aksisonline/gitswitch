@@ -123,8 +123,10 @@ gitswitch add work "Jane Doe" jane@company.com --ssh-key ~/.ssh/id_work
 gitswitch switch work      # switch by name
 gitswitch remove work      # remove a profile
 gitswitch init             # re-import current git config
-gitswitch version          # show version and check for updates
-gitswitch upgrade          # upgrade to latest release
+gitswitch --version        # just the version (also -v)
+gitswitch version          # version, channel, and whether an update exists
+gitswitch upgrade          # update — via Homebrew if that's how you installed
+gitswitch --help           # every command; add --help to any command for its flags
 ```
 
 See **[docs/cli.md](docs/cli.md)** for full flag reference and examples.

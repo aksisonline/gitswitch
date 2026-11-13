@@ -6,7 +6,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const minPanelWidth = 60
+// minPanelWidth is the panel's preferred minimum content width — used when the
+// terminal has room for it. Narrower terminals get a narrower panel.
+const minPanelWidth = 72
 const maxPanelWidth = 120
 
 // ThemeColors holds the four mutable colors per palette.
