@@ -54,6 +54,8 @@ So: great CHANGELOG = great splash = users understand what changed without Googl
 
 ## UI Consistency Check
 
+Every TUI screen must fit the terminal at every supported size: draw on the `canvas` in `internal/tui/layout.go` (never a raw `lipgloss.Place`), reserve a row for anything that appears and disappears (status, results), and run `go test ./internal/tui` — it renders every screen from 200×60 down to 44×12 and fails on overflow or layout shift. `GS_PREVIEW=<file> go test ./internal/tui -run TestPreviewScreens` writes a contact sheet to look at.
+
 Before every push that ships a feature or behavior change, check whether the TUI (`internal/tui/`), CLI help text, `gitswitch doctor`, and docs (`docs/public/`) all agree with what actually shipped. This codebase has repeatedly shipped a backend feature (HTTPS credential helper, repo pins) while the Utilities/Settings tab kept showing it as a disabled "coming soon" stub — don't let that recur. Concretely: if a command's behavior, a config field, or a status changes, grep the TUI views and CLI flag descriptions for stale references before committing.
 
 ## CI/CD
@@ -69,4 +71,6 @@ Push to `main` → CI checks for code changes in `internal/` or `cmd/` → compu
 
 **`canary` is kept in sync automatically.** After a main release, CI merges `main` back into `canary` and pushes. If that merge conflicts, the job fails loudly instead of skipping — resolve it with a manual PR from `main` into `canary`.
 
-Required secrets: `HOMEBREW_PAT`, `WEBSITE_DISPATCH_PAT` (GITHUB_TOKEN is auto-provided).
+**Homebrew owns Homebrew installs.** The tap carries two formulae that conflict with each other: `gitswitch` (stable, written by GoReleaser on a main release) and `gitswitch-beta` (written by `.github/scripts/beta-formula.sh` at the end of every canary release). gitswitch must never replace a binary Homebrew installed — `upgrade`, the TUI update prompt, and `beta`/`stable` all route through `internal/version/install.go` and run `brew` when `DetectInstall()` says Homebrew is in charge. Self-updating a formula-installed binary breaks `brew upgrade` and is disallowed in Homebrew core, so don't add a code path that bypasses it.
+
+Required secrets: `HOMEBREW_PAT` (used by both release.yml and canary.yml to push formulae to the tap), `WEBSITE_DISPATCH_PAT` (GITHUB_TOKEN is auto-provided).

@@ -91,8 +91,8 @@ func checkGuard(st *storage.Store, dir string) error {
 }
 
 var guardCmd = &cobra.Command{
-	Use:   "guard [enable|disable|check|status]",
-	Short: "Enforce commit identity with a pre-commit guard hook",
+	Use:   "guard",
+	Short: "Block commits made with the wrong identity",
 	Long: `Blocks wrong-author commits before they enter git history.
 
 When enabled, gitswitch installs a global pre-commit hook (in

@@ -1,36 +1,49 @@
 package tui
 
-import (
-	"github.com/charmbracelet/lipgloss"
-)
+import "github.com/charmbracelet/lipgloss"
 
-// Utility items (indices match utilityFocus and the 4-row mouse grid):
+// Utility items (indices match utilityFocus):
 //   0 = Shell Integration       (toggleable)
 //   1 = Session Isolation       (toggleable)
 //   2 = HTTPS Credential Helper (toggleable)
 //   3 = Auto-pin Repeat Repos   (toggleable)
 //   4 = Pre-commit Guard        (toggleable)
 
-func (m Model) viewUtilitiesTab(pw int) string {
-	var top string
-	if m.arcadeMode {
-		top = m.viewScoreLine(pw) + "\n"
+func (m Model) drawUtilities(c *canvas) {
+	m.header(c, "", m.versionTag())
+	if m.headGap() {
+		c.blank()
 	}
+	m.drawTabs(c)
 
-	header := m.viewHeader("") + m.viewTabHeader()
-	iw := itemInnerW(pw)
+	items := make([]itemView, len(utilItemSpecs))
+	for i, spec := range utilItemSpecs {
+		title, desc := spec.title, spec.desc
+		if m.arcadeMode {
+			title, desc = spec.arcadeTitle, spec.arcadeDesc
+		}
+		toggle := renderToggle(spec.enabled(m))
+		if m.busyItem == i+1 {
+			toggle = m.renderToggleBusy()
+		}
+		items[i] = itemView{
+			title:  title,
+			right:  toggle,
+			detail: lipgloss.NewStyle().Foreground(colorDim).Render(desc),
+		}
+	}
+	m.drawItems(c, m.utilityFocus, items)
 
-	// Build each item box
-	items := m.utilItem(pw, iw, 0) + m.utilItem(pw, iw, 1) + m.utilItem(pw, iw, 2) + m.utilItem(pw, iw, 3) + m.utilItem(pw, iw, 4)
-
-	sep := "\n\n"
-	footer := sep + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
+	if c.d != dTight {
+		c.blank()
+	}
+	c.add(m.statusLine())
+	c.footer(m, [][2]string{
+		{"↑/↓", "move"},
 		{"enter", "toggle"},
-		{"1/2/3", "tabs"},
+		{"tab", "next tab"},
 		{"q", "quit"},
 	})
-
-	return top + stylePanelBorder(pw).Render(header+items+footer)
 }
 
 // utilItemSpec describes one utility toggle's copy (normal and arcade-mode)
@@ -72,22 +85,4 @@ var utilItemSpecs = [5]utilItemSpec{
 		arcadeDesc: "Blocks wrong-account commits before they hit git log.",
 		enabled:    func(m Model) bool { return m.guardEnabled },
 	},
-}
-
-func (m Model) utilItem(pw, iw, idx int) string {
-	if idx < 0 || idx >= len(utilItemSpecs) {
-		return ""
-	}
-	spec := utilItemSpecs[idx]
-	focused := m.utilityFocus == idx
-
-	title, desc := spec.title, spec.desc
-	if m.arcadeMode {
-		title, desc = spec.arcadeTitle, spec.arcadeDesc
-	}
-	toggle := renderToggle(spec.enabled(m))
-	line1 := titleWithRight(styleCurrentVal.Render(title), toggle, iw)
-	line2 := lipgloss.NewStyle().Foreground(colorDim).Render(truncate(desc, iw))
-	line2 = padTo(line2, iw)
-	return renderItemBox(pw, focused, false, line1, line2)
 }

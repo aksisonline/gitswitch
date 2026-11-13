@@ -7,8 +7,39 @@ Format: `[version] — date — summary`
 
 ## [Unreleased]
 
+### What's New
+- **The app now fits any terminal window** — every screen tightens to fit a small window instead of running off the edge or wrapping (works down to 44 columns × 12 rows; anything smaller shows a short notice).
+- **A clearer first-run setup** — setup shows which step you're on, checks for git and the GitHub CLI up front, ticks off what it scans as it goes, and finishes with a "try next" screen.
+- **Updates go through Homebrew when Homebrew installed gitswitch** — `gitswitch upgrade` and the in-app update prompt now run `brew upgrade` for you rather than downloading a second copy beside it (installs made with the install script still update themselves).
+- **Beta builds on Homebrew** — `gitswitch beta` and `gitswitch stable` now swap between two formulae in the same tap, so Homebrew keeps handling updates on either channel (`aksisonline/tap/gitswitch` and `aksisonline/tap/gitswitch-beta`).
+- **`gitswitch --version`** — prints the installed version instantly and offline (`-v` and `--v` work too).
+- **`gitswitch version` tells you more** — it now shows your channel and how gitswitch is updated, and `--json` prints the same for scripts.
+- **Help that's easier to read** — `gitswitch --help` lists commands in the order you need them with examples, and every command's `--help` shows its own flags and examples.
+- **Flags mean the same thing everywhere** — `--json`, `--yes`, `--dry-run` and `--quiet` behave identically on every command that has them (`upgrade`, `beta` and `stable` gained `--dry-run` to preview exactly what they would run).
+- **Friendlier mistakes** — a wrong argument now says what was expected and points to that command's help, and a mistyped command or nickname gets a "did you mean…?" (usage errors exit with status 2).
+- **Short command names** — `ls`, `rm`, `use`, `whoami` and `update` work as shortcuts for `list`, `remove`, `switch`, `current` and `upgrade`.
+- **Tab completion knows your accounts** — pressing Tab completes your nicknames and the allowed values of flags like `--shell`.
+- **You can see it working** — a spinner shows while a switch, pin or toggle is applied, the tab marker slides between tabs, and the account you switched to glows for a moment (set `GITSWITCH_REDUCE_MOTION=1` to turn the decoration off).
+- **`gitswitch doctor` spots duplicate installs** — it warns when two copies of gitswitch are on your PATH, the usual reason an upgrade seems to do nothing.
+
 ### Bug Fixes
+- **The screen no longer jumps around** — status messages, toggles, the update notice and changing tabs used to resize or move the whole panel; everything now stays put.
+- **The update prompt no longer appears under your keystroke** — it only opens by itself before you've pressed anything, and "not now" is remembered for that release (press `u` when you're ready).
+- **Utilities and Settings now show what happened** — result messages such as "pre-commit guard enabled" were being set but never displayed on those tabs.
+- **`gitswitch shell` setup fits on a standard terminal** — every step was taller than 24 rows and lost its title off the top; steps you've already set up are now skipped and the step counter is correct.
+- **Setup can be skipped from the keyboard** — "Skip for now" used to be reachable only with the mouse, and the wizard's button borders were misaligned.
+- **New users no longer see an empty "What's New" screen** — it could appear on the second launch with nothing in it.
+- **First launch opens setup straight away** — it used to wait on a blank screen while fetching release notes nobody needed yet.
+- **The add/edit form stays inside the window** — on short terminals it now scrolls with the field you're on instead of pushing the buttons off-screen.
+- **Clicks land on what you see** — mouse targets are now taken from what is actually drawn, so they stay right at every window size.
+- **`gitswitch beta` no longer moves you backwards** — right after a stable release, when no newer beta exists yet, it says so and leaves you on stable.
+- **The install script won't create a second copy** — if Homebrew already manages gitswitch, it stops and tells you to use `brew upgrade` instead.
 - **Upgrading on Windows no longer fails when gitswitch is open elsewhere** — the installer now moves the old `gitswitch.exe`/`gs.exe` aside before writing the new one (Windows blocks overwriting a running program, but allows renaming it), and tells you to close other windows if it still can't.
+
+### Under the Hood
+- **Beta releases now publish a Homebrew formula** — each canary build writes `gitswitch-beta` to the tap, which is what makes the Homebrew channel switch possible.
+- **Shell-hook plumbing is out of the way** — `record` and `recommend` still work but no longer clutter `--help` and tab completion.
+- **Every screen is tested at every size** — the test suite renders each screen from 200×60 down to 44×12 and fails on overflow or layout shift (`GS_PREVIEW=<file> go test ./internal/tui -run TestPreviewScreens` writes a contact sheet to look at).
 
 ## [v0.5.0] — 2026-10-21
 

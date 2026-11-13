@@ -1,6 +1,12 @@
 ### Install this beta
 
-**macOS / Linux**
+**Homebrew**
+```bash
+brew install aksisonline/tap/gitswitch-beta
+```
+Already have the stable formula? Run `gitswitch beta` — it swaps the two for you.
+
+**macOS / Linux — install script**
 ```bash
 curl -fsSL https://get.gitswitch.dev | bash -s -- __TAG__
 ```

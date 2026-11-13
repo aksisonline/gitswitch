@@ -6,64 +6,160 @@ import (
 
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/storage"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
-// TestNoLineOverflowsPanel renders every screen at several terminal sizes and
-// asserts no rendered line is wider than the panel's outer width. A wider line
-// wraps in the terminal, which breaks both the layout and the mouse hit grid.
-func TestNoLineOverflowsPanel(t *testing.T) {
-	profiles := []storage.Profile{
-		{Nickname: "personal", UserName: "Abhiram Kanna", Email: "a-very-long-address@example-domain-name.com", GHUser: "aksisonline", SSHKey: "~/.ssh/id_p"},
-		{Nickname: "work-account-long-nickname", UserName: "Work", Email: "work@corp.example"},
-	}
+// testProfiles is a deliberately awkward set: a long email, a long nickname.
+var testProfiles = []storage.Profile{
+	{Nickname: "personal", UserName: "Abhiram Kanna", Email: "a-very-long-address@example-domain-name.com", GHUser: "aksisonline", SSHKey: "~/.ssh/id_p"},
+	{Nickname: "work-account-long-nickname", UserName: "Work", Email: "work@corp.example"},
+}
 
-	states := []State{
-		StateList, StateTips, StateDeleteConfirm, StateUpdatePrompt,
-		StateWhatsNew, StateWizardWelcome, StateWizardDetect, StateWizardImport,
-		StateWizardAddMore, StateWizardDone, StateShellConfirm,
-		StateIntro, StateSelectFlash, StateTransition, StateExitAnim,
-		StateAdd, StateEdit,
-	}
+var allStates = []State{
+	StateList, StateTips, StateDeleteConfirm, StateUpdatePrompt,
+	StateWhatsNew, StateWizardWelcome, StateWizardDetect, StateWizardImport,
+	StateWizardAddMore, StateWizardDone, StateShellConfirm,
+	StateIntro, StateSelectFlash, StateTransition, StateExitAnim,
+	StateAdd, StateEdit,
+}
 
-	// Widest case: inside a repo pinned to a profile, so the extra "pinned" tag on
-	// the Current line and the extra `p` footer key are both in play.
+// screenModel builds a model in the widest realistic configuration: inside a
+// repo pinned to a profile (extra tag on the Current line, extra footer key),
+// an update pending, a status message showing.
+func screenModel(t *testing.T, st State, tab, w, h int, arcade bool) Model {
+	t.Helper()
+	m := Model{
+		store:            storage.NewAt(t.TempDir()),
+		profiles:         testProfiles,
+		active:           &testProfiles[0],
+		state:            st,
+		width:            w,
+		height:           h,
+		arcadeMode:       arcade,
+		tabIndex:         tab,
+		latestVersion:    "v9.9.9",
+		updateAvailable:  true,
+		releaseNotes:     "## What's new\n- something quite long that should be truncated to fit the panel width without wrapping",
+		whatsNewBody:     "## What's new\n- something quite long that should be wrapped to fit the panel width without overflowing",
+		currentVersion:   "v0.5.0-beta.3",
+		detectedProfiles: testProfiles,
+		importSelected:   []bool{true, false},
+		shellAlias:       "gs",
+		repoKey:          "git@github.com:acme/widget.git",
+		scope:            git.ScopeRepo,
+		scopeProfile:     &testProfiles[1],
+		onboarding:       st >= StateWizardWelcome && st <= StateWizardDone,
+		aliasInput:       textinput.New(),
+		formFields:       [6]string{"personal", "Abhiram Kanna", "a@example.com", "", "", "aksisonline"},
+	}
+	if st == StateAdd || st == StateEdit {
+		m.openProfileForm(st == StateEdit, m.formFields)
+	}
+	return m
+}
+
+// TestEveryScreenFitsTheTerminal renders every screen, on every tab, in both
+// modes, from a roomy window down to the smallest supported one, and asserts
+// the output never exceeds the terminal in either direction. A line wider than
+// the window wraps and a body taller than it scrolls the top off-screen —
+// both break the layout and the mouse grid.
+func TestEveryScreenFitsTheTerminal(t *testing.T) {
+	sizes := [][2]int{
+		{minTermW, minTermH}, {50, 16}, {60, 20}, {66, 24}, {80, 24}, {90, 12}, {100, 30}, {120, 40}, {200, 60},
+	}
 	for _, arcade := range []bool{false, true} {
-		for _, size := range [][2]int{{66, 24}, {80, 24}, {90, 12}, {120, 40}} {
-			for _, st := range states {
+		for _, size := range sizes {
+			for _, st := range allStates {
 				for tab := 0; tab < 3; tab++ {
-					m := Model{
-						store:            storage.NewAt(t.TempDir()),
-						profiles:         profiles,
-						active:           &profiles[0],
-						state:            st,
-						width:            size[0],
-						height:           size[1],
-						arcadeMode:       arcade,
-						tabIndex:         tab,
-						latestVersion:    "v9.9.9",
-						updateAvailable:  true,
-						releaseNotes:     "## What's new\n- something quite long that should be truncated to fit the panel width without wrapping",
-						whatsNewBody:     "## What's new\n- something quite long that should be wrapped to fit the panel width without overflowing",
-						currentVersion:   "v0.5.0-beta.3",
-						detectedProfiles: profiles,
-						importSelected:   []bool{true, false},
-						shellAlias:       "gs",
-						repoKey:          "git@github.com:acme/widget.git",
-						scope:            git.ScopeRepo,
-						scopeProfile:     &profiles[1],
+					m := screenModel(t, st, tab, size[0], size[1], arcade)
+					m.statusMsg = "Session Isolation enabled — run: source /Users/someone/with/a/long/home/.zshrc"
+					view := m.View()
+					lines := strings.Split(view, "\n")
+					if len(lines) > size[1] {
+						t.Errorf("arcade=%v size=%v state=%d tab=%d: %d rows > terminal height %d",
+							arcade, size, st, tab, len(lines), size[1])
 					}
-					applyTheme(normalThemes[0], arcade)
-					pw := m.panelWidth()
-					body := m.bodyView(pw)
-					for i, line := range strings.Split(body, "\n") {
-						if w := lipgloss.Width(line); w > pw+2 {
-							t.Errorf("arcade=%v size=%v state=%d tab=%d line %d: width %d > panel %d\n%q",
-								arcade, size, st, tab, i, w, pw+2, line)
+					for i, line := range lines {
+						if w := lipgloss.Width(line); w > size[0] {
+							t.Errorf("arcade=%v size=%v state=%d tab=%d line %d: width %d > terminal width %d\n%q",
+								arcade, size, st, tab, i, w, size[0], ansi.Strip(line))
 						}
 					}
+				}
+			}
+		}
+	}
+}
+
+// TestTooSmallWindowShowsNotice: below the minimum size the panel is replaced
+// by a short notice rather than drawn broken.
+func TestTooSmallWindowShowsNotice(t *testing.T) {
+	for _, size := range [][2]int{{minTermW - 1, 30}, {100, minTermH - 1}, {20, 5}} {
+		m := screenModel(t, StateList, 0, size[0], size[1], false)
+		view := ansi.Strip(m.View())
+		if !strings.Contains(view, "too small") {
+			t.Errorf("size=%v: expected the too-small notice, got:\n%s", size, view)
+		}
+		for _, line := range strings.Split(view, "\n") {
+			if lipgloss.Width(line) > size[0] {
+				t.Errorf("size=%v: notice line wider than the window: %q", size, line)
+			}
+		}
+	}
+}
+
+// TestLayoutDoesNotShift pins the things that used to move the panel around:
+// a status message appearing, a toggle flipping, the update notice arriving,
+// and changing tab must all leave the panel's size and position unchanged.
+func TestLayoutDoesNotShift(t *testing.T) {
+	for _, size := range [][2]int{{80, 24}, {100, 40}, {60, 18}} {
+		base := screenModel(t, StateList, 0, size[0], size[1], false)
+		base.updateAvailable = false
+
+		// The tab strip must sit on the same terminal row on every tab.
+		tabRow := func(m Model) int {
+			for i, l := range strings.Split(ansi.Strip(m.View()), "\n") {
+				if strings.Contains(l, "Accounts") && strings.Contains(l, "Settings") {
+					return i
+				}
+			}
+			return -1
+		}
+		want := tabRow(base)
+		for tab := 1; tab < 3; tab++ {
+			m := base
+			m.tabIndex = tab
+			if got := tabRow(m); got != want {
+				t.Errorf("size=%v: tab strip on row %d for tab %d, row %d for tab 0", size, got, tab, want)
+			}
+		}
+
+		for tab := 0; tab < 3; tab++ {
+			m := base
+			m.tabIndex = tab
+			quiet := m.screen()
+
+			variants := map[string]func(*Model){
+				"status message":  func(m *Model) { m.statusMsg = strings.Repeat("a long status message ", 8) },
+				"error message":   func(m *Model) { m.statusMsg, m.statusIsErr = "something failed", true },
+				"busy spinner":    func(m *Model) { m.busy = "switching to work…" },
+				"update notice":   func(m *Model) { m.updateAvailable = true },
+				"toggles flipped": func(m *Model) { m.shellEnabled, m.guardEnabled, m.ghWrapperEnabled = true, true, true },
+				"toggle applying": func(m *Model) { m.busyItem = 2 },
+				"theme changed":   func(m *Model) { m.colorTheme = 7 },
+				"alias disabled":  func(m *Model) { m.shellAliasDisabled = true },
+				"row glowing":     func(m *Model) { m.flashNick, m.flashLeft = "personal", 5 },
+			}
+			for name, change := range variants {
+				v := m
+				change(&v)
+				got := v.screen()
+				if got.height() != quiet.height() || got.width() != quiet.width() {
+					t.Errorf("size=%v tab=%d %s: panel %dx%d, was %dx%d", size, tab, name,
+						got.width(), got.height(), quiet.width(), quiet.height())
 				}
 			}
 		}
@@ -104,16 +200,15 @@ func TestWhatsNewFitsScreenAndScrolls(t *testing.T) {
 
 	for _, termH := range []int{0, 18, 24, 30, 40} {
 		m := Model{
-			store:                        storage.NewAt(t.TempDir()),
-			state:                        StateWhatsNew,
-			width:                        80,
-			height:                       termH,
+			store:          storage.NewAt(t.TempDir()),
+			state:          StateWhatsNew,
+			width:          80,
+			height:         termH,
 			currentVersion: "v0.5.0-beta.3",
-			whatsNewBody:                 canaryBody,
+			whatsNewBody:   canaryBody,
 		}
 		applyTheme(normalThemes[0], false)
-		pw := m.panelWidth()
-		rendered := m.bodyView(pw)
+		rendered := m.bodyView()
 		lines := strings.Split(rendered, "\n")
 
 		if termH >= 18 && len(lines) > termH {
@@ -138,64 +233,79 @@ func TestWhatsNewFitsScreenAndScrolls(t *testing.T) {
 		if mScrolled.whatsNewScroll != maxS {
 			t.Errorf("termH=%d: scroll=%d, want clamped maxScroll=%d", termH, mScrolled.whatsNewScroll, maxS)
 		}
-		renderedBottom := mScrolled.bodyView(pw)
+		renderedBottom := mScrolled.bodyView()
 		if !strings.Contains(ansi.Strip(renderedBottom), "What's New in v0.5.0-beta.3") {
 			t.Errorf("termH=%d: top header scrolled off screen after scrolling down", termH)
 		}
 	}
 }
 
-// TestMouseGridMatchesRender pins the mouse handler's row math to the actual
-// rendered layout — the exact drift that broke clicks on the Utilities and
-// Settings tabs.
-func TestMouseGridMatchesRender(t *testing.T) {
-	profiles := []storage.Profile{
-		{Nickname: "personal", UserName: "A", Email: "a@example.com"},
-		{Nickname: "work-account-long-nickname", UserName: "W", Email: "w@example.com"},
+// click sends a left press at terminal cell (x, y).
+func click(m Model, x, y int) Model {
+	next, _ := m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	return next.(Model)
+}
+
+// rowOf returns the terminal column and row where text last appears (the
+// last, because a profile's name also shows on the Current line above the list).
+func rowOf(t *testing.T, m Model, text string) (x, y int) {
+	t.Helper()
+	x, y = -1, -1
+	for i, l := range strings.Split(ansi.Strip(m.View()), "\n") {
+		if j := strings.Index(l, text); j >= 0 {
+			x, y = lipgloss.Width(l[:j]), i
+		}
 	}
+	if y < 0 {
+		t.Fatalf("%q not on screen:\n%s", text, ansi.Strip(m.View()))
+	}
+	return x, y
+}
+
+// TestMouseHitsWhatIsRendered clicks on what is actually drawn — at roomy,
+// compact and tight densities, in both modes — and checks the right thing
+// reacts. This is the drift that used to break clicks on the Utilities and
+// Settings tabs whenever the layout changed.
+func TestMouseHitsWhatIsRendered(t *testing.T) {
 	for _, arcade := range []bool{false, true} {
-		for _, height := range []int{40, 13} { // roomy and compact
-			m := Model{
-				store:      storage.NewAt(t.TempDir()),
-				profiles:   profiles,
-				active:     &profiles[0],
-				state:      StateList,
-				width:      100,
-				height:     height,
-				arcadeMode: arcade,
-				shellAlias: "gs",
-			}
-			applyTheme(normalThemes[0], arcade)
-			off := 0
-			if arcade {
-				off = 1
-			}
+		for _, size := range [][2]int{{100, 40}, {80, 24}, {60, 14}} {
+			m := screenModel(t, StateList, 0, size[0], size[1], arcade)
+			m.updateAvailable = false
 
-			// Accounts tab: second profile row must sit at profileRowStart+1.
-			lines := strings.Split(m.bodyView(m.panelWidth()), "\n")
-			found := -1
-			for i, l := range lines {
-				if strings.Contains(ansi.Strip(l), "work-account-long-nic") {
-					found = i
-					break
+			// Tabs: clicking a label selects that tab.
+			for i, name := range m.tabNames() {
+				x, y := rowOf(t, m, name)
+				if got := click(m, x+1, y); got.tabIndex != i {
+					t.Errorf("arcade=%v size=%v: clicking tab %q selected tab %d", arcade, size, name, got.tabIndex)
 				}
 			}
-			if want := m.profileRowStart(off) + 1; found != want {
-				t.Errorf("arcade=%v height=%d: profile row rendered at %d, mouse math expects %d", arcade, height, found, want)
+
+			// Accounts: hovering the second profile moves the cursor to it.
+			x, y := rowOf(t, m, "work-acc")
+			next, _ := m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionMotion})
+			if got := next.(Model).cursor; got != 1 {
+				t.Errorf("arcade=%v size=%v: hovering profile 2 put the cursor on %d", arcade, size, got)
 			}
 
-			// Utilities tab: first item box top border must sit where itemBoxAt starts.
+			// Utilities: clicking each item focuses that item.
 			m.tabIndex = 1
-			lines = strings.Split(m.bodyView(m.panelWidth()), "\n")
-			found = -1
-			for i, l := range lines {
-				if strings.Contains(l, "┌") {
-					found = i
-					break
+			for i, spec := range utilItemSpecs {
+				title := spec.title
+				if arcade {
+					title = spec.arcadeTitle
+				}
+				x, y := rowOf(t, m, title)
+				next, _ := m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionMotion})
+				if got := next.(Model).utilityFocus; got != i {
+					t.Errorf("arcade=%v size=%v: hovering utility %q focused item %d", arcade, size, title, got)
 				}
 			}
-			if want := 4 + off; found != want {
-				t.Errorf("arcade=%v height=%d: first item box at %d, mouse math expects %d", arcade, height, found, want)
+
+			// Settings: the rename chip opens the alias editor.
+			m.tabIndex = 2
+			x, y = rowOf(t, m, chipRename)
+			if got := click(m, x+2, y); !got.aliasEditing || got.settingsFocus != 2 {
+				t.Errorf("arcade=%v size=%v: clicking %s did not start alias editing", arcade, size, chipRename)
 			}
 		}
 	}

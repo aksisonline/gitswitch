@@ -13,12 +13,12 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/aksisonline/gitswitch/internal/git"
 	"github.com/aksisonline/gitswitch/internal/shell"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ── palette — mirrors main TUI normal/default theme ──────────────────────────
@@ -30,7 +30,6 @@ var (
 	cDim       = lipgloss.Color("241") // muted   — secondary text
 	cWhite     = lipgloss.Color("255") // bright  — body text
 	cRed       = lipgloss.Color("196") // error / NO
-	cBgHover   = lipgloss.Color("237") // selected option background
 )
 
 // ── Options / Config ─────────────────────────────────────────────────────────
@@ -102,7 +101,14 @@ func PrintSummary(w io.Writer, shellResult string, shellDone, httpsDone, ghWrapp
 	dim := func(s string) string { return lipgloss.NewStyle().Foreground(cDim).Render(s) }
 
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, lipgloss.NewStyle().Bold(true).Foreground(cWhite).Render("  Setup complete"))
+	// Cancelling the wizard (or declining every step) lands here too — don't
+	// call that "complete".
+	title := "  Setup complete"
+	anyGuard := len(guardDone) > 0 && guardDone[0]
+	if !shellDone && !httpsDone && !ghWrapperDone && !anyGuard && httpsErr == nil {
+		title = "  Nothing was changed"
+	}
+	fmt.Fprintln(w, lipgloss.NewStyle().Bold(true).Foreground(cWhite).Render(title))
 	fmt.Fprintln(w, dim("  ────────────────────────────────────────────────"))
 	fmt.Fprintln(w)
 
@@ -161,8 +167,6 @@ const (
 	stepDone
 )
 
-type tickMsg time.Time
-
 type model struct {
 	width, height int
 	step          wizStep
@@ -172,7 +176,6 @@ type model struct {
 	wantGHWrapper bool
 	wantGuard     bool
 	cancelled     bool
-	blink         bool
 
 	sh               shell.Shell
 	fw               shell.Framework
@@ -186,28 +189,7 @@ type model struct {
 }
 
 func newModel(sh shell.Shell, fw shell.Framework, httpsDefault, guardDefault bool) model {
-	alreadyShell := shell.IsInstalled(shell.RCFile(sh))
-	alreadyHTTPS := git.IsCredentialHelperInstalled()
-	alreadyGHWrapper := shell.IsGHWrapperInstalled(shell.RCFile(sh))
-	alreadyGuard := git.IsGuardHookInstalled()
-
-	start := stepShell
-	if alreadyShell {
-		start = stepHTTPS
-	}
-	if alreadyShell && alreadyHTTPS {
-		start = stepGHWrapper
-	}
-	if alreadyShell && alreadyHTTPS && alreadyGHWrapper {
-		start = stepGuard
-	}
-	if alreadyShell && alreadyHTTPS && alreadyGHWrapper && alreadyGuard {
-		start = stepDone
-	}
-
-	return model{
-		step:             start,
-		cursor:           0,
+	m := model{
 		wantShell:        true,
 		wantHTTPS:        httpsDefault,
 		wantGHWrapper:    true,
@@ -216,27 +198,62 @@ func newModel(sh shell.Shell, fw shell.Framework, httpsDefault, guardDefault boo
 		fw:               fw,
 		httpsDefault:     httpsDefault,
 		guardDefault:     guardDefault,
-		alreadyShell:     alreadyShell,
-		alreadyHTTPS:     alreadyHTTPS,
-		alreadyGHWrapper: alreadyGHWrapper,
-		alreadyGuard:     alreadyGuard,
+		alreadyShell:     shell.IsInstalled(shell.RCFile(sh)),
+		alreadyHTTPS:     git.IsCredentialHelperInstalled(),
+		alreadyGHWrapper: shell.IsGHWrapperInstalled(shell.RCFile(sh)),
+		alreadyGuard:     git.IsGuardHookInstalled(),
 		ghInstalled:      git.IsGHInstalled(),
 	}
+	m.step = m.nextStep(stepShell)
+	return m
 }
 
-func tickCmd() tea.Cmd {
-	return tea.Tick(600*time.Millisecond, func(t time.Time) tea.Msg { return tickMsg(t) })
+// done reports whether a step's feature is already set up.
+func (m model) done(s wizStep) bool {
+	switch s {
+	case stepShell:
+		return m.alreadyShell
+	case stepHTTPS:
+		return m.alreadyHTTPS
+	case stepGHWrapper:
+		return m.alreadyGHWrapper
+	case stepGuard:
+		return m.alreadyGuard
+	}
+	return false
 }
 
-func (m model) Init() tea.Cmd { return tickCmd() }
+// nextStep returns the first step at or after from that still needs an
+// answer — steps whose feature is already set up are never asked about.
+func (m model) nextStep(from wizStep) wizStep {
+	for s := from; s < stepDone; s++ {
+		if !m.done(s) {
+			return s
+		}
+	}
+	return stepDone
+}
+
+// progress returns this step's position among the steps being asked.
+func (m model) progress() (n, total int) {
+	for s := stepShell; s < stepDone; s++ {
+		if m.done(s) {
+			continue
+		}
+		total++
+		if s <= m.step {
+			n++
+		}
+	}
+	return n, total
+}
+
+func (m model) Init() tea.Cmd { return nil }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-	case tickMsg:
-		m.blink = !m.blink
-		return m, tickCmd()
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
@@ -266,20 +283,17 @@ func (m model) commit() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case stepShell:
 		m.wantShell = yes
-		m.step = stepHTTPS
-		m.cursor = 0
 	case stepHTTPS:
 		m.wantHTTPS = yes
-		m.step = stepGHWrapper
-		m.cursor = 0
 	case stepGHWrapper:
 		m.wantGHWrapper = yes
-		m.step = stepGuard
-		m.cursor = 0
 	case stepGuard:
 		m.wantGuard = yes
-		return m, tea.Quit
 	case stepDone:
+		return m, tea.Quit
+	}
+	m.cursor = 0
+	if m.step = m.nextStep(m.step + 1); m.step == stepDone {
 		return m, tea.Quit
 	}
 	return m, nil
@@ -287,379 +301,346 @@ func (m model) commit() (tea.Model, tea.Cmd) {
 
 // ── View ─────────────────────────────────────────────────────────────────────
 
+// Density: how much vertical room a step is drawn with. View tries roomy
+// first and tightens until the step fits the window, so a 24-row terminal
+// shows the whole step instead of scrolling its title off the top.
+const (
+	dRoomy   = iota // padded panel, boxed before/after example
+	dCompact        // no padding, example inline
+	dTight          // title, one-line bullets, question
+)
+
+// stepCopy is everything a step says.
+type stepCopy struct {
+	title    string
+	detail   string   // styled line under the title (what was detected)
+	bullets  []string // what turning this on does
+	status   string   // styled prerequisite line (gh CLI found / missing)
+	before   string
+	after    string // may be styled
+	note     string
+	question string
+}
+
+func (m model) copy() stepCopy {
+	dim := lipgloss.NewStyle().Foreground(cDim)
+	good := lipgloss.NewStyle().Foreground(cAccent).Bold(true)
+	gh := lipgloss.NewStyle().Foreground(cAccent).Render("✓") + dim.Render("  gh CLI found")
+	if !m.ghInstalled {
+		gh = lipgloss.NewStyle().Foreground(cHighlight).Render("!") + dim.Render("  gh CLI not found — stays inactive until gh is installed")
+	}
+
+	switch m.step {
+	case stepShell:
+		detected := lipgloss.NewStyle().Foreground(cWhite).Bold(true).Render(shellName(m.sh))
+		if fw := frameworkName(m.fw); fw != "" {
+			detected += dim.Render("  ·  " + fw)
+		}
+		return stepCopy{
+			title:  "Shell integration",
+			detail: dim.Render("Detected  ") + detected,
+			bullets: []string{
+				"Shows the active profile in your prompt",
+				"Offers to switch when you cd into a repo you use a different identity in",
+				"Learns which identity you use in each repo",
+			},
+			before:   "user@machine ~/code $",
+			after:    "user@machine ~/code " + lipgloss.NewStyle().Foreground(cPrimary).Bold(true).Render("[work]") + " $",
+			note:     `On cd: "You usually work here as 'work' — switch? [y/N]"`,
+			question: "Install shell integration?",
+		}
+	case stepHTTPS:
+		return stepCopy{
+			title: "HTTPS credential routing",
+			bullets: []string{
+				"Makes gitswitch the helper git asks for HTTPS logins",
+				"Hands git the right account's token per repo — via gh, stores nothing",
+				"Works alongside existing helpers (osxkeychain and others)",
+			},
+			status:   gh,
+			before:   "git push  →  wrong account, or a password prompt",
+			after:    "git push  →  " + good.Render("right account, no prompt"),
+			question: "Register the HTTPS credential helper?",
+		}
+	case stepGHWrapper:
+		return stepCopy{
+			title: "Session Isolation",
+			bullets: []string{
+				"Each repo gets its own git identity and gh account",
+				"Required for 'gitswitch pin' to take effect",
+				"Wraps the gh command so it follows the repo you are in",
+			},
+			status:   gh,
+			before:   "gh pr view  →  always your one global gh account",
+			after:    "gh pr view  →  " + good.Render("this repo's own gh account"),
+			question: "Enable Session Isolation?",
+		}
+	case stepGuard:
+		return stepCopy{
+			title: "Pre-commit identity guard",
+			bullets: []string{
+				"Stops a commit made with the wrong name or email",
+				"Checks repo pins, your usual identity per repo, and unknown emails",
+				"Your existing hooks (Husky, lefthook, pre-commit) still run",
+			},
+			before:   "git commit  →  wrong email quietly lands in git log",
+			after:    "git commit  →  " + good.Render("blocked, with the one-line fix"),
+			note:     "Bypass once with: git commit --no-verify",
+			question: "Enable the pre-commit identity guard?",
+		}
+	}
+	return stepCopy{}
+}
+
 func (m model) View() string {
 	if m.width == 0 {
 		return ""
 	}
-	pw := m.width - 6
-	if pw > 90 {
-		pw = 90
+	// Panel outer width, with a column of margin each side.
+	outer := m.width - 2
+	if outer > 92 {
+		outer = 92
 	}
-	if pw < 40 {
-		pw = 40
-	}
-
-	padLeft := (m.width - pw - 4) / 2
-	if padLeft < 0 {
-		padLeft = 0
-	}
-	pad := strings.Repeat(" ", padLeft)
-
-	var sections []string
-	sections = append(sections, m.viewHeader(pw))
-
-	switch m.step {
-	case stepShell:
-		sections = append(sections, m.viewShell(pw))
-	case stepHTTPS:
-		sections = append(sections, m.viewHTTPS(pw))
-	case stepGHWrapper:
-		sections = append(sections, m.viewGHWrapper(pw))
-	case stepGuard:
-		sections = append(sections, m.viewGuard(pw))
-	case stepDone:
-		sections = append(sections, m.viewAlreadyDone(pw))
+	if outer < 24 {
+		outer = 24
 	}
 
-	sections = append(sections, m.viewFooter(pw))
-
-	// vertical centering
-	totalLines := 0
-	for _, s := range sections {
-		totalLines += strings.Count(s, "\n") + 1
+	var lines []string
+	for d := dRoomy; d <= dTight; d++ {
+		lines = m.render(outer, d)
+		if m.height <= 0 || len(lines) <= m.height {
+			break
+		}
 	}
-	topPad := (m.height - totalLines) / 3
-	if topPad < 0 {
-		topPad = 0
+	if m.height > 0 && len(lines) > m.height {
+		lines = lines[:m.height]
 	}
 
+	left := (m.width - outer) / 2
+	if left < 0 {
+		left = 0
+	}
+	top := 0
+	if m.height > len(lines) {
+		top = (m.height - len(lines)) / 3
+	}
+	pad := strings.Repeat(" ", left)
 	var b strings.Builder
-	b.WriteString(strings.Repeat("\n", topPad))
-	for i, s := range sections {
-		lines := strings.Split(s, "\n")
-		for _, l := range lines {
-			b.WriteString(pad + l + "\n")
+	b.WriteString(strings.Repeat("\n", top))
+	for i, l := range lines {
+		if i > 0 {
+			b.WriteByte('\n')
 		}
-		if i < len(sections)-1 {
-			b.WriteString("\n")
-		}
+		b.WriteString(pad + clipLine(l, m.width-left))
 	}
 	return b.String()
 }
 
-// ── header ────────────────────────────────────────────────────────────────────
-
-func (m model) viewHeader(pw int) string {
-	brand := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(cPrimary).
-		Render("gitswitch")
-	sub := lipgloss.NewStyle().Foreground(cDim).Render(" — setup")
-
-	line := lipgloss.NewStyle().Foreground(cDim).Render(strings.Repeat("─", pw-2))
-
-	return lipgloss.NewStyle().
-		PaddingLeft(1).
-		Render(brand+sub) + "\n" +
-		lipgloss.NewStyle().PaddingLeft(1).Render(line)
-}
-
-// ── shell step ────────────────────────────────────────────────────────────────
-
-func (m model) viewShell(pw int) string {
-	inner := pw - 4
-
-	stepLine := m.stepBadge(1, m.totalSteps()) + "  " +
-		lipgloss.NewStyle().Bold(true).Foreground(cWhite).Render("Shell integration")
-
-	shName := shellName(m.sh)
-	fwName := frameworkName(m.fw)
-	detectedVal := lipgloss.NewStyle().Foreground(cWhite).Bold(true).Render(shName)
-	if fwName != "" {
-		detectedVal += lipgloss.NewStyle().Foreground(cDim).Render("  ·  " + fwName)
-	}
-	detected := lipgloss.NewStyle().Foreground(cDim).Render("Detected  ") + detectedVal
-
-	bullets := m.bullets([]string{
-		"Active profile visible in your prompt at all times",
-		"Nudge when you cd into a repo usually worked on as a different identity",
-		"Usage learning — gitswitch builds per-repo identity history automatically",
-	})
-
-	ba := m.beforeAfter(inner,
-		"user@machine ~/code $",
-		"user@machine ~/code "+
-			lipgloss.NewStyle().Foreground(cPrimary).Bold(true).Render("[work]")+" $",
-		`On cd: "You usually work here as 'work' — switch? [y/N]"`,
-	)
-
-	prompt := m.choicePrompt("Install shell integration?")
-
-	body := strings.Join([]string{stepLine, "", detected, "", bullets, "", ba, "", prompt}, "\n")
-
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(cPrimary).
-		Width(pw).
-		PaddingLeft(1).PaddingRight(1).PaddingTop(1).PaddingBottom(1).
-		Render(body)
-}
-
-// ── HTTPS step ────────────────────────────────────────────────────────────────
-
-func (m model) viewHTTPS(pw int) string {
-	inner := pw - 4
-	stepN := 2
-	if m.alreadyShell {
-		stepN = 1
+// render draws the whole screen at density d as a list of terminal rows,
+// none wider than outer.
+func (m model) render(outer, d int) []string {
+	inner := outer - 4 // border (2) + padding (2)
+	var lines []string
+	lines = append(lines, m.headerLines(outer)...)
+	if d == dRoomy {
+		lines = append(lines, "")
 	}
 
-	stepLine := m.stepBadge(stepN, m.totalSteps()) + "  " +
-		lipgloss.NewStyle().Bold(true).Foreground(cWhite).Render("HTTPS credential routing")
-
-	upgradeNote := ""
-	if m.alreadyShell {
-		upgradeNote = lipgloss.NewStyle().Foreground(cDim).
-			Render("Shell integration already active — this is the one new step.") + "\n\n"
-	}
-
-	bullets := m.bullets([]string{
-		"Registers gitswitch as git's HTTPS credential helper",
-		"Routes the right token per repo — delegates to gh CLI, stores nothing",
-		"Works alongside existing helpers (osxkeychain etc.)",
-	})
-
-	ghStatus := ""
-	if m.ghInstalled {
-		ghStatus = lipgloss.NewStyle().Foreground(cAccent).Render("✓") +
-			lipgloss.NewStyle().Foreground(cDim).Render("  gh CLI found")
+	var body []string
+	if m.step == stepDone {
+		body = []string{
+			lipgloss.NewStyle().Foreground(cAccent).Bold(true).Render("✓  Already fully set up"),
+			"",
+		}
+		body = append(body, wrapLines("Nothing to do. Run 'gitswitch current' to see your active profile.", inner, lipgloss.NewStyle().Foreground(cDim))...)
 	} else {
-		ghStatus = lipgloss.NewStyle().Foreground(cHighlight).Render("⚠") +
-			lipgloss.NewStyle().Foreground(cDim).Render("  gh CLI not found — installs but stays inert until gh is set up")
+		body = m.stepLines(inner, d)
 	}
-
-	ba := m.beforeAfter(inner,
-		"git push  →  wrong account / password prompt",
-		"git push  →  "+lipgloss.NewStyle().Foreground(cAccent).Bold(true).Render("right token routed silently"),
-		"",
-	)
-
-	prompt := m.choicePrompt("Register HTTPS credential helper?")
-
-	body := strings.Join([]string{stepLine, "", upgradeNote + bullets, "", ghStatus, "", ba, "", prompt}, "\n")
-
-	return lipgloss.NewStyle().
+	padV := 0
+	if d == dRoomy {
+		padV = 1
+	}
+	panel := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(cPrimary).
-		Width(pw).
-		PaddingLeft(1).PaddingRight(1).PaddingTop(1).PaddingBottom(1).
-		Render(body)
+		Width(outer-2).
+		Padding(padV, 1).
+		Render(strings.Join(body, "\n"))
+	lines = append(lines, strings.Split(panel, "\n")...)
+
+	if d == dRoomy {
+		lines = append(lines, "")
+	}
+	return append(lines, m.footerLines(outer)...)
 }
 
-// ── Session Isolation step ───────────────────────────────────────────────────
-
-func (m model) viewGHWrapper(pw int) string {
-	inner := pw - 4
-	stepN := 3
-	if m.alreadyShell {
-		stepN--
-	}
-	if m.alreadyHTTPS {
-		stepN--
-	}
-
-	stepLine := m.stepBadge(stepN, m.totalSteps()) + "  " +
-		lipgloss.NewStyle().Bold(true).Foreground(cWhite).Render("Session Isolation")
-
-	bullets := m.bullets([]string{
-		"Isolates this repo's git identity and gh account from whatever's global",
-		"Required for `gitswitch pin` to take effect",
-		"Wraps the `gh` shell function — bare `gh` commands resolve per-repo",
-	})
-
-	ghStatus := ""
-	if m.ghInstalled {
-		ghStatus = lipgloss.NewStyle().Foreground(cAccent).Render("✓") +
-			lipgloss.NewStyle().Foreground(cDim).Render("  gh CLI found")
-	} else {
-		ghStatus = lipgloss.NewStyle().Foreground(cHighlight).Render("⚠") +
-			lipgloss.NewStyle().Foreground(cDim).Render("  gh CLI not found — installs but stays inert until gh is set up")
-	}
-
-	ba := m.beforeAfter(inner,
-		"gh pr view  →  always your single global gh account",
-		"gh pr view  →  "+lipgloss.NewStyle().Foreground(cAccent).Bold(true).Render("this repo's own gh account"),
-		"",
-	)
-
-	prompt := m.choicePrompt("Enable Session Isolation?")
-
-	body := strings.Join([]string{stepLine, "", bullets, "", ghStatus, "", ba, "", prompt}, "\n")
-
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(cPrimary).
-		Width(pw).
-		PaddingLeft(1).PaddingRight(1).PaddingTop(1).PaddingBottom(1).
-		Render(body)
-}
-
-// ── Pre-commit Guard step ────────────────────────────────────────────────────
-
-func (m model) viewGuard(pw int) string {
-	inner := pw - 4
-	stepN := 4
-	if m.alreadyShell {
-		stepN--
-	}
-	if m.alreadyHTTPS {
-		stepN--
-	}
-	if m.alreadyGHWrapper {
-		stepN--
-	}
-
-	stepLine := m.stepBadge(stepN, m.totalSteps()) + "  " +
-		lipgloss.NewStyle().Bold(true).Foreground(cWhite).Render("Pre-commit identity guard")
-
-	bullets := m.bullets([]string{
-		"Refuses wrong-author commits before they enter git history",
-		"Catches mismatches against repo pins, learned habits, or unmanaged emails",
-		"Chains into existing .git/hooks/pre-commit (Husky, lefthook, pre-commit still run)",
-	})
-
-	ba := m.beforeAfter(inner,
-		"git commit  →  wrong email silently enters git log",
-		"git commit  →  "+lipgloss.NewStyle().Foreground(cAccent).Bold(true).Render("blocked with 1-line fix before commit lands"),
-		"Bypass once anytime with: git commit --no-verify",
-	)
-
-	prompt := m.choicePrompt("Enable pre-commit identity guard?")
-
-	body := strings.Join([]string{stepLine, "", bullets, "", ba, "", prompt}, "\n")
-
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(cPrimary).
-		Width(pw).
-		PaddingLeft(1).PaddingRight(1).PaddingTop(1).PaddingBottom(1).
-		Render(body)
-}
-
-// ── already done ─────────────────────────────────────────────────────────────
-
-func (m model) viewAlreadyDone(pw int) string {
-	msg := lipgloss.NewStyle().Foreground(cAccent).Bold(true).Render("✓  Already fully set up")
-	sub := lipgloss.NewStyle().Foreground(cDim).
-		Render("Nothing to do. Run `gitswitch current` to see your active profile.")
-	body := lipgloss.JoinVertical(lipgloss.Left, msg, "", sub)
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(cPrimary).
-		Width(pw).
-		PaddingLeft(2).PaddingRight(2).PaddingTop(2).PaddingBottom(2).
-		Render(body)
-}
-
-// ── components ────────────────────────────────────────────────────────────────
-
-func (m model) stepBadge(n, total int) string {
-	return lipgloss.NewStyle().
-		Foreground(cPrimary).
-		Bold(true).
-		Render(fmt.Sprintf("%d / %d", n, total))
-}
-
-func (m model) totalSteps() int {
-	n := 0
-	if !m.alreadyShell {
-		n++
-	}
-	if !m.alreadyHTTPS {
-		n++
-	}
-	if !m.alreadyGHWrapper {
-		n++
-	}
-	if !m.alreadyGuard {
-		n++
-	}
-	if n == 0 {
-		n = 1
-	}
-	return n
-}
-
-func (m model) bullets(items []string) string {
-	dim := lipgloss.NewStyle().Foreground(cDim)
+// stepLines is the inside of the panel for the current step.
+func (m model) stepLines(w, d int) []string {
+	c := m.copy()
 	white := lipgloss.NewStyle().Foreground(cWhite)
+	dim := lipgloss.NewStyle().Foreground(cDim)
+	gap := func(out []string) []string {
+		if d == dRoomy {
+			return append(out, "")
+		}
+		return out
+	}
+
+	n, total := m.progress()
+	badge := lipgloss.NewStyle().Foreground(cPrimary).Bold(true).Render(fmt.Sprintf("%d / %d", n, total))
+	out := []string{clipLine(badge+"  "+white.Bold(true).Render(c.title), w)}
+	if c.detail != "" && d != dTight {
+		out = gap(out)
+		out = append(out, clipLine(c.detail, w))
+	}
+
+	out = gap(out)
 	dot := lipgloss.NewStyle().Foreground(cPrimary).Render("·")
-	lines := make([]string, len(items))
-	for i, item := range items {
-		lines[i] = dim.Render("  ") + dot + " " + white.Render(item)
+	for _, bl := range c.bullets {
+		if d == dTight {
+			out = append(out, clipLine(" "+dot+" "+white.Render(bl), w))
+			continue
+		}
+		// Hanging indent: wrapped lines line up under the text, not the dot.
+		for i, l := range wrapLines(bl, w-3, white) {
+			lead := " " + dot + " "
+			if i > 0 {
+				lead = "   "
+			}
+			out = append(out, lead+l)
+		}
 	}
-	return strings.Join(lines, "\n")
+
+	if c.status != "" && d != dTight {
+		out = gap(out)
+		out = append(out, clipLine(" "+c.status, w))
+	}
+
+	if d != dTight {
+		out = gap(out)
+		label := func(s string, col lipgloss.Color) string {
+			return lipgloss.NewStyle().Foreground(col).Bold(true).Width(8).Render(s)
+		}
+		example := []string{
+			clipLine(label("before", cDim)+dim.Render(c.before), w-4),
+			clipLine(label("after", cAccent)+c.after, w-4),
+		}
+		if d == dRoomy {
+			if c.note != "" {
+				example = append(example, clipLine(dim.Italic(true).Render("        "+c.note), w-4))
+			}
+			box := lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(cDim).
+				Width(w-2).
+				Padding(0, 1).
+				Render(strings.Join(example, "\n"))
+			out = append(out, strings.Split(box, "\n")...)
+		} else {
+			for _, l := range example {
+				out = append(out, " "+l)
+			}
+		}
+	}
+
+	if d != dTight {
+		out = append(out, "")
+	}
+	// The buttons are never clipped: if they don't fit beside the question,
+	// they get a line of their own.
+	question, buttons := white.Bold(true).Render(c.question), m.buttons()
+	if lipgloss.Width(question)+2+lipgloss.Width(buttons) <= w {
+		return append(out, question+"  "+buttons)
+	}
+	return append(out, clipLine(question, w), buttons)
 }
 
-func (m model) beforeAfter(w int, before, after, note string) string {
-	label := func(s string, c lipgloss.Color) string {
-		return lipgloss.NewStyle().Foreground(c).Bold(true).Width(7).Render(s)
-	}
-	lines := label("before", cDim) + "  " +
-		lipgloss.NewStyle().Foreground(cDim).Render(before) + "\n" +
-		label("after", cAccent) + "  " + after
-	if note != "" {
-		lines += "\n\n" + lipgloss.NewStyle().Foreground(cDim).Italic(true).Render("        "+note)
-	}
-	return lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(cDim).
-		Width(w - 2).
-		PaddingLeft(1).PaddingRight(1).
-		Render(lines)
-}
-
-func (m model) choicePrompt(question string) string {
-	q := lipgloss.NewStyle().Foreground(cWhite).Bold(true).Render(question)
-
-	var yes, no string
+// buttons renders the Yes / No choice with the focused one highlighted.
+func (m model) buttons() string {
+	on := lipgloss.NewStyle().Background(cAccent).Foreground(lipgloss.Color("0")).Bold(true).Padding(0, 2)
+	onNo := on.Background(cRed).Foreground(cWhite)
+	off := lipgloss.NewStyle().Foreground(cDim).Padding(0, 2)
 	if m.cursor == 0 {
-		yes = lipgloss.NewStyle().Background(cBgHover).Foreground(cHighlight).Bold(true).Padding(0, 2).Render("Yes")
-		no = lipgloss.NewStyle().Foreground(cDim).Padding(0, 2).Render("No")
-	} else {
-		yes = lipgloss.NewStyle().Foreground(cDim).Padding(0, 2).Render("Yes")
-		no = lipgloss.NewStyle().Background(cBgHover).Foreground(cRed).Bold(true).Padding(0, 2).Render("No")
+		return on.Render("Yes") + " " + off.Render("No")
 	}
-
-	cursor := "  "
-	if m.blink {
-		cursor = lipgloss.NewStyle().Foreground(cPrimary).Render("  ▌")
-	}
-
-	return lipgloss.JoinVertical(lipgloss.Left,
-		q,
-		"",
-		lipgloss.JoinHorizontal(lipgloss.Top, yes, "  ", no, cursor),
-	)
+	return off.Render("Yes") + " " + onNo.Render("No")
 }
 
-// ── footer ────────────────────────────────────────────────────────────────────
+func (m model) headerLines(outer int) []string {
+	brand := lipgloss.NewStyle().Bold(true).Foreground(cPrimary).Render("gitswitch")
+	left := " " + brand + lipgloss.NewStyle().Foreground(cDim).Render(" — setup")
 
-func (m model) viewFooter(pw int) string {
+	// Step dots at the right: done, current, to do.
+	right := ""
+	if n, total := m.progress(); m.step != stepDone && total > 1 {
+		var dots []string
+		for i := 1; i <= total; i++ {
+			switch {
+			case i < n:
+				dots = append(dots, lipgloss.NewStyle().Foreground(cAccent).Render("●"))
+			case i == n:
+				dots = append(dots, lipgloss.NewStyle().Foreground(cPrimary).Bold(true).Render("●"))
+			default:
+				dots = append(dots, lipgloss.NewStyle().Foreground(cDim).Render("○"))
+			}
+		}
+		right = strings.Join(dots, " ") + " "
+	}
+	if gap := outer - lipgloss.Width(left) - lipgloss.Width(right); gap > 0 && right != "" {
+		left += strings.Repeat(" ", gap) + right
+	}
+	rule := " " + lipgloss.NewStyle().Foreground(cDim).Render(strings.Repeat("─", outer-2))
+	return []string{clipLine(left, outer), rule}
+}
+
+// footerLines lists the keys, wrapping onto a second line on narrow windows.
+func (m model) footerLines(outer int) []string {
 	key := lipgloss.NewStyle().Foreground(cHighlight).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(cDim)
-
-	pairs := []string{
-		key.Render("←/→") + dim.Render(" toggle"),
-		key.Render("Enter") + dim.Render(" confirm"),
-		key.Render("Y/N") + dim.Render(" quick answer"),
-		key.Render("Q") + dim.Render(" quit"),
+	pairs := [][2]string{{"←/→", "choose"}, {"enter", "confirm"}, {"y/n", "answer"}, {"q", "quit"}}
+	if m.step == stepDone {
+		pairs = [][2]string{{"enter", "close"}}
 	}
+	var lines []string
+	cur, curW := " ", 1
+	for i, p := range pairs {
+		item := key.Render(p[0]) + dim.Render(" "+p[1])
+		itemW := lipgloss.Width(p[0]) + 1 + lipgloss.Width(p[1])
+		sepW := 0
+		if i > 0 {
+			sepW = 3
+		}
+		if curW+sepW+itemW > outer && curW > 1 {
+			lines = append(lines, cur)
+			cur, curW, sepW = " ", 1, 0
+		}
+		cur += strings.Repeat(" ", sepW) + item
+		curW += sepW + itemW
+	}
+	return append(lines, cur)
+}
 
-	return lipgloss.NewStyle().
-		Foreground(cDim).
-		Width(pw).
-		Render(strings.Join(pairs, "   "))
+// wrapLines word-wraps plain text to w cells and styles each line.
+func wrapLines(text string, w int, style lipgloss.Style) []string {
+	if w < 8 {
+		w = 8
+	}
+	var out []string
+	for _, l := range strings.Split(ansi.Wordwrap(text, w, ""), "\n") {
+		out = append(out, style.Render(l))
+	}
+	return out
+}
+
+// clipLine shortens a (possibly styled) line to w cells.
+func clipLine(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= w {
+		return s
+	}
+	return ansi.Truncate(s, w, "…")
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

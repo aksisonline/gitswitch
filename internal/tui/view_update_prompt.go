@@ -6,82 +6,80 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (m Model) viewUpdatePrompt(pw int) string {
-	header := m.viewHeader("") + m.viewTabHeader()
-	iw := itemInnerW(pw)
-	sep := "\n\n"
+// Button labels on the update prompt — also the mouse targets.
+const (
+	updateYes       = "Update now"
+	updateNo        = "Not now"
+	updateYesArcade = "INSERT COIN"
+	updateNoArcade  = "CONTINUE"
+)
 
-	var chip, title, body string
+// drawUpdatePrompt confirms an upgrade and says exactly how it will happen —
+// through Homebrew when Homebrew owns the binary, otherwise the install script.
+func (m Model) drawUpdatePrompt(c *canvas) {
+	m.header(c, "Update", "")
+	c.gap()
+
+	from := styleItemDim.Render(m.currentVersion)
+	to := lipgloss.NewStyle().Foreground(colorGreen).Bold(true).Render(m.latestVersion)
 	if m.arcadeMode {
-		chip = lipgloss.NewStyle().
-			Background(colorBgChip).
-			Foreground(colorYellow).
-			Bold(true).
-			Padding(0, 1).
-			Render("★ BONUS STAGE")
-		title = sep + "  " + chip + "  " + styleScore.Render("NEW VERSION DETECTED")
-		body = sep +
-			"  " + styleCurrentVal.Render(m.latestVersion) + styleBrand.Render("  is available") +
-			sep +
-			"  " + styleBrand.Render("  "+truncate("Update now to unlock new features and fixes.", iw-4))
+		c.add("  " + styleChipBonus.Render("★ BONUS STAGE") + "  " + styleScore.Render("NEW VERSION DETECTED"))
 	} else {
-		chip = styleChipBox().Render("UPDATE")
-		title = sep + "  " + chip + "  " + styleCurrentVal.Render("New version available")
-		body = sep +
-			"  " + styleBrand.Render("  "+m.latestVersion+" is ready to install.")
+		c.add("  " + styleChipBox().Render("UPDATE") + "  " + styleCurrentVal.Render("New version available"))
+	}
+	c.add("  " + from + styleBrand.Render("  →  ") + to)
+	c.gap()
 
-		// Release notes block (cleaned & capped so the prompt never overflows)
-		if cleaned := cleanReleaseNotes(m.releaseNotes); cleaned != "" {
-			body += sep + "  " + styleItemDim.Render("What's new:") + "\n"
-			noteStyle := lipgloss.NewStyle().Foreground(colorDim)
-			maxLines := 6
-			shown := 0
-			for _, line := range strings.Split(cleaned, "\n") {
-				line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#"))
-				if line == "" {
-					continue
-				}
-				line = strings.ReplaceAll(line, "**", "")
-				if idx := strings.Index(line, " by @"); idx > 0 && strings.Contains(line[idx:], "http") {
-					line = strings.TrimSpace(line[:idx])
-				}
-				if shown >= maxLines {
-					body += "  " + noteStyle.Render("  …") + "\n"
-					break
-				}
-				body += "  " + noteStyle.Render(truncate(line, iw-4)) + "\n"
-				shown++
+	// How it updates — never a surprise.
+	via := "Updates with " + m.install.Label() + ": "
+	c.add("  " + styleBrand.Render(via) + styleFooterKey.Render(m.install.UpgradeHint()))
+	if c.d != dTight {
+		c.add("  " + styleBrand.Render("Your profiles and settings are not touched."))
+	}
+
+	// Release notes, capped to what the window can spare.
+	if notes := m.updateNoteLines(c.w - 4); len(notes) > 0 && c.d != dTight {
+		budget := 6
+		if c.d == dCompact {
+			budget = 3
+		}
+		c.gap()
+		c.add("  " + styleItemDim.Render("What's new"))
+		for i, line := range notes {
+			if i >= budget {
+				c.add("  " + styleItemDim.Render("  …"))
+				break
 			}
-		} else {
-			body += sep +
-				"  " + styleBrand.Render("  "+truncate("Your profiles are unchanged. Restart after upgrade to apply.", iw-4))
+			c.add("  " + lipgloss.NewStyle().Foreground(colorPurple).Render("•") + " " + styleBrand.Render(line))
 		}
 	}
 
-	yesLabel := "  Yes, update now  "
-	noLabel := "  Skip  "
+	c.gap()
 	if m.arcadeMode {
-		yesLabel = "  INSERT COIN  "
-		noLabel = "  CONTINUE  "
+		c.add(buttonRow(updateYesArcade, updateNoArcade))
+	} else {
+		c.add(buttonRow(updateYes, updateNo))
 	}
+	c.gap()
+	c.footer(m, [][2]string{{"y / enter", "update"}, {"n / esc", "not now"}})
+}
 
-	yesBtn := lipgloss.NewStyle().
-		Background(colorGreen).
-		Foreground(lipgloss.Color("0")).
-		Bold(true).
-		Padding(0, 1).
-		Render(yesLabel)
-	noBtn := lipgloss.NewStyle().
-		Foreground(colorDim).
-		Padding(0, 1).
-		Render(noLabel)
-
-	buttons := sep + "  " + yesBtn + "   " + noBtn
-
-	footer := sep + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
-		{"y / enter", "update"},
-		{"n / esc", "skip"},
-	})
-
-	return stylePanelBorder(pw).Render(header + title + body + buttons + footer)
+// updateNoteLines flattens the pending release's notes into short plain lines.
+func (m Model) updateNoteLines(w int) []string {
+	var out []string
+	for _, line := range strings.Split(cleanReleaseNotes(m.releaseNotes), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimSpace(strings.TrimLeft(line, "*- "))
+		line = strings.ReplaceAll(strings.ReplaceAll(line, "**", ""), "`", "")
+		if idx := strings.Index(line, " by @"); idx > 0 && strings.Contains(line[idx:], "http") {
+			line = strings.TrimSpace(line[:idx])
+		}
+		if line != "" {
+			out = append(out, truncate(line, w))
+		}
+	}
+	return out
 }

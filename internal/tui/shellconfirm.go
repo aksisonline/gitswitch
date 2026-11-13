@@ -77,6 +77,7 @@ func (m Model) updateShellConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "y", "Y", "enter":
+			m.setBusy("updating shell integration…")
 			return m, m.runShellAction(m.pendingShellInstall)
 		case "n", "N", "esc", "q":
 			m.state = StateList
@@ -91,49 +92,37 @@ func (m Model) updateShellConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) viewShellConfirm(pw int) string {
+// Button labels on the shell-integration dialog — also the mouse targets.
+const (
+	shellYesInstall = "Yes, install it"
+	shellYesRemove  = "Yes, remove it"
+	shellNo         = "Cancel"
+)
+
+func (m Model) drawShellConfirm(c *canvas) {
 	sh := shell.DetectShell()
 	rc := shell.RCFile(sh)
-	name := shellDisplayName(sh)
 
-	header := m.viewHeader("Shell Integration")
-	iw := pw - 2
-
-	var title, body, yesLabel string
+	title, body, yes := "Disable shell integration?", "gitswitch will safely remove its hook block from:", shellYesRemove
 	if m.pendingShellInstall {
 		title = "Enable shell integration?"
-		body = fmt.Sprintf("Detected %s. gitswitch will add its auto-switch hook to:", name)
-		yesLabel = "Yes, install it"
-	} else {
-		title = "Disable shell integration?"
-		body = "gitswitch will safely remove its hook block from:"
-		yesLabel = "Yes, remove it"
+		body = fmt.Sprintf("Detected %s. gitswitch will add its auto-switch hook to:", shellDisplayName(sh))
+		yes = shellYesInstall
 	}
+	note := lipgloss.NewStyle().Foreground(colorDim)
 
-	titleStyle := lipgloss.NewStyle().Foreground(colorPurple).Bold(true)
-	pathStyle := lipgloss.NewStyle().Foreground(colorGreen)
-	noteStyle := lipgloss.NewStyle().Foreground(colorDim)
-
-	yesBtn := lipgloss.NewStyle().
-		Background(colorGreen).
-		Foreground(lipgloss.Color("0")).
-		Bold(true).
-		Padding(0, 2).
-		Render(yesLabel)
-	noBtn := lipgloss.NewStyle().
-		Foreground(colorDim).
-		Padding(0, 2).
-		Render("Cancel")
-
-	content := "\n\n  " + titleStyle.Render(title) +
-		"\n\n  " + noteStyle.Render(truncate(body, iw-2)) +
-		"\n  " + pathStyle.Render(truncate(rc, iw-2)) +
-		"\n\n  " + noteStyle.Render(truncate("Only gitswitch's own block changes — the rest of your file is untouched.", iw-2)) +
-		"\n\n  " + yesBtn + "   " + noBtn
-
-	footer := "\n\n" + divider(pw) + "\n" + m.footerKeys(pw, [][2]string{
-		{"y / enter", "confirm"},
-		{"n / esc", "cancel"},
-	})
-	return stylePanelBorder(pw).Render(header + content + footer)
+	m.header(c, "Shell Integration", "")
+	c.gap()
+	c.add("  " + lipgloss.NewStyle().Foreground(colorPurple).Bold(true).Render(title))
+	c.gap()
+	c.add("  " + note.Render(body))
+	c.add("  " + lipgloss.NewStyle().Foreground(colorGreen).Render(rc))
+	if c.d != dTight {
+		c.gap()
+		c.add("  " + note.Render("Only gitswitch's own block changes; the rest stays as it is."))
+	}
+	c.gap()
+	c.add(buttonRow(yes, shellNo))
+	c.gap()
+	c.footer(m, [][2]string{{"y / enter", "confirm"}, {"n / esc", "cancel"}})
 }

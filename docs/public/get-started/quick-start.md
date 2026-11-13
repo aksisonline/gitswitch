@@ -142,11 +142,11 @@ Three tabs — **Accounts**, **Utilities**, **Settings** — switched with `1` `
 | `e` | Edit — `ctrl+d` inside the form deletes |
 | `v` | Show GitHub usernames instead of emails |
 | `c` | Next color theme (there are 12) |
-| `u` | Upgrade — only appears when there's something to upgrade to |
+| `u` | Update — when the status line says a newer version is out |
 | `?` | CLI cheat sheet |
 | `q` | Out |
 
-First launch with no accounts runs a short onboarding wizard — it scans your `gh` logins and `~/.ssh/` keys and offers to import what it finds.
+First launch with no accounts runs a short setup wizard — it scans your git config, `gh` logins and `~/.ssh/` keys and offers to import what it finds.
 
 ## Where next
 
