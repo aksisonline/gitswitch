@@ -48,7 +48,6 @@ brews:
     # The beta channel is a second formula in the same tap (published by
     # canary.yml). Both install the same binary, so only one can be linked.
     conflicts:
-      - name: gitswitch-beta
-        because: both install a `gitswitch` binary
+      - gitswitch-beta
     test: |
       assert_match version.to_s, shell_output("#{bin}/gitswitch --version")
