@@ -7,6 +7,8 @@ Format: `[version] — date — summary`
 
 ## [Unreleased]
 
+## [v0.6.0] — 2026-11-13
+
 ### What's New
 - **The app now fits any terminal window** — every screen tightens to fit a small window instead of running off the edge or wrapping (works down to 44 columns × 12 rows; anything smaller shows a short notice).
 - **A clearer first-run setup** — setup shows which step you're on, checks for git and the GitHub CLI up front, ticks off what it scans as it goes, and finishes with a "try next" screen.
