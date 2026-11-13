@@ -6,12 +6,33 @@ description: Every gitswitch command and flag
 
 | | |
 |---|---|
-| **[Identity](#identity)** | `add` `switch` `list` `remove` `current` `init` |
-| **[Session Isolation](#session-isolation)** | `pin` `unpin` `guard` `xcode` `shell` `uninstall` `doctor` |
-| **[Channels](#channels)** | `version` `upgrade` `beta` `stable` |
-| **[Extras](#extras)** | `login` `skills` `reauthor` `pacman` |
+| **[Identity](#identity)** | `login` `add` `switch` `list` `current` `remove` `init` |
+| **[Setup & Session Isolation](#session-isolation)** | `shell` `doctor` `pin` `unpin` `guard` `xcode` `uninstall` |
+| **[Updates & Channels](#channels)** | `version` `upgrade` `beta` `stable` |
+| **[Extras](#extras)** | `reauthor` `skills` `pacman` `completion` `help` |
 
 Plus [`gitswitch`](#gitswitch--the-interactive-ui) with no arguments, and [`gitswitch <nickname>`](#gitswitch-nickname--quick-switch) as a shortcut.
+
+## Help, version, and flags that work everywhere
+
+```bash
+gitswitch --help              # every command, grouped
+gitswitch <command> --help    # that command's flags and examples (-h works too)
+gitswitch --version           # the installed version (-v and --v work too)
+```
+
+Flags mean the same thing on every command that has them:
+
+| Flag | Meaning | On |
+|---|---|---|
+| `--json` | Machine-readable output | `list` `current` `version` `doctor` `guard status` `xcode status` |
+| `-y`, `--yes` | Don't ask, just do it | `shell` `doctor` `reauthor` `beta` `stable` |
+| `--dry-run` | Show what would happen, change nothing | `upgrade` `beta` `stable` `xcode sync` |
+| `-q`, `--quiet` | Print nothing on success | `switch` |
+
+Short names: `ls` = `list`, `rm` / `delete` = `remove`, `use` = `switch`, `whoami` = `current`, `update` = `upgrade`.
+
+When a command is called wrongly — a missing argument, an unknown flag, a value that isn't allowed — gitswitch says what it expected, points you at that command's `--help`, and exits `2`. A mistyped command or nickname gets a "did you mean…?".
 
 ---
 
@@ -32,17 +53,22 @@ Three tabs — **Accounts**, **Utilities**, **Settings** — reachable with `1` 
 | `e` | Edit — `ctrl+d` inside the form deletes |
 | `v` | Toggle the second column between email and GitHub username |
 | `c` | Cycle color theme (12 of them) |
-| `u` | Upgrade — only appears when a newer version exists |
+| `u` | Open the update prompt — when the status line shows a newer version |
 | `?` | CLI cheat sheet |
 | `1` `2` `3` / `tab` | Switch tab |
+| `g` / `G` | Jump to the first / last account |
 | `q` / `ctrl+c` | Quit |
 
 The mouse works throughout: hover moves focus, clicks select and toggle, the scroll wheel moves through lists.
 
-**Utilities tab** — three toggles: Shell Integration, Session Isolation, HTTPS Credential Helper.
-**Settings tab** — theme, config file location (opens it in `$EDITOR`), and the `gs` shell alias (rename with `e`, toggle with `enter`).
+**Utilities tab** — five toggles: Shell Integration, Session Isolation, HTTPS Credential Helper, Auto-pin Repeat Repos, Pre-commit Guard.
+**Settings tab** — theme (`←` `→`), config file location (opens it in `$EDITOR`), and the `gs` shell alias (rename with `e`, toggle with `enter`).
 
-First launch on a machine with no profiles yet checks for `git`/`gh` and offers to install whichever's missing, then runs a short onboarding wizard, which scans your `gh` logins and `~/.ssh/` keys and offers to import them.
+The line under each tab's content is the status line: it shows what gitswitch is doing (with a spinner), the result of the last action, or a pending update.
+
+**Any window size.** The layout tightens as the terminal gets smaller — boxes become rows, blank lines go, long lists scroll — rather than running off the screen. The smallest window it draws in is 44 columns by 12 rows; below that it shows a short notice (and `gitswitch <nickname>` still works). Set `GITSWITCH_REDUCE_MOTION=1` to turn off the decorative motion (the sliding tab marker, the launch shimmer, the staged setup scan); progress spinners stay.
+
+First launch on a machine with no profiles yet checks for `git`/`gh` and offers to install whichever's missing, then runs a short setup wizard: it scans your git config, `gh` logins and `~/.ssh/` keys, lets you pick what to import, and offers to add more accounts.
 
 ---
 
@@ -259,27 +285,27 @@ The HTTPS check is the interesting one — git asks credential helpers in config
 ## `version`
 
 ```bash
-gitswitch version
+gitswitch version [--json]
 ```
 
-Prints your version and checks for a newer one (cached 24h).
+Prints your version, your channel, how gitswitch is managed (Homebrew or the install script), and whether a newer release exists (cached 24h). For just the number, with no network access, use `gitswitch --version`.
 
 ## `upgrade`
 
 ```bash
-gitswitch upgrade
+gitswitch upgrade [--check] [--dry-run]
 ```
 
-Installs the latest release. On a Homebrew install it tells you to run `brew upgrade gitswitch` instead.
+Updates to the latest release on your channel. On a Homebrew install it runs `brew update && brew upgrade` for you, so Homebrew stays in charge; on a script install it downloads the new binary. `--check` only reports; `--dry-run` shows the command without running it.
 
 ## `beta` / `stable`
 
 ```bash
-gitswitch beta      # canary pre-releases
-gitswitch stable    # back to normal
+gitswitch beta   [--yes] [--dry-run]    # pre-release builds
+gitswitch stable [--yes] [--dry-run]    # back to normal
 ```
 
-Both confirm first and never touch `~/.config/gitswitch/`. See [Versions & Release Channels](/docs/cli/channels).
+Both show their plan and confirm first, and never touch `~/.config/gitswitch/`. On Homebrew they swap the `gitswitch` and `gitswitch-beta` formulae. See [Versions & Release Channels](/docs/cli/channels).
 
 ---
 
@@ -328,9 +354,17 @@ gitswitch pacman
 
 Toggles [arcade mode](/docs/extras/arcade) on or off for every future launch. No, we won't explain it here.
 
+## `completion`
+
+```bash
+gitswitch completion zsh    # or bash, fish, powershell
+```
+
+Prints a tab-completion script for your shell. [`gitswitch shell`](#shell) already loads it for you; use this only if you manage completions yourself. It completes commands, flags, flag values, and your own account nicknames.
+
 ## `record` / `recommend`
 
-Used by the shell hook. You rarely run these by hand.
+Plumbing for the shell hook — hidden from `--help` and tab completion, but still callable.
 
 ```bash
 gitswitch record    [--path <dir>]    # count the active account for this repo

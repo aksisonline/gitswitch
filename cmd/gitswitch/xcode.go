@@ -130,7 +130,7 @@ func unbindRemotes(dir string) ([]string, error) { return rewriteRemotes(dir, xc
 
 var xcodeCmd = &cobra.Command{
 	Use:   "xcode",
-	Short: "Keep Xcode's GitHub account in step with your gitswitch profile",
+	Short: "Keep Xcode's GitHub account in step with your profile",
 	Long: "Xcode keeps its own GitHub accounts (" + xcodeSettingsPath + ") and, when a repo's\n" +
 		"owner doesn't match one of them, silently uses whichever account is listed first.\n" +
 		"gitswitch can't write Xcode's tokens (they live in Apple's private keychain\n" +

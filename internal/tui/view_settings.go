@@ -7,94 +7,85 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Settings sections (indices match settingsFocus and mouse grid):
+// Settings items (indices match settingsFocus):
 //   0 = Config Location  (display + edit button)
 //   1 = Theme            (cycle with ← →)
 //   2 = Shell Alias      (editable shortcut name, default "gs")
 
-func (m Model) viewSettingsTab(pw int) string {
-	var top string
+// Chip labels double as mouse targets — the handler looks for these strings.
+const (
+	chipEdit   = "[✎ edit]"
+	chipRename = "[✎ rename]"
+)
+
+// themeSwatch previews a palette as four colored dots.
+func themeSwatch(tc ThemeColors) string {
+	out := ""
+	for _, col := range []lipgloss.Color{tc.Primary, tc.Accent, tc.Highlight, tc.Error} {
+		out += lipgloss.NewStyle().Foreground(col).Render("●")
+	}
+	return out
+}
+
+func (m Model) drawSettings(c *canvas) {
+	m.header(c, "", m.versionTag())
+	if m.headGap() {
+		c.blank()
+	}
+	m.drawTabs(c)
+
+	chip := lipgloss.NewStyle().Foreground(colorPurple)
+	dim := lipgloss.NewStyle().Foreground(colorDim)
+
+	configTitle, themeTitle, aliasTitle := "Config Location", "Theme", "Shell Alias"
 	if m.arcadeMode {
-		top = m.viewScoreLine(pw) + "\n"
+		configTitle, themeTitle, aliasTitle = "SAVE FILE LOCATION", "VISUAL THEME", "COMMAND ALIAS"
 	}
 
-	header := m.viewHeader("") + m.viewTabHeader()
-	iw := itemInnerW(pw)
-
-	// Config location box
-	configPath := truncate(filepath.Join(m.store.ConfigDir(), "config.yaml"), iw-6)
-	editChip := lipgloss.NewStyle().Foreground(colorPurple).Render("[✎ edit]")
-	configTitle := "Config Location"
-	if m.arcadeMode {
-		configTitle = "SAVE FILE LOCATION"
+	theme := m.colorTheme
+	if theme < 0 || theme >= len(normalThemes) {
+		theme = 0
 	}
-	configLine1 := titleWithRight(styleItemDim.Render(configTitle), editChip, iw)
-	configLine2 := lipgloss.NewStyle().Foreground(colorDim).Render(configPath)
-	configLine2 = padTo(configLine2, iw)
-	configBox := renderItemBox(pw, m.settingsFocus == 0, false, configLine1, configLine2)
-
-	// Theme box
-	themeTitle := "Theme"
+	var themeDetail string
 	if m.arcadeMode {
-		themeTitle = "VISUAL THEME"
-	}
-	cycleTip := styleBrand.Render("← →")
-	themeLine1 := titleWithRight(styleCurrentVal.Render(themeTitle), cycleTip, iw)
-
-	// Show current theme name + prev/next hint
-	name := themeNames[m.colorTheme]
-	var nameStr string
-	if m.arcadeMode {
-		nameStr = fmt.Sprintf("THEME %02d/%d", m.colorTheme+1, len(themeNames))
+		themeDetail = lipgloss.NewStyle().Foreground(colorYellow).Render("ARCADE PALETTE") + dim.Render("  (locked in arcade mode)")
 	} else {
-		nameStr = fmt.Sprintf("%-20s  (%d/%d)", name, m.colorTheme+1, len(themeNames))
+		themeDetail = themeSwatch(normalThemes[theme]) + "  " +
+			lipgloss.NewStyle().Foreground(colorYellow).Render(themeNames[theme]) +
+			dim.Render(fmt.Sprintf("  (%d/%d)", theme+1, len(themeNames)))
 	}
-	themeLine2 := lipgloss.NewStyle().Foreground(colorYellow).Render(truncate(nameStr, iw))
-	themeLine2 = padTo(themeLine2, iw)
-	themeBox := renderItemBox(pw, m.settingsFocus == 1, false, themeLine1, themeLine2)
 
-	// Shell alias box
-	aliasTitle := "Shell Alias"
-	if m.arcadeMode {
-		aliasTitle = "COMMAND ALIAS"
+	var aliasDetail string
+	switch {
+	case m.aliasEditing && m.settingsFocus == 2:
+		aliasDetail = lipgloss.NewStyle().Foreground(colorGreen).Render(m.aliasInput.View())
+	case m.shellAliasDisabled:
+		aliasDetail = dim.Render("○ disabled")
+	default:
+		aliasDetail = lipgloss.NewStyle().Foreground(colorGreen).Render("●") + " " + styleCurrentVal.Render(m.shellAlias)
 	}
-	aliasEditChip := lipgloss.NewStyle().Foreground(colorPurple).Render("[✎ rename]")
-	aliasLine1 := titleWithRight(styleItemDim.Render(aliasTitle), aliasEditChip, iw)
-	var aliasLine2 string
-	if m.aliasEditing && m.settingsFocus == 2 {
-		aliasLine2 = lipgloss.NewStyle().Foreground(colorGreen).Render(m.aliasInput.View())
-	} else if m.shellAliasDisabled {
-		toggleDot := lipgloss.NewStyle().Foreground(colorDim).Render("○")
-		aliasLine2 = padTo(toggleDot+" "+styleItemDim.Render("disabled"), iw)
-	} else {
-		toggleDot := lipgloss.NewStyle().Foreground(colorGreen).Render("●")
-		aliasLine2 = padTo(toggleDot+" "+styleCurrentVal.Render(m.shellAlias), iw)
-	}
-	aliasBox := renderItemBox(pw, m.settingsFocus == 2, false, aliasLine1, aliasLine2)
 
-	sep := "\n\n"
-	var footerHints [][2]string
-	if m.aliasEditing {
-		footerHints = [][2]string{
-			{"enter", "save"},
-			{"esc", "cancel"},
-		}
-	} else if m.settingsFocus == 2 {
-		footerHints = [][2]string{
-			{"↑/↓", "move"},
-			{"enter", "toggle on/off"},
-			{"e", "rename alias"},
-			{"q", "quit"},
-		}
-	} else {
-		footerHints = [][2]string{
-			{"↑/↓", "move"},
-			{"← →", "cycle theme"},
-			{"1/2/3", "tabs"},
-			{"q", "quit"},
-		}
-	}
-	footer := sep + divider(pw) + "\n" + m.footerKeys(pw, footerHints)
+	m.drawItems(c, m.settingsFocus, []itemView{
+		{title: configTitle, right: chip.Render(chipEdit), detail: dim.Render(filepath.Join(m.store.ConfigDir(), "config.yaml"))},
+		{title: themeTitle, right: styleBrand.Render("← →"), detail: themeDetail},
+		{title: aliasTitle, right: chip.Render(chipRename), detail: aliasDetail},
+	})
 
-	return top + stylePanelBorder(pw).Render(header+configBox+themeBox+aliasBox+footer)
+	if c.d != dTight {
+		c.blank()
+	}
+	c.add(m.statusLine())
+
+	var hints [][2]string
+	switch {
+	case m.aliasEditing:
+		hints = [][2]string{{"enter", "save"}, {"esc", "cancel"}}
+	case m.settingsFocus == 0:
+		hints = [][2]string{{"↑/↓", "move"}, {"enter", "open in editor"}, {"tab", "next tab"}, {"q", "quit"}}
+	case m.settingsFocus == 2:
+		hints = [][2]string{{"↑/↓", "move"}, {"enter", "on/off"}, {"e", "rename"}, {"tab", "next tab"}, {"q", "quit"}}
+	default:
+		hints = [][2]string{{"↑/↓", "move"}, {"← →", "change theme"}, {"tab", "next tab"}, {"q", "quit"}}
+	}
+	c.footer(m, hints)
 }

@@ -22,7 +22,7 @@ Opens the interactive terminal UI. On first run, auto-imports your existing `git
 | `e` | Open edit-profile form |
 | `ctrl+d` (in edit form) | Delete profile |
 | `?` | Show CLI quick-reference screen |
-| `u` | Upgrade to latest version (shown only when update available) |
+| `u` | Open the update prompt (when the status line shows a newer version) |
 | `q` / `ctrl+c` | Quit |
 
 ---
@@ -275,13 +275,15 @@ After installing, reload your agent or open a new session to activate.
 gitswitch version
 ```
 
-Prints the installed version and checks for a newer release (via a 24-hour cache).
+Prints the installed version, the channel, how gitswitch is managed, and whether a newer release exists (via a 24-hour cache). `--json` prints the same as JSON.
 
 ```
-gitswitch v0.1.11
-New version available: v0.1.12
-Run: gitswitch upgrade
+gitswitch v0.5.0
+stable channel · managed by Homebrew
+Update available: v0.6.0 — run: brew upgrade gitswitch
 ```
+
+For just the version, offline: `gitswitch --version` (also `-v`, `--v`).
 
 ---
 
@@ -291,7 +293,15 @@ Run: gitswitch upgrade
 gitswitch upgrade
 ```
 
-Downloads and runs the install script for the latest release. Bypasses the version cache. Exits early if already on the latest version.
+Updates to the latest release on your channel. Bypasses the version cache. Exits early if already on the latest version.
+
+- **Homebrew install** — runs `brew update && brew upgrade aksisonline/tap/gitswitch`. gitswitch never overwrites a Homebrew-managed binary itself.
+- **Script install** — downloads and runs the install script for the new release.
+
+| Flag | Description |
+|------|-------------|
+| `--check` | Only report whether an update exists |
+| `--dry-run` | Show the command that would run, change nothing |
 
 ---
 

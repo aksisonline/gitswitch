@@ -54,6 +54,24 @@ case "$OS" in
     ;;
 esac
 
+# Homebrew already manages gitswitch here? Then Homebrew is the one that should
+# update it. Dropping a second copy into $INSTALL_DIR would shadow (or be
+# shadowed by) the Homebrew one, and the two drift apart on the next update.
+# Set GS_FORCE=1 to install a separate copy anyway.
+if [ -z "${GS_FORCE:-}" ] && command -v brew >/dev/null 2>&1; then
+  for FORMULA in gitswitch gitswitch-beta; do
+    if brew list --formula "$FORMULA" >/dev/null 2>&1; then
+      echo "gitswitch is already installed with Homebrew ($FORMULA)."
+      echo ""
+      echo "  Update it with:   brew upgrade $FORMULA"
+      echo "  Change channel:   gitswitch beta   /   gitswitch stable"
+      echo ""
+      echo "Not installing a second copy. (Set GS_FORCE=1 to do it anyway.)"
+      exit 1
+    fi
+  done
+fi
+
 # Use version from arg, or resolve latest from GitHub API
 VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
@@ -114,6 +132,12 @@ else
     ln -sf "$INSTALL_DIR/gitswitch" "$GS_PATH"
   fi
   echo "✓ gs alias created at $GS_PATH"
+fi
+
+if command -v brew >/dev/null 2>&1; then
+  echo ""
+  echo "Tip: you have Homebrew. 'brew install aksisonline/tap/gitswitch' installs the same"
+  echo "     thing and keeps it updated with 'brew upgrade' (remove this copy first)."
 fi
 
 echo ""

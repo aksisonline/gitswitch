@@ -285,8 +285,10 @@ git -c credential.helper= -c credential.helper='!gitswitch credential' push
 | `gitswitch shell` | Set up shell prompt segment, nudge hook, and tab completion |
 | `gitswitch skills` | Install this skill for your AI agent (skills.sh first, offline fallback) |
 | `gitswitch init` | Re-import current `git config` as `default` |
-| `gitswitch version` | Show version, check for updates |
-| `gitswitch upgrade` | Upgrade to latest release |
+| `gitswitch --version` | Print the installed version (offline; also `-v`) |
+| `gitswitch version [--json]` | Version, channel, install method, and whether an update exists |
+| `gitswitch upgrade [--check]` | Update to the latest release — runs `brew upgrade` on Homebrew installs |
+| `gitswitch <command> --help` | Flags and examples for any command |
 
 Profiles stored at `~/.config/gitswitch/config.yaml` (or migrated from `profiles.json`).
 Usage history stored at `~/.config/gitswitch/history.json`.

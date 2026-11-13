@@ -138,6 +138,24 @@ Fixed in v0.3.0 — `gitswitch shell` now replaces the gitswitch block in your r
 gitswitch upgrade
 ```
 
+## "I upgraded and nothing changed" / two copies of gitswitch
+
+```bash
+gitswitch doctor
+```
+
+If it reports more than one copy of gitswitch on your `PATH`, the first one listed is the one that runs — and it is probably the stale one. This happens when gitswitch was installed with Homebrew *and* with the install script (older versions could do that themselves when you upgraded from inside the app).
+
+Keep the Homebrew copy and delete the other:
+
+```bash
+which -a gitswitch                 # see them all
+sudo rm /usr/local/bin/gitswitch   # only if that path is NOT the Homebrew one
+brew upgrade gitswitch
+```
+
+From this version on it can't recur: a Homebrew install only ever updates through `brew`, and the install script refuses to add a second copy next to it. See [Release Channels](/docs/cli/channels).
+
 ## "gitswitch can't read my profiles"
 
 Your accounts live in `~/.config/gitswitch/config.yaml`. If you hand-edited it, check the YAML:

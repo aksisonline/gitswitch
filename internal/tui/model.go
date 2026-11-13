@@ -25,7 +25,8 @@ func (m *Model) openProfileForm(edit bool, seed [6]string) tea.Cmd {
 		sshKey:   seed[4],
 		ghUser:   seed[5],
 	}
-	m.form = newProfileForm(m.formData, edit, m.panelWidth()-6)
+	w, h := m.formSize()
+	m.form = newProfileForm(m.formData, edit, w, h)
 	return m.form.Init()
 }
 
@@ -157,24 +158,36 @@ type Model struct {
 
 	whatsNewBody   string
 	whatsNewScroll int
-}
 
-var formLabels = [6]string{
-	"Nickname",
-	"User Name",
-	"Email",
-	"Signing Key",
-	"SSH Key Path",
-	"GitHub Username",
-}
+	// How this binary is managed (Homebrew or the install script) — decides
+	// which command an in-app upgrade runs.
+	install ver.Install
+	// skippedUpdate is the release the user said "not now" to (persisted).
+	skippedUpdate string
+	// touched is set on the first key or click. The update prompt only opens
+	// by itself before that — never underneath someone mid-keystroke.
+	touched bool
 
-var formSubtitles = [6]string{
-	"label shown in this list — not written to git config",
-	"git user.name — author name on commits",
-	"git user.email — author email on commits",
-	"GPG key ID or SSH key path — optional, leave blank to skip",
-	"sets core.sshCommand, e.g. ~/.ssh/id_work — optional",
-	"for gh auth switch — optional, leave blank to skip",
+	// Prerequisites, shown on the setup welcome screen.
+	hasGit, hasGH bool
+	// onboarding is true while the first-run setup wizard is in progress.
+	onboarding bool
+
+	// Motion (see animation.go). All zero when idle.
+	ticking   bool   // the frame ticker is running
+	frame     int    // frame counter — drives spinners
+	busy      string // work in progress, shown with a spinner in the status slot
+	busyItem  int    // 1-based Utilities item whose toggle is being applied
+	shimmer   int    // launch glint position across the title (0 = off)
+	flashNick string // profile that was just switched to
+	flashLeft int    // frames of glow left on that row
+	tabAnim   bool   // tab indicator is sliding
+	tabX      AnimState
+	tabW      AnimState
+	scanning  bool // setup scan animation is running
+	scanStep  int  // rows ticked off so far
+	scanReady bool // the real scan has returned
+	scanHold  int  // frames spent resting on the finished scan
 }
 
 // refreshRepoScope re-reads the repo gitswitch was launched from: its key, and
@@ -272,6 +285,10 @@ func New(store *storage.Store, currentVersion, whatsNewBody string) (*Model, err
 		aliasInput:              aliasInput,
 		arcadeMode:              prefs.ArcadeMode,
 		autoPinDisabled:         prefs.AutoPinDisabled,
+		skippedUpdate:           prefs.SkippedUpdate,
+		install:                 ver.DetectInstall(),
+		hasGit:                  git.IsGitInstalled(),
+		hasGH:                   git.IsGHInstalled(),
 	}
 	m.refreshRepoScope()
 	if whatsNewBody != "" {
@@ -299,9 +316,12 @@ func New(store *storage.Store, currentVersion, whatsNewBody string) (*Model, err
 	if !m.arcadeMode {
 		if len(profiles) == 0 {
 			m.state = StateWizardWelcome
-		} else if !prefs.SplashSeen020 {
-			m.state = StateWhatsNew
+			m.onboarding = true
 		}
+	}
+	if !m.arcadeMode && !reduceMotion {
+		// One glint across the title on launch. Init starts the ticker.
+		m.shimmer, m.ticking = 1, true
 	}
 	return m, nil
 }
@@ -315,6 +335,9 @@ func (m Model) Init() tea.Cmd {
 	}
 	if m.arcadeMode {
 		return tea.Batch(versionCmd, arcadeTickCmd())
+	}
+	if m.ticking {
+		return tea.Batch(versionCmd, frameCmd())
 	}
 	return versionCmd
 }
@@ -332,22 +355,21 @@ func (m *Model) savePrefs() error {
 		ArcadeHiScore:      m.hiScore,
 		ArcadeMode:         m.arcadeMode,
 		AutoPinDisabled:    m.autoPinDisabled,
+		SkippedUpdate:      m.skippedUpdate,
 	})
 }
 
+// panelWidth is the panel's content width (the border adds 2 more columns).
+// It grows to fit the longest profile row, up to maxPanelWidth, and shrinks
+// with the terminal — there is no hard floor, so a narrow window gets a
+// narrower panel instead of one that runs off the edge.
 func (m Model) panelWidth() int {
 	content := minPanelWidth
 	for _, p := range m.profiles {
-		needed := 3 + 3 + 14 + 2 + lipgloss.Width(p.Email) + 6
-		if needed > content {
+		if needed := 3 + 3 + 14 + 2 + lipgloss.Width(p.Email) + 6; needed > content {
 			content = needed
 		}
-		if nickNeeded := 3 + 3 + lipgloss.Width(p.Nickname) + 2 + lipgloss.Width(p.Email) + 6; nickNeeded > content {
-			content = nickNeeded
-		}
-	}
-	for _, s := range formSubtitles {
-		if needed := lipgloss.Width(s) + 8; needed > content {
+		if needed := 3 + 3 + lipgloss.Width(p.Nickname) + 2 + lipgloss.Width(p.Email) + 6; needed > content {
 			content = needed
 		}
 	}
@@ -355,12 +377,13 @@ func (m Model) panelWidth() int {
 		content = maxPanelWidth
 	}
 	if m.width > 0 {
-		if available := m.width - 6; content > available {
+		// panel outer width = content + 2; keep one column of margin each side
+		if available := m.width - 4; content > available {
 			content = available
 		}
 	}
-	if content < minPanelWidth {
-		content = minPanelWidth
+	if content < 20 {
+		content = 20
 	}
 	return content
 }
